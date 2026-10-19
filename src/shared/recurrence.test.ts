@@ -362,6 +362,7 @@ describe('展開: 繰り返さない予定', () => {
         seriesId: 'e1',
         occurrenceDate: '2026-10-19',
         isException: false,
+        recurring: false,
         kind: 'event',
         title: '歯医者',
         workspaceId: 'w1',
@@ -815,6 +816,92 @@ describe('RP-4: 例外の行の展開', () => {
       endDate: '2026-10-21',
     });
     expect(expandOccurrences([ex], '2026-10-01', '2026-10-31')).toEqual([]);
+  });
+});
+
+describe('展開: Occurrence.recurring（範囲を選ぶ画面を出すかどうか）', () => {
+  const daily = makeEntry({ id: 's1', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+  const exception = makeEntry({
+    id: 'ex1',
+    seriesId: 's1',
+    originalDate: '2026-10-20',
+    startDate: '2026-10-21',
+  });
+
+  it('繰り返さない予定は false', () => {
+    const single = makeEntry({ id: 'e1' });
+    expect(expandOccurrences([single], '2026-10-19', '2026-10-19').map((o) => o.recurring)).toEqual(
+      [false],
+    );
+  });
+
+  it('系列の回は true', () => {
+    const occurrences = expandOccurrences([daily], '2026-10-19', '2026-10-20');
+    expect(occurrences.map(({ recurring }) => recurring)).toEqual([true, true]);
+  });
+
+  it('系列の例外の回（移した回を含む）は true', () => {
+    const occurrences = expandOccurrences([daily, exception], '2026-10-20', '2026-10-21');
+    expect(
+      occurrences.filter(({ isException }) => isException).map(({ recurring }) => recurring),
+    ).toEqual([true]);
+  });
+});
+
+describe('展開: 期間の端', () => {
+  const daily = makeEntry({ id: 's1', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+  const exception = makeEntry({
+    id: 'ex1',
+    seriesId: 's1',
+    originalDate: '2026-10-21',
+    startDate: '2026-10-21',
+  });
+
+  it('from が to より後なら、系列も例外も出ず、空になる', () => {
+    expect(expandOccurrences([daily, exception], '2026-10-25', '2026-10-20')).toEqual([]);
+  });
+
+  it('from が to より後なら、両方の日にかかる長い予定や系列があっても、空になる', () => {
+    const trip = makeEntry({ id: 'trip', startDate: '2026-10-10', endDate: '2026-10-30' });
+    const longWeekly = makeEntry({
+      id: 'long',
+      rrule: { freq: 'weekly', days: [1] },
+      startDate: '2026-10-05',
+      endDate: '2026-10-30',
+    });
+    expect(expandOccurrences([trip, longWeekly], '2026-10-25', '2026-10-20')).toEqual([]);
+  });
+
+  it('from と to が同じ日なら、その 1 日だけを展開する', () => {
+    expect(labels(expandOccurrences([daily], '2026-10-22', '2026-10-22'))).toEqual([
+      's1@2026-10-22',
+    ]);
+  });
+
+  it('2199 年の末をまたぐ期間でも例外にならず、2199-12-31 までの回が出る', () => {
+    const weekday = makeEntry({ id: 'w', rrule: { freq: 'weekday' }, startDate: '2199-12-01' });
+    const holiday = makeEntry({ id: 'h', rrule: { freq: 'holiday' }, startDate: '2199-12-01' });
+    const weekdays = expandOccurrences([weekday], '2199-12-20', '2200-01-10');
+    const holidays = expandOccurrences([holiday], '2199-12-20', '2200-01-10');
+    expect(weekdays.at(-1)?.occurrenceDate).toBe('2199-12-27');
+    expect(holidays.at(-1)?.occurrenceDate).toBe('2199-12-31');
+  });
+
+  it('2199-12-31 の毎日は、期間が 2200 年にかかっても、2199-12-31 で止まる', () => {
+    const every = makeEntry({ id: 's1', rrule: { freq: 'daily' }, startDate: '2199-12-30' });
+    expect(labels(expandOccurrences([every], '2199-12-30', '2200-01-05'))).toEqual([
+      's1@2199-12-30',
+      's1@2199-12-31',
+    ]);
+  });
+
+  it('1900 年より前の日は、系列の開始日がそれより前でも、回を生成しない', () => {
+    const weekday = makeEntry({ id: 'w', rrule: { freq: 'weekday' }, startDate: '1899-12-27' });
+    expect(labels(expandOccurrences([weekday], '1899-12-27', '1900-01-08'))).toEqual([
+      'w@1900-01-04',
+      'w@1900-01-05',
+      'w@1900-01-08',
+    ]);
   });
 });
 
