@@ -8,7 +8,8 @@ import {
   OccurrenceNotFoundError,
   type Occurrence,
 } from './recurrence';
-import type { Entry, EntryChanges, EntryDraft, Scope } from './schema';
+import { addDays } from './date';
+import type { Entry, EntryChanges, EntryDraft, Rrule, Scope } from './schema';
 import { deepFreeze, makeEntry } from '../../test/helpers/entries';
 
 const NEW_ID = 'new-1';
@@ -424,7 +425,7 @@ describe('RP-4: これ以降すべて（変更）', () => {
     expect(rowOf(rows, 's1').untilDate).toBe('2026-10-25');
   });
 
-  it('Δ は、表示上の開始日（移した例外なら移した先）から数える', () => {
+  it('Δ は、その回の日付（移した例外なら originalDate）から数え、新しい系列は変更後の開始日から始まる', () => {
     const moved = exceptionOf({
       id: 'ex-moved',
       originalDate: '2026-10-26',
@@ -432,7 +433,10 @@ describe('RP-4: これ以降すべて（変更）', () => {
       endDate: '2026-10-27',
     });
     const rows = change([weekly, moved], '2026-10-26', 'following', { startDate: '2026-10-28' });
-    expect(rowOf(rows, NEW_ID).startDate).toBe('2026-10-27');
+    expect(rowOf(rows, NEW_ID)).toMatchObject({
+      startDate: '2026-10-28',
+      rrule: { freq: 'weekly', days: [0, 3, 5] },
+    });
   });
 
   it('ルールを変えると、新しい系列は変更後のルールになり、開始日はルールに合う日へずれる', () => {
@@ -535,15 +539,29 @@ describe('RP-4: すべて（変更）', () => {
     expect(rowOf(rows, 's1')).toMatchObject({ startDate: '2026-10-20', endDate: '2026-10-20' });
   });
 
-  it('移した例外の回を選んだときの Δ は、移した先の日から数える', () => {
+  it('移した例外の回を開いて日付を変えると、その回がユーザーが選んだ日に出る（Δ は originalDate から数える）', () => {
+    const monthly = makeEntry({
+      id: 's1',
+      allDay: false,
+      rrule: { freq: 'monthly' },
+      startDate: '2026-10-19',
+      startTime: '19:00',
+      endTime: '20:00',
+    });
     const moved = exceptionOf({
       id: 'ex-moved',
-      originalDate: '2026-10-21',
-      startDate: '2026-10-22',
-      endDate: '2026-10-22',
+      originalDate: '2026-11-19',
+      startDate: '2026-11-20',
+      endDate: '2026-11-20',
     });
-    const rows = change([weekly, moved], '2026-10-21', 'all', { startDate: '2026-10-23' });
-    expect(rowOf(rows, 's1').startDate).toBe('2026-10-20');
+    const rows = change([monthly, moved], '2026-11-19', 'all', { startDate: '2026-11-22' });
+    expect(rowOf(rows, 's1').startDate).toBe('2026-10-22');
+    const after = applyRows([monthly, moved], rows);
+    expect(titlesAndDates(expandOccurrences(after, '2026-10-01', '2026-12-31'))).toEqual([
+      '2026-10-22 ジム',
+      '2026-11-22 ジム',
+      '2026-12-22 ジム',
+    ]);
   });
 
   it('monthly は、ずらした開始日がそのまま新しい基準になる', () => {
@@ -612,16 +630,232 @@ describe('RP-4: すべて（変更）', () => {
     expect(rowOf(rows, 's1')).toMatchObject({ startDate: '2026-10-19', endDate: '2026-10-19' });
   });
 
-  it('untilDate は、そのまま残る', () => {
+  it('untilDate は、日付をずらさなければ、そのまま残る', () => {
     const cut = { ...weekly, untilDate: '2026-12-31' };
     const rows = change([cut], '2026-10-26', 'all', { title: '新ジム' });
     expect(rowOf(rows, 's1').untilDate).toBe('2026-12-31');
+  });
+
+  it('日付をずらすと、untilDate も同じだけずれて、回の数は変わらない', () => {
+    const cut = { ...weekly, untilDate: '2026-11-13' };
+    const before = expandOccurrences([cut], '2026-10-01', '2026-12-31');
+    const rows = change([cut], '2026-10-21', 'all', { startDate: '2026-10-22' });
+    expect(rowOf(rows, 's1').untilDate).toBe('2026-11-14');
+    const after = expandOccurrences(applyRows([cut], rows), '2026-10-01', '2026-12-31');
+    expect(after).toHaveLength(before.length);
+    expect(after.at(-1)?.occurrenceDate).toBe('2026-11-14');
+  });
+
+  it('日付を前にずらすと、untilDate も前にずれる（monthly）', () => {
+    const monthly = makeEntry({
+      id: 's1',
+      rrule: { freq: 'monthly' },
+      startDate: '2026-10-19',
+      untilDate: '2027-01-19',
+    });
+    const rows = change([monthly], '2026-11-19', 'all', { startDate: '2026-11-18' });
+    expect(rowOf(rows, 's1')).toMatchObject({ startDate: '2026-10-18', untilDate: '2027-01-18' });
+  });
+
+  it('untilDate がない系列は、日付をずらしても null のまま', () => {
+    const rows = change([weekly], '2026-10-21', 'all', { startDate: '2026-10-22' });
+    expect(rowOf(rows, 's1').untilDate).toBeNull();
+  });
+
+  it('開いていた回が例外の行なら、その例外には日時・終日も含めて変更をすべて当て、ほかの例外には日時を当てない', () => {
+    const rows = change(entries, '2026-10-21', 'all', {
+      title: '新ジム',
+      startTime: '18:00',
+      endTime: '19:00',
+    });
+    expect(rows.map(({ id }) => id).sort()).toEqual(['ex-10-21', 'ex-10-28', 's1']);
+    expect(rowOf(rows, 'ex-10-21')).toMatchObject({
+      title: '新ジム',
+      startTime: '18:00',
+      endTime: '19:00',
+      editedAt: EDITED_AT,
+    });
+    expect(rowOf(rows, 'ex-10-28')).toMatchObject({
+      title: '新ジム',
+      startTime: '19:00',
+      endTime: '20:00',
+    });
+  });
+
+  it('開いていた回の例外を終日に変えると、その例外も終日になる', () => {
+    const rows = change(entries, '2026-10-21', 'all', {
+      allDay: true,
+      startTime: null,
+      endTime: null,
+    });
+    expect(rows.map(({ id }) => id).sort()).toEqual(['ex-10-21', 's1']);
+    expect(rowOf(rows, 'ex-10-21')).toMatchObject({ allDay: true, startTime: null, endTime: null });
+  });
+
+  it('開いていた回が、別の日に移した例外なら、その日付にも変更後の終了日が当たる', () => {
+    const moved = exceptionOf({
+      id: 'ex-moved',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-22',
+      endDate: '2026-10-22',
+    });
+    const rows = change([weekly, moved], '2026-10-21', 'all', { endDate: '2026-10-23' });
+    expect(rowOf(rows, 'ex-moved')).toMatchObject({
+      startDate: '2026-10-22',
+      endDate: '2026-10-23',
+    });
+    expect(rowOf(rows, 's1')).toMatchObject({ startDate: '2026-10-19', endDate: '2026-10-20' });
+  });
+
+  it('開いていた回の例外が、変更後も同じ値なら、その行は書き込まない', () => {
+    const rows = change(entries, '2026-10-28', 'all', { startTime: '19:00', endTime: '20:00' });
+    expect(rows.map(({ id }) => id)).toEqual(['s1']);
   });
 
   it('系列の回でない日付は、OccurrenceNotFoundError', () => {
     expect(() => change(entries, '2026-10-27', 'all', { title: 'x' })).toThrow(
       OccurrenceNotFoundError,
     );
+  });
+});
+
+describe('RP-4: 日付をずらせるのは weekly・monthly・yearly だけ', () => {
+  function seriesOf(rrule: Rrule, startDate: string): Entry {
+    return makeEntry({
+      id: 's1',
+      allDay: false,
+      startDate,
+      startTime: '19:00',
+      endTime: '20:00',
+      rrule,
+    });
+  }
+
+  /** [名前, ルール, 系列の開始日（最初の回）, 2 回目以降の回] */
+  const NOT_SHIFTABLE: [string, Rrule, string, string][] = [
+    ['daily', { freq: 'daily' }, '2026-10-19', '2026-10-21'],
+    ['weekday', { freq: 'weekday' }, '2026-10-19', '2026-10-21'],
+    ['holiday', { freq: 'holiday' }, '2026-10-24', '2026-10-25'],
+  ];
+
+  it.each(NOT_SHIFTABLE)(
+    '%s は、「すべて」「これ以降すべて」で開始日を変えると InvalidChangeError',
+    (_name, rrule, first, later) => {
+      const entries = [seriesOf(rrule, first)];
+      expect(() => change(entries, first, 'all', { startDate: addDays(first, 1) })).toThrow(
+        InvalidChangeError,
+      );
+      expect(() => change(entries, later, 'following', { startDate: addDays(later, 1) })).toThrow(
+        InvalidChangeError,
+      );
+    },
+  );
+
+  it.each(NOT_SHIFTABLE)(
+    '%s でも、「この予定のみ」なら日付を動かせる',
+    (_name, rrule, first, later) => {
+      const rows = change([seriesOf(rrule, first)], later, 'this', {
+        startDate: addDays(later, 1),
+      });
+      expect(rows[0]).toMatchObject({ originalDate: later, startDate: addDays(later, 1) });
+    },
+  );
+
+  it.each(NOT_SHIFTABLE)(
+    '%s でも、開始日を変えなければ（Δ = 0）、ほかの項目は変えられる',
+    (_name, rrule, first, later) => {
+      const entries = [seriesOf(rrule, first)];
+      expect(() => change(entries, first, 'all', { title: '新ジム' })).not.toThrow();
+      expect(() =>
+        change(entries, later, 'following', { title: '新ジム', startDate: later }),
+      ).not.toThrow();
+    },
+  );
+
+  it('yearly は、日付をずらせる', () => {
+    const yearly = seriesOf({ freq: 'yearly' }, '2026-10-19');
+    const rows = change([yearly], '2027-10-19', 'all', { startDate: '2027-10-20' });
+    expect(rowOf(rows, 's1').startDate).toBe('2026-10-20');
+  });
+
+  it('ルールを同時に変えるときは、変更後のルールで判定する（weekly → daily は不可、daily → weekly は可）', () => {
+    const weeklyDaily = () =>
+      change([weekly], '2026-10-21', 'all', {
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-22',
+      });
+    expect(weeklyDaily).toThrow(InvalidChangeError);
+
+    const daily = seriesOf({ freq: 'daily' }, '2026-10-19');
+    const rows = change([daily], '2026-10-21', 'all', {
+      rrule: { freq: 'weekly', days: [3] },
+      startDate: '2026-10-22',
+    });
+    expect(rowOf(rows, 's1')).toMatchObject({
+      rrule: { freq: 'weekly', days: [3] },
+      startDate: '2026-10-21',
+    });
+  });
+
+  it('繰り返さない予定（ルールを null）に変えるなら、日付をずらせる', () => {
+    const daily = seriesOf({ freq: 'daily' }, '2026-10-19');
+    const rows = change([daily], '2026-10-19', 'all', { rrule: null, startDate: '2026-10-20' });
+    expect(rowOf(rows, 's1')).toMatchObject({ rrule: null, startDate: '2026-10-20' });
+  });
+});
+
+describe('RP-4: すべて（変更）で、終日かどうかが違う例外には、通知の分数を当てない', () => {
+  const allDayException = exceptionOf({
+    id: 'ex-allday',
+    originalDate: '2026-10-21',
+    allDay: true,
+    startTime: null,
+    endTime: null,
+    notifyOffsetMin: -360,
+  });
+  const timedException = exceptionOf({
+    id: 'ex-timed',
+    originalDate: '2026-10-23',
+    notifyOffsetMin: 10,
+  });
+  const entries = [weekly, allDayException, timedException];
+
+  it('時間指定の系列に通知の設定を当てると、終日の例外には notifyEnabled だけが当たる', () => {
+    const rows = change(entries, '2026-10-26', 'all', {
+      notifyEnabled: false,
+      notifyOffsetMin: 30,
+    });
+    expect(rowOf(rows, 's1')).toMatchObject({ notifyEnabled: false, notifyOffsetMin: 30 });
+    expect(rowOf(rows, 'ex-timed')).toMatchObject({ notifyEnabled: false, notifyOffsetMin: 30 });
+    expect(rowOf(rows, 'ex-allday')).toMatchObject({ notifyEnabled: false, notifyOffsetMin: -360 });
+  });
+
+  it('系列を終日に変えるときは、時間指定の例外に notifyOffsetMin を当てない', () => {
+    const rows = change(entries, '2026-10-26', 'all', {
+      allDay: true,
+      startTime: null,
+      endTime: null,
+      notifyEnabled: false,
+      notifyOffsetMin: -360,
+    });
+    expect(rowOf(rows, 'ex-timed')).toMatchObject({ notifyEnabled: false, notifyOffsetMin: 10 });
+    expect(rowOf(rows, 'ex-allday')).toMatchObject({ notifyEnabled: false, notifyOffsetMin: -360 });
+  });
+
+  it('当たらない項目だけの変更なら、その例外の行は書き込まない', () => {
+    const rows = change(entries, '2026-10-26', 'all', { notifyOffsetMin: 30 });
+    expect(rows.map(({ id }) => id).sort()).toEqual(['ex-timed', 's1']);
+  });
+
+  it('開いていた回の例外を終日に変えるときは、その例外にも notifyOffsetMin が当たる', () => {
+    const rows = change(entries, '2026-10-23', 'all', {
+      allDay: true,
+      startTime: null,
+      endTime: null,
+      notifyOffsetMin: -180,
+    });
+    expect(rowOf(rows, 'ex-timed')).toMatchObject({ allDay: true, notifyOffsetMin: -180 });
+    expect(rowOf(rows, 'ex-allday')).toMatchObject({ allDay: true, notifyOffsetMin: -180 });
   });
 });
 
