@@ -343,6 +343,21 @@ describe('RP-4: この予定のみ（変更）', () => {
       OccurrenceNotFoundError,
     );
   });
+
+  it('削除した回（cancelled の例外）は、存在しない回として OccurrenceNotFoundError', () => {
+    expect(() => change([weekly, ...exceptions], '2026-10-23', 'this', { title: 'x' })).toThrow(
+      OccurrenceNotFoundError,
+    );
+  });
+
+  it('現在と同じルールを渡しても、ルールを変えたことにならず、受け付ける（曜日の並びも問わない）', () => {
+    const rows = change([weekly], '2026-10-21', 'this', {
+      title: '体験',
+      rrule: { freq: 'weekly', days: [5, 3, 1] },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ title: '体験', rrule: null, originalDate: '2026-10-21' });
+  });
 });
 
 describe('RP-4: これ以降すべて（変更）', () => {
@@ -398,6 +413,15 @@ describe('RP-4: これ以降すべて（変更）', () => {
     });
     const rows = change([weekly, laterCancelled], '2026-10-26', 'following', { title: 'x' });
     expect(rowOf(rows, 'ex-10-30').deletedAt).toBe(EDITED_AT);
+  });
+
+  it('すでに後ろで切られている系列を、延ばさない（untilDate は D の前の日と、既存の untilDate の早い方）', () => {
+    // 10/28 の例外が、切った後（untilDate = 10/23）にも残っているとき。
+    const cut = { ...weekly, untilDate: '2026-10-23' };
+    const rows = change([cut, rowOf(exceptions, 'ex-10-28')], '2026-10-28', 'following', {
+      title: '新ジム',
+    });
+    expect(rowOf(rows, 's1').untilDate).toBe('2026-10-23');
   });
 
   it('元の系列が前に切られていたら、新しい系列も同じ untilDate を引き継ぐ', () => {
@@ -949,6 +973,12 @@ describe('RP-4: 削除', () => {
     const onDay = exceptionOf({ id: 'ex-10-26', originalDate: '2026-10-26', cancelled: true });
     const rows = remove([weekly, onDay], '2026-10-26', 'following');
     expect(rowOf(rows, 'ex-10-26').deletedAt).toBe(EDITED_AT);
+  });
+
+  it('これ以降すべて: すでに後ろで切られている系列を、延ばさない', () => {
+    const cut = { ...weekly, untilDate: '2026-10-23' };
+    const rows = remove([cut, rowOf(exceptions, 'ex-10-28')], '2026-10-28', 'following');
+    expect(rowOf(rows, 's1').untilDate).toBe('2026-10-23');
   });
 
   it('これ以降すべて: 最初の回で選ぶと、「すべて」と同じ結果になる', () => {
