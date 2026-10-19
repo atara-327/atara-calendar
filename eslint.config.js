@@ -23,7 +23,22 @@ export default defineConfig(
     rules: {
       'no-restricted-imports': [
         'error',
-        { paths: [{ name: 'vitest', message: 'テスト以外のコードから vitest を import しない' }] },
+        {
+          paths: [
+            { name: 'vitest', message: 'テスト以外のコードから vitest を import しない' },
+            {
+              name: 'astronomia',
+              message: '本体の index は使わない。astronomia/solar のようにサブパスだけを使う',
+            },
+          ],
+          patterns: [
+            {
+              group: ['astronomia/data', 'astronomia/data/*'],
+              message:
+                '間引いたデータ src/shared/data/ を使う。元データは約127KBあり、画面のバンドルが重くなる',
+            },
+          ],
+        },
       ],
     },
   },
