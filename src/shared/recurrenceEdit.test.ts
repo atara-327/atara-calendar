@@ -344,6 +344,18 @@ describe('RP-4: この予定のみ（変更）', () => {
     );
   });
 
+  it('同じ回の例外が 2 行あって編集時刻も同じなら、id が大きい方を書き換える', () => {
+    const small = exceptionOf({ id: 'ex-a', originalDate: '2026-10-21', editedAt: 1000 });
+    const large = exceptionOf({ id: 'ex-b', originalDate: '2026-10-21', editedAt: 1000 });
+    for (const entries of [
+      [weekly, small, large],
+      [weekly, large, small],
+    ]) {
+      const rows = change(entries, '2026-10-21', 'this', { memo: '変更' });
+      expect(rows.map(({ id }) => id)).toEqual(['ex-b']);
+    }
+  });
+
   it('削除した回（cancelled の例外）は、存在しない回として OccurrenceNotFoundError', () => {
     expect(() => change([weekly, ...exceptions], '2026-10-23', 'this', { title: 'x' })).toThrow(
       OccurrenceNotFoundError,
@@ -413,6 +425,35 @@ describe('RP-4: これ以降すべて（変更）', () => {
     });
     const rows = change([weekly, laterCancelled], '2026-10-26', 'following', { title: 'x' });
     expect(rowOf(rows, 'ex-10-30').deletedAt).toBe(EDITED_AT);
+  });
+
+  it('D より前の回を D 以降の日へ移した例外は、消えない（originalDate で判定するため）', () => {
+    const moved = exceptionOf({
+      id: 'ex-moved',
+      title: '移した',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-27',
+      endDate: '2026-10-27',
+    });
+    const rows = change([weekly, moved], '2026-10-26', 'following', { title: '新ジム' });
+    expect(rows.map(({ id }) => id)).toEqual(['s1', NEW_ID]);
+    const after = applyRows([weekly, moved], rows);
+    expect(titlesAndDates(expandOccurrences(after, '2026-10-26', '2026-10-28'))).toEqual([
+      '2026-10-26 新ジム',
+      '2026-10-21 移した',
+      '2026-10-28 新ジム',
+    ]);
+  });
+
+  it('D 以降の回を D より前の日へ移した例外は、消える（originalDate で判定するため）', () => {
+    const moved = exceptionOf({
+      id: 'ex-moved',
+      originalDate: '2026-10-28',
+      startDate: '2026-10-22',
+      endDate: '2026-10-22',
+    });
+    const rows = change([weekly, moved], '2026-10-26', 'following', { title: '新ジム' });
+    expect(rowOf(rows, 'ex-moved').deletedAt).toBe(EDITED_AT);
   });
 
   it('すでに後ろで切られている系列を、延ばさない（untilDate は D の前の日と、既存の untilDate の早い方）', () => {
@@ -975,6 +1016,17 @@ describe('RP-4: 削除', () => {
     expect(rowOf(rows, 'ex-10-26').deletedAt).toBe(EDITED_AT);
   });
 
+  it('これ以降すべて: D より前の回を D 以降の日へ移した例外は、消えない', () => {
+    const moved = exceptionOf({
+      id: 'ex-moved',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-27',
+      endDate: '2026-10-27',
+    });
+    const rows = remove([weekly, moved], '2026-10-26', 'following');
+    expect(rows.map(({ id }) => id)).toEqual(['s1']);
+  });
+
   it('これ以降すべて: すでに後ろで切られている系列を、延ばさない', () => {
     const cut = { ...weekly, untilDate: '2026-10-23' };
     const rows = remove([cut, rowOf(exceptions, 'ex-10-28')], '2026-10-28', 'following');
@@ -1071,6 +1123,62 @@ describe('展開との組み合わせ（行を書き込んだ後の見え方）'
       '2026-10-20 ジム',
       '2026-10-22 ジム',
       '2026-10-24 ジム',
+    ]);
+  });
+
+  it('操作を重ねても、二重にならず、それぞれの範囲だけが変わる（これ以降 → これ以降 → この予定のみ → すべて）', () => {
+    let state: Entry[] = [weekly];
+    const apply = (
+      seriesId: string,
+      occurrenceDate: string,
+      scope: Scope,
+      changes: EntryChanges,
+      newId: string,
+    ) => {
+      const rows = changeEntry({
+        entries: state,
+        target: { seriesId, occurrenceDate },
+        scope,
+        changes,
+        newId,
+        editedAt: EDITED_AT,
+      });
+      state = applyRows(state, rows);
+    };
+    apply('s1', '2026-10-26', 'following', { title: '新ジム' }, 'new-1');
+    apply(
+      'new-1',
+      '2026-11-09',
+      'following',
+      { title: '夜ジム', startTime: '18:00', endTime: '19:00' },
+      'new-2',
+    );
+    apply('new-2', '2026-11-11', 'this', { title: '休み前' }, 'new-3');
+    apply('new-2', '2026-11-13', 'all', { location: '新駅' }, 'new-4');
+
+    expect(
+      state
+        .filter(({ seriesId }) => seriesId === null)
+        .map(({ id, untilDate }) => `${id} ${String(untilDate)}`),
+    ).toEqual(['s1 2026-10-25', 'new-1 2026-11-08', 'new-2 null']);
+    const lines = expandOccurrences(state, '2026-10-19', '2026-11-16').map(
+      ({ occurrenceDate, startTime, title, location }) =>
+        `${occurrenceDate} ${String(startTime)} ${title} @${String(location)}`,
+    );
+    expect(lines).toEqual([
+      '2026-10-19 19:00 ジム @駅前',
+      '2026-10-21 19:00 ジム @駅前',
+      '2026-10-23 19:00 ジム @駅前',
+      '2026-10-26 19:00 新ジム @駅前',
+      '2026-10-28 19:00 新ジム @駅前',
+      '2026-10-30 19:00 新ジム @駅前',
+      '2026-11-02 19:00 新ジム @駅前',
+      '2026-11-04 19:00 新ジム @駅前',
+      '2026-11-06 19:00 新ジム @駅前',
+      '2026-11-09 18:00 夜ジム @新駅',
+      '2026-11-11 18:00 休み前 @新駅',
+      '2026-11-13 18:00 夜ジム @新駅',
+      '2026-11-16 18:00 夜ジム @新駅',
     ]);
   });
 
