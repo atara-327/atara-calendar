@@ -11,13 +11,13 @@ import { assertSupportedYear, solarTermDate, type SolarLongitude } from './solar
 
 /** 祝日の上書き。name が null なら、その日を祝日から外す（設計書 Q8）。 */
 export interface HolidayOverride {
-  date: DateStr;
-  name: string | null;
+  readonly date: DateStr;
+  readonly name: string | null;
 }
 
 export interface NamedDate {
-  date: DateStr;
-  name: string;
+  readonly date: DateStr;
+  readonly name: string;
 }
 
 export type Observance = NamedDate;
