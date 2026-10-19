@@ -68,13 +68,18 @@ describe('日付文字列と日数の変換', () => {
   it('スクロールできる範囲（1900-01-01〜2199-12-31）の全日で、UTC の暦と一致して往復できる', () => {
     const first = dateToDays('1900-01-01');
     const last = dateToDays('2199-12-31');
+    const mismatches: string[] = [];
 
     for (let days = first; days <= last; days++) {
       const date = daysToDate(days);
+      const utcDate = new Date(days * 86_400_000).toISOString().slice(0, 10);
 
-      expect(date).toBe(new Date(days * 86_400_000).toISOString().slice(0, 10));
-      expect(dateToDays(date)).toBe(days);
+      if (date !== utcDate || dateToDays(date) !== days) {
+        mismatches.push(`${String(days)}日目: ${date}（UTC の暦では ${utcDate}）`);
+      }
     }
+
+    expect(mismatches).toEqual([]);
   });
 
   it.each([
