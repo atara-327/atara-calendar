@@ -472,6 +472,12 @@ describe('RP-4: これ以降すべて（変更）', () => {
     expect(rowOf(rows, NEW_ID).untilDate).toBe('2026-12-31');
   });
 
+  it('元の系列が前に切られていて日付もずらしたら、新しい系列の untilDate も同じ日数ずれる', () => {
+    const cut = { ...weekly, untilDate: '2026-11-04' };
+    const rows = change([cut], '2026-10-26', 'following', { startDate: '2026-10-27' });
+    expect(rowOf(rows, NEW_ID)).toMatchObject({ startDate: '2026-10-27', untilDate: '2026-11-05' });
+  });
+
   it('最初の回で選ぶと、「すべて」と同じ結果になる', () => {
     const entries = [weekly, ...exceptions];
     const changes: EntryChanges = { title: '新ジム', startTime: '18:00', endTime: '19:00' };
