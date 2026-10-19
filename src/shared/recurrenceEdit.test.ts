@@ -4,6 +4,8 @@ import {
   createEntry,
   deleteEntry,
   expandOccurrences,
+  InvalidChangeError,
+  OccurrenceNotFoundError,
   type Occurrence,
 } from './recurrence';
 import type { Entry, EntryChanges, EntryDraft, Scope } from './schema';
@@ -319,18 +321,26 @@ describe('RP-4: この予定のみ（変更）', () => {
     ]);
   });
 
-  it('繰り返しのルールの変更は受け付けない（例外を投げる）', () => {
-    expect(() => change([weekly], '2026-10-21', 'this', { rrule: { freq: 'daily' } })).toThrow();
-    expect(() => change([weekly], '2026-10-21', 'this', { rrule: null })).toThrow();
+  it('繰り返しのルールの変更は受け付けない（InvalidChangeError）', () => {
+    expect(() => change([weekly], '2026-10-21', 'this', { rrule: { freq: 'daily' } })).toThrow(
+      InvalidChangeError,
+    );
+    expect(() => change([weekly], '2026-10-21', 'this', { rrule: null })).toThrow(
+      InvalidChangeError,
+    );
   });
 
-  it('系列の回でない日付は、存在しない回を作らないよう、例外を投げる', () => {
-    expect(() => change([weekly], '2026-10-20', 'this', { title: 'x' })).toThrow(RangeError);
+  it('系列の回でない日付は、存在しない回を作らないよう、OccurrenceNotFoundError', () => {
+    expect(() => change([weekly], '2026-10-20', 'this', { title: 'x' })).toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 
   it('untilDate より後の日付も、回ではない', () => {
     const cut = { ...weekly, untilDate: '2026-10-23' };
-    expect(() => change([cut], '2026-10-26', 'this', { title: 'x' })).toThrow(RangeError);
+    expect(() => change([cut], '2026-10-26', 'this', { title: 'x' })).toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 });
 
@@ -451,8 +461,10 @@ describe('RP-4: これ以降すべて（変更）', () => {
     expect(rowOf(rows, NEW_ID)).toMatchObject({ startDate: '2026-10-26', endDate: '2026-10-27' });
   });
 
-  it('系列の回でない日付は、例外を投げる', () => {
-    expect(() => change([weekly], '2026-10-27', 'following', { title: 'x' })).toThrow(RangeError);
+  it('系列の回でない日付は、OccurrenceNotFoundError', () => {
+    expect(() => change([weekly], '2026-10-27', 'following', { title: 'x' })).toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 });
 
@@ -606,26 +618,47 @@ describe('RP-4: すべて（変更）', () => {
     expect(rowOf(rows, 's1').untilDate).toBe('2026-12-31');
   });
 
-  it('系列の回でない日付は、例外を投げる', () => {
-    expect(() => change(entries, '2026-10-27', 'all', { title: 'x' })).toThrow(RangeError);
+  it('系列の回でない日付は、OccurrenceNotFoundError', () => {
+    expect(() => change(entries, '2026-10-27', 'all', { title: 'x' })).toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 });
 
 describe('対象が見つからないとき', () => {
-  it.each(SCOPES)('変更（%s）は、系列が見つからなければ例外を投げる', (scope) => {
-    expect(() => change([weekly], '2026-10-19', scope, { title: 'x' }, 'missing')).toThrow();
+  it.each(SCOPES)('変更（%s）は、系列が見つからなければ OccurrenceNotFoundError', (scope) => {
+    expect(() => change([weekly], '2026-10-19', scope, { title: 'x' }, 'missing')).toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 
-  it('削除済みの系列は、見つからないものとして例外を投げる', () => {
+  it('削除済みの系列は、見つからないものとして OccurrenceNotFoundError', () => {
     const deleted = { ...weekly, deletedAt: 1 };
-    expect(() => change([deleted], '2026-10-19', 'all', { title: 'x' })).toThrow();
-    expect(() => remove([deleted], '2026-10-19', 'all')).toThrow();
+    expect(() => change([deleted], '2026-10-19', 'all', { title: 'x' })).toThrow(
+      OccurrenceNotFoundError,
+    );
+    expect(() => remove([deleted], '2026-10-19', 'all')).toThrow(OccurrenceNotFoundError);
   });
 
   it('例外の行の id は、系列として扱わない', () => {
     expect(() =>
       change([weekly, ...exceptions], '2026-10-21', 'all', { title: 'x' }, 'ex-10-21'),
-    ).toThrow();
+    ).toThrow(OccurrenceNotFoundError);
+  });
+});
+
+describe('エラーの種類（API が「依頼を捨てる」と「エラーを返す」を区別できる）', () => {
+  it('OccurrenceNotFoundError と InvalidChangeError は、別のクラスで、どちらも Error', () => {
+    const notFound = new OccurrenceNotFoundError('x');
+    const invalid = new InvalidChangeError('x');
+    expect(notFound).toBeInstanceOf(Error);
+    expect(invalid).toBeInstanceOf(Error);
+    expect(notFound).not.toBeInstanceOf(InvalidChangeError);
+    expect(invalid).not.toBeInstanceOf(OccurrenceNotFoundError);
+    expect([notFound.name, invalid.name]).toEqual([
+      'OccurrenceNotFoundError',
+      'InvalidChangeError',
+    ]);
   });
 });
 
@@ -666,8 +699,8 @@ describe('RP-4: 削除', () => {
     ]);
   });
 
-  it('この予定のみ: 系列の回でない日付は、例外を投げる', () => {
-    expect(() => remove([weekly], '2026-10-20', 'this')).toThrow(RangeError);
+  it('この予定のみ: 系列の回でない日付は、OccurrenceNotFoundError', () => {
+    expect(() => remove([weekly], '2026-10-20', 'this')).toThrow(OccurrenceNotFoundError);
   });
 
   it('これ以降すべて: 系列を前の日で切り、D 以降の例外を消す', () => {
@@ -691,8 +724,8 @@ describe('RP-4: 削除', () => {
     );
   });
 
-  it('これ以降すべて: 系列の回でない日付は、例外を投げる', () => {
-    expect(() => remove([weekly], '2026-10-20', 'following')).toThrow(RangeError);
+  it('これ以降すべて: 系列の回でない日付は、OccurrenceNotFoundError', () => {
+    expect(() => remove([weekly], '2026-10-20', 'following')).toThrow(OccurrenceNotFoundError);
   });
 
   it('すべて: 系列と、その例外（cancelled も）をすべて削除する', () => {
@@ -836,8 +869,10 @@ describe('RP-6: タイムブロックでも同じように動く', () => {
     });
   });
 
-  it('平日の系列で、土曜の回の日付は存在しない回なので例外になる', () => {
-    expect(() => blockChange('2026-10-24', 'this', { startTime: '10:00' })).toThrow(RangeError);
+  it('平日の系列で、土曜の回の日付は存在しない回なのでOccurrenceNotFoundError', () => {
+    expect(() => blockChange('2026-10-24', 'this', { startTime: '10:00' })).toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 });
 
