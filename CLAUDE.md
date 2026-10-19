@@ -68,6 +68,7 @@ Cloudflare（Workers + D1 + Access）に載せ、通知は Discord に送る。
   npm run lint
   npm run format:check
   npm test
+  npm run build
   ```
 - ブランチは機能ごとに切る（例: `feature/holidays`、`fix/notify-duplicate`）。main に直接コミットしない。
 - **main へのマージは、必ずユーザーが行う**。Claude（メインセッション・サブエージェントとも）はマージしない。main に取り込まれると本番に反映されるので（設計書 Q7）、リリースの判断をユーザーに残すため。
