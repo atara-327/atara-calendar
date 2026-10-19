@@ -1,5 +1,6 @@
 import { addDays, dateToDays, dateToYmd, dayOfWeek, daysToDate, type DateStr } from './date';
 import { isDayOff, isWeekday } from './holidays';
+import { MAX_YEAR, MIN_YEAR } from './solarTerms';
 import type { Entry, EntryChanges, EntryDraft, Rrule, Scope } from './schema';
 
 /** 回の判定に必要な、系列の列。 */
@@ -113,6 +114,8 @@ export interface Occurrence extends Pick<
   /** 回の日付。例外なら originalDate、そうでなければ生成した日。変更・削除の対象を指すのに使う。 */
   occurrenceDate: DateStr;
   isException: boolean;
+  /** 繰り返しの系列の回なら true、繰り返さない予定なら false。範囲を選ぶ画面を出すかどうかの判断に使う。 */
+  recurring: boolean;
 }
 
 function toOccurrence(
@@ -127,6 +130,7 @@ function toOccurrence(
     seriesId,
     occurrenceDate,
     isException,
+    recurring: row.rrule !== null || row.seriesId !== null,
     kind: row.kind,
     title: row.title,
     workspaceId: row.workspaceId,
@@ -175,6 +179,8 @@ export function expandOccurrences(
   from: DateStr,
   to: DateStr,
 ): Occurrence[] {
+  if (from > to) return [];
+
   const seriesRows = new Map<string, Entry>();
   const exceptionsBySeries = new Map<string, Map<DateStr, Entry>>();
   const result: Occurrence[] = [];
@@ -212,6 +218,11 @@ export function expandOccurrences(
   return result.sort(compareOccurrences);
 }
 
+// 系列が回を生成する日を、祝日の計算が対応する年に収める。収めないと、2199 年の最後の週の行が
+// 2200 年の 1 月にかかって、平日・休日のルールが、対応外の年で例外を投げてしまう。
+const MIN_GENERATED_DAY = dateToDays(`${String(MIN_YEAR)}-01-01`);
+const MAX_GENERATED_DAY = dateToDays(`${String(MAX_YEAR)}-12-31`);
+
 /** 系列が生成する回のうち、期間にかかるものの日付（開始日）。例外による置き換えは考えない。 */
 function generatedDates(series: Entry, from: DateStr, to: DateStr): DateStr[] {
   const { rrule } = series;
@@ -220,10 +231,15 @@ function generatedDates(series: Entry, from: DateStr, to: DateStr): DateStr[] {
 
   // 期間の前から始まる、複数日・日付をまたぐ回も出すため、1 回がかかる日数だけ手前から探す。
   const coveredDays = diffDays(series.startDate, lastCoveredDate(series));
-  const firstDay = Math.max(dateToDays(series.startDate), dateToDays(from) - coveredDays);
+  const firstDay = Math.max(
+    dateToDays(series.startDate),
+    dateToDays(from) - coveredDays,
+    MIN_GENERATED_DAY,
+  );
   const lastDay = Math.min(
     dateToDays(to),
     series.untilDate === null ? Number.POSITIVE_INFINITY : dateToDays(series.untilDate),
+    MAX_GENERATED_DAY,
   );
 
   const dates: DateStr[] = [];
