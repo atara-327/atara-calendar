@@ -586,7 +586,11 @@ function cutBefore(
   const removed = liveExceptionsOf(entries, series.id)
     .filter(({ originalDate }) => originalDate !== null && originalDate >= occurrenceDate)
     .map((exception) => markDeleted(exception, editedAt));
-  return [{ ...cloneRow(series), untilDate: addDays(occurrenceDate, -1), editedAt }, ...removed];
+  const cutAt = addDays(occurrenceDate, -1);
+  // 既存の untilDate が手前にあれば、それを残す。延ばすと、前に切って消えた回が戻ってしまう。
+  const untilDate =
+    series.untilDate !== null && series.untilDate < cutAt ? series.untilDate : cutAt;
+  return [{ ...cloneRow(series), untilDate, editedAt }, ...removed];
 }
 
 interface ChangeArguments {
@@ -645,8 +649,15 @@ function changeThis(
   changes: EntryChanges,
   stamp: { newId: string; editedAt: number },
 ): Entry {
+  // 削除した回は、画面に出ていない回なので、存在しない回として扱う。通すと、画面に出ない行に
+  // 変更が残るだけになる。
+  if (exception?.cancelled === true) {
+    throw new OccurrenceNotFoundError(`${occurrenceDate} の回は、削除されています: ${series.id}`);
+  }
   // 例外の行は 1 回だけの行で、ルールを持たない。変えたいなら「これ以降すべて」か「すべて」にする。
-  if (changes.rrule !== undefined) {
+  // キーがあるかどうかで判定しないのは、フォームが、変えていないルールまで送ってきたときに、
+  // 弾かないため（「すべて」と同じ判定にそろえている）。
+  if (changes.rrule !== undefined && !isSameRrule(changes.rrule, series.rrule)) {
     throw new InvalidChangeError('「この予定のみ」では、繰り返しのルールを変えられません');
   }
   const base = exception ?? newException(series, occurrenceDate, displayed, stamp);
