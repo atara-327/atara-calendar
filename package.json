@@ -14,10 +14,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "gen:vsop87": "node scripts/generate-vsop87-earth.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.3.1",
+    "astronomia": "^4.2.0",
     "hono": "^4.13.13",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

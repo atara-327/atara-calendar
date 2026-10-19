@@ -28,6 +28,10 @@ export default defineConfig(
     },
   },
   {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ['src/client/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     extends: [reactHooks.configs.flat.recommended],

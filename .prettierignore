@@ -5,3 +5,4 @@ package-lock.json
 docs
 *.md
 .claude
+src/shared/data/vsop87-earth-truncated.json

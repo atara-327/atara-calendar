@@ -5,7 +5,7 @@
     "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": [],
+    "types": ["node"],
     "allowJs": true,
     "checkJs": true,
     "skipLibCheck": true,
@@ -16,5 +16,11 @@
     "noFallthroughCasesInSwitch": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "eslint.config.js",
+    "scripts/*.mjs",
+    "src/shared/astronomia.d.ts"
+  ]
 }
