@@ -234,6 +234,20 @@ function generatedDates(series: Entry, from: DateStr, to: DateStr): DateStr[] {
   return dates;
 }
 
+// 例外をクラスで分けるのは、API（#4）が「依頼を捨てる」場合（対象がもうない）と「エラーを返す」場合
+// （依頼の中身が受け付けられない）を区別するため。message の文面で区別しないのは、
+// 文面を直しただけで、API の振る舞いが変わってしまうため。
+
+/** 変更・削除の対象にした回（または系列）が、存在しない、または削除されている。 */
+export class OccurrenceNotFoundError extends Error {
+  override readonly name = 'OccurrenceNotFoundError';
+}
+
+/** 変更の中身が受け付けられない（「この予定のみ」でルールを変える、など）。 */
+export class InvalidChangeError extends Error {
+  override readonly name = 'InvalidChangeError';
+}
+
 // ここから先は、作成・変更・削除（設計書 4.5）。どれも純粋な関数で、結果は「書き込む行
 // （変更後の行全体）」の配列。端末とサーバーで同じ計算をして同じ行にするため（設計書 5.2）、
 // 乱数も現在時刻も使わず、新しい行の id と編集時刻は引数で受け取る。
@@ -394,7 +408,9 @@ function findSeriesRow(entries: readonly Entry[], seriesId: string): Entry {
   const row = entries.find(
     (entry) => entry.id === seriesId && entry.seriesId === null && entry.deletedAt === null,
   );
-  if (row === undefined) throw new Error(`対象の予定が見つかりません: ${seriesId}`);
+  if (row === undefined) {
+    throw new OccurrenceNotFoundError(`対象の予定が見つかりません: ${seriesId}`);
+  }
   return row;
 }
 
@@ -441,7 +457,7 @@ function locateOccurrence(
   }
   const rule: SeriesRule = { rrule, startDate: series.startDate, untilDate: series.untilDate };
   if (!isOccurrenceDate(rule, occurrenceDate)) {
-    throw new RangeError(`${occurrenceDate} は、${series.id} の回ではありません`);
+    throw new OccurrenceNotFoundError(`${occurrenceDate} は、${series.id} の回ではありません`);
   }
   return {
     exception: undefined,
@@ -594,7 +610,7 @@ function changeThis(
 ): Entry {
   // 例外の行は 1 回だけの行で、ルールを持たない。変えたいなら「これ以降すべて」か「すべて」にする。
   if (changes.rrule !== undefined) {
-    throw new Error('「この予定のみ」では、繰り返しのルールを変えられません');
+    throw new InvalidChangeError('「この予定のみ」では、繰り返しのルールを変えられません');
   }
   const schedule = resolveSchedule(displayed, changes);
   const base = exception ?? newException(series, occurrenceDate, displayed, stamp);
