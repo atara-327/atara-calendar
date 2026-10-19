@@ -22,12 +22,26 @@ export interface NamedDate {
 
 export type Observance = NamedDate;
 
+/** 記念日の上書き。year 年の name の日付を、date に差し替える。 */
+export interface ObservanceOverride {
+  readonly year: number;
+  readonly name: string;
+  readonly date: DateStr;
+}
+
 /**
  * 内閣府の正式な発表と、計算の結果が食い違ったときに、ここへ足す。
  * 内閣府の CSV を自動で取りに行かないのは、形式の変更や文字コード（Shift_JIS）の扱いで壊れやすく、
  * 上書きが必要になるのは法律の特例があるときだけ（数年に1回程度）だから。
  */
 export const HOLIDAY_OVERRIDES: readonly HolidayOverride[] = [];
+
+/**
+ * 記念日の日付が、正式な発表と食い違ったときに、ここへ足す。
+ * 主に節分・夏至・冬至で、国立天文台の暦要項と計算が食い違ったときに使う（固定日や第n曜日は食い違わない）。
+ * 記念日の追加・削除を上書きで行わないのは、それが年ごとの例外ではなく、表（OBSERVANCE_RULES）の変更だから。
+ */
+export const OBSERVANCE_OVERRIDES: readonly ObservanceOverride[] = [];
 
 const SUNDAY = 0;
 const MONDAY = 1;
@@ -233,23 +247,54 @@ export function holidayName(
   return holidaysOfYear(dateToYmd(date).year, overrides).get(date) ?? null;
 }
 
+function byDate(a: NamedDate, b: NamedDate): number {
+  return dateToDays(a.date) - dateToDays(b.date);
+}
+
+const OBSERVANCE_NAMES: ReadonlySet<string> = new Set(OBSERVANCE_RULES.map(({ name }) => name));
+
 const observanceCache = new Map<number, readonly Observance[]>();
 
-/**
- * year 年の記念日（休日ではない）。日付順。同じ日に重なることがある（例: 2026 年の夏至と父の日）。
- * 1900〜2199 年に対応する。範囲外は例外を投げる。
- */
-export function observancesOfYear(year: number): readonly Observance[] {
+function baseObservances(year: number): readonly Observance[] {
   const cached = observanceCache.get(year);
   if (cached !== undefined) return cached;
 
   assertSupportedYear(year);
-  const observances = OBSERVANCE_RULES.map(({ name, rule }) => ({
+  const computed = OBSERVANCE_RULES.map(({ name, rule }) => ({
     date: resolveDateRule(year, rule),
     name,
-  })).sort((a, b) => dateToDays(a.date) - dateToDays(b.date));
-  observanceCache.set(year, observances);
-  return observances;
+  })).sort(byDate);
+  observanceCache.set(year, computed);
+  return computed;
+}
+
+/**
+ * year 年の記念日（休日ではない）。日付順。同じ日に重なることがある（例: 2026 年の夏至と父の日）。
+ * 1900〜2199 年に対応する。範囲外は例外を投げる。
+ * 上書きの name が記念日の表にない、または date が year 年でないときも例外を投げる
+ * （他の年の上書きも確かめる。打ち間違いを、その年になるまで見逃さないため）。
+ */
+export function observancesOfYear(
+  year: number,
+  overrides: readonly ObservanceOverride[] = OBSERVANCE_OVERRIDES,
+): readonly Observance[] {
+  const base = baseObservances(year);
+  for (const override of overrides) {
+    if (!OBSERVANCE_NAMES.has(override.name)) {
+      throw new RangeError(`記念日の表にない名前です: ${override.name}`);
+    }
+    if (dateToYmd(override.date).year !== override.year) {
+      throw new RangeError(
+        `上書きの日付が、年と合っていません: ${String(override.year)}年の ${override.date}`,
+      );
+    }
+  }
+  const applicable = overrides.filter((override) => override.year === year);
+  if (applicable.length === 0) return base;
+
+  // 上書き後の結果をキャッシュに入れないのは、上書き一覧は引数で変わり、同じ年でも結果が変わるため。
+  const dateByName = new Map(applicable.map(({ name, date }) => [name, date]));
+  return base.map(({ date, name }) => ({ date: dateByName.get(name) ?? date, name })).sort(byDate);
 }
 
 /**

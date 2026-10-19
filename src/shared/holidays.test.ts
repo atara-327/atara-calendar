@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addDays, dateToDays } from './date';
 import {
   HOLIDAY_OVERRIDES,
+  OBSERVANCE_OVERRIDES,
   holidayName,
   holidaysOfYear,
   isDayOff,
@@ -350,6 +351,81 @@ describe('HD-3: 記念日', () => {
 
   it.each([1899, 2200])('対応外の年 %s は例外を投げる', (year) => {
     expect(() => observancesOfYear(year)).toThrow(RangeError);
+  });
+});
+
+describe('HD-5: 記念日の上書き一覧', () => {
+  it('既定の上書き一覧は空で、記念日は計算どおりになる', () => {
+    expect(OBSERVANCE_OVERRIDES).toEqual([]);
+    expect(observancesOfYear(2026)).toEqual(observancesOfYear(2026, []));
+    expect(observancesOfYear(2026).find(({ name }) => name === '冬至')?.date).toBe('2026-12-22');
+  });
+
+  it('その年のその記念日の日付を、差し替えられる', () => {
+    const overrides = [{ year: 2026, name: '冬至', date: '2026-12-23' }];
+
+    const observances = observancesOfYear(2026, overrides);
+
+    expect(observances.find(({ name }) => name === '冬至')).toEqual({
+      date: '2026-12-23',
+      name: '冬至',
+    });
+    expect(observances).toHaveLength(13);
+  });
+
+  it('差し替えた後も、日付順に並ぶ', () => {
+    // 節分を 2/3 から 2/15 に動かすと、バレンタインデー（2/14）の後ろになる
+    const overrides = [{ year: 2026, name: '節分', date: '2026-02-15' }];
+
+    const names = observancesOfYear(2026, overrides).map(({ name }) => name);
+
+    expect(names.slice(0, 3)).toEqual(['バレンタインデー', '節分', 'ひな祭り']);
+  });
+
+  it('同じ年の複数の記念日を、まとめて差し替えられる', () => {
+    const overrides = [
+      { year: 2026, name: '夏至', date: '2026-06-22' },
+      { year: 2026, name: '冬至', date: '2026-12-23' },
+    ];
+
+    const dates = observancesOfYear(2026, overrides)
+      .filter(({ name }) => name === '夏至' || name === '冬至')
+      .map(({ date }) => date);
+
+    expect(dates).toEqual(['2026-06-22', '2026-12-23']);
+  });
+
+  it('上書きしても、既定の結果や他の年の結果は変わらない', () => {
+    const overrides = [{ year: 2026, name: '冬至', date: '2026-12-23' }];
+
+    observancesOfYear(2026, overrides);
+
+    expect(observancesOfYear(2026).find(({ name }) => name === '冬至')?.date).toBe('2026-12-22');
+    expect(observancesOfYear(2025, overrides)).toBe(observancesOfYear(2025));
+  });
+
+  it('記念日の表にない名前の上書きは、例外を投げる', () => {
+    expect(() =>
+      observancesOfYear(2026, [{ year: 2026, name: '春分', date: '2026-03-20' }]),
+    ).toThrow(RangeError);
+  });
+
+  it('記念日の表にない名前の上書きは、別の年の分でも例外を投げる', () => {
+    expect(() =>
+      observancesOfYear(2026, [{ year: 2027, name: '春分', date: '2027-03-21' }]),
+    ).toThrow(RangeError);
+  });
+
+  it('日付が、上書きの年でないときは例外を投げる', () => {
+    expect(() =>
+      observancesOfYear(2026, [{ year: 2026, name: '冬至', date: '2027-12-22' }]),
+    ).toThrow(RangeError);
+  });
+
+  it('存在しない日付の上書きは例外を投げる', () => {
+    expect(() =>
+      observancesOfYear(2026, [{ year: 2026, name: '冬至', date: '2026-12-32' }]),
+    ).toThrow(RangeError);
   });
 });
 
