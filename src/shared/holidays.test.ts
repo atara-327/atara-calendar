@@ -335,14 +335,27 @@ describe('HD-3: 記念日', () => {
       .slice(1)
       .map((line) => line.split(','));
 
-    for (const [year = '', term = '', , date = ''] of rows) {
-      const observances = observancesOfYear(Number(year));
-      const dateOf = (name: string) => observances.find((o) => o.name === name)?.date;
+    // 国立天文台の節気名 → [記念日の名前, 節気の日から記念日までの日数]。春分・秋分は記念日にない
+    const observanceOfTerm: Record<string, readonly [string, number]> = {
+      夏至: ['夏至', 0],
+      冬至: ['冬至', 0],
+      立春: ['節分', -1],
+    };
+    const comparedCounts: Record<string, number> = {};
 
-      if (term === '夏至') expect(dateOf('夏至')).toBe(date);
-      if (term === '冬至') expect(dateOf('冬至')).toBe(date);
-      if (term === '立春') expect(dateOf('節分')).toBe(addDays(date, -1));
+    for (const [year = '', term = '', , date = ''] of rows) {
+      const target = observanceOfTerm[term];
+      if (target === undefined) continue;
+
+      const [name, offsetDays] = target;
+      const actual = observancesOfYear(Number(year)).find((o) => o.name === name)?.date;
+
+      expect(actual).toBe(addDays(date, offsetDays));
+      comparedCounts[term] = (comparedCounts[term] ?? 0) + 1;
     }
+
+    // 2004〜2027 年の 24 年 × 3 種類。照合の対象が空になって、何も確かめずに通るのを防ぐ
+    expect(comparedCounts).toEqual({ 夏至: 24, 冬至: 24, 立春: 24 });
   });
 
   it('毎年 13 件あり、日付順に並ぶ', () => {
