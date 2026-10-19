@@ -11,6 +11,8 @@
   - 使う Claude: Claude Code / Claude Desktop（PC）。ローカルで動く MCP サーバーを想定
   - 許可する操作: 確認・サマリ・追加・編集・削除のすべて
   - 参考: Googleカレンダーの MCP（ツールの分け方・引数の設計）
+  - 認証: Cloudflare Access のサービストークン（`CF-Access-Client-Id` / `CF-Access-Client-Secret` ヘッダー）で API を呼ぶ（3次ヒアリング K2）
+- 移行: MCP ができたら、今の Googleカレンダーの予定を Claude に移してもらう（Googleカレンダーの MCP で読み、こちらの MCP で書き込む）（3次ヒアリング E14）
 - MVP の時点で気をつけること:
   - 後から MCP サーバーを付けやすいように、データの読み書きは API として整理しておく
 
