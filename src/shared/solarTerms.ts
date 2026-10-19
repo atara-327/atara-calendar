@@ -18,7 +18,7 @@ const MEAN_TROPICAL_YEAR_DAYS = 365.2422;
 const CONVERGED_DAYS = 1e-7;
 const MAX_ITERATIONS = 50;
 
-// 反復の出発点。実際の日は前後に 1 日ずれることがあるが、反復で補正されるので、これで足りる。
+// 反復の出発点。実際の日は最大 2 日ずれる（例: 1903 年の夏至は 6/23）が、反復で補正されるので、これで足りる。
 const FIRST_GUESS: Record<SolarLongitude, { month: number; day: number }> = {
   315: { month: 2, day: 4 },
   0: { month: 3, day: 20 },

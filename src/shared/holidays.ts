@@ -146,7 +146,8 @@ const OBSERVANCE_RULES: readonly { name: string; rule: DateRule }[] = [
 
 /** 振替休日の制度が始まった日。この日より前の祝日が日曜でも、振替休日はない。 */
 const SUBSTITUTE_HOLIDAY_START: DateStr = '1973-04-12';
-/** 国民の休日の制度が始まった年。 */
+// 国民の休日の施行は 1985-12-27 だが、日付ではなく年で判定する。
+// 1985 年の残り（12/28〜12/31）に、前後を祝日に挟まれる日がなく、年で判定しても結果が変わらないため。
 const CITIZENS_HOLIDAY_START_YEAR = 1986;
 /** 振替休日と国民の休日のルールが変わった年。 */
 const RULE_CHANGE_YEAR = 2007;
