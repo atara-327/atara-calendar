@@ -1,4 +1,12 @@
-import { addDays, dateToYmd, dayOfWeek, nthWeekday, ymdToDate, type DateStr } from './date';
+import {
+  addDays,
+  dateToDays,
+  dateToYmd,
+  dayOfWeek,
+  nthWeekday,
+  ymdToDate,
+  type DateStr,
+} from './date';
 import { assertSupportedYear, solarTermDate, type SolarLongitude } from './solarTerms';
 
 /** 祝日の上書き。name が null なら、その日を祝日から外す（設計書 Q8）。 */
@@ -12,6 +20,8 @@ export interface NamedDate {
   name: string;
 }
 
+export type Observance = NamedDate;
+
 /**
  * 内閣府の正式な発表と、計算の結果が食い違ったときに、ここへ足す。
  * 内閣府の CSV を自動で取りに行かないのは、形式の変更や文字コード（Shift_JIS）の扱いで壊れやすく、
@@ -21,11 +31,12 @@ export const HOLIDAY_OVERRIDES: readonly HolidayOverride[] = [];
 
 const SUNDAY = 0;
 const MONDAY = 1;
+const SATURDAY = 6;
 
 type DateRule =
   | { kind: 'fixed'; month: number; day: number }
   | { kind: 'nthWeekday'; month: number; weekday: number; n: number }
-  | { kind: 'solarTerm'; longitude: SolarLongitude };
+  | { kind: 'solarTerm'; longitude: SolarLongitude; offsetDays: number | undefined };
 
 interface HolidayRule {
   name: string;
@@ -42,10 +53,21 @@ const nthMonday = (month: number, n: number): DateRule => ({
   weekday: MONDAY,
   n,
 });
-const solarTerm = (longitude: SolarLongitude): DateRule => ({ kind: 'solarTerm', longitude });
+const nthSunday = (month: number, n: number): DateRule => ({
+  kind: 'nthWeekday',
+  month,
+  weekday: SUNDAY,
+  n,
+});
+const solarTerm = (longitude: SolarLongitude, offsetDays?: number): DateRule => ({
+  kind: 'solarTerm',
+  longitude,
+  offsetDays,
+});
 
 // 祝日法は 1948-07-20 に施行された。それより前の年は、どの行にも当てはまらないので祝日がない。
-// 2020・2021 年の五輪による移動も、年を限った行として、ここに並べる。
+// 2020・2021 年の五輪による移動は、一度きりの祝日の表には入れず、年を限った行として並べる。
+// 一度きりの祝日の表に入れると、「その年だけ元の日付の祝日を消す」処理が別に必要になるため。
 const HOLIDAY_RULES: readonly HolidayRule[] = [
   { name: '元日', fromYear: 1949, rule: fixed(1, 1) },
   { name: '成人の日', fromYear: 1949, toYear: 1999, rule: fixed(1, 15) },
@@ -91,6 +113,23 @@ const ONE_OFF_HOLIDAYS: readonly NamedDate[] = [
   { date: '2019-10-22', name: '即位礼正殿の儀' },
 ];
 
+// 記念日は表（データ）として持つ（HD-4）。
+const OBSERVANCE_RULES: readonly { name: string; rule: DateRule }[] = [
+  { name: '節分', rule: solarTerm(315, -1) },
+  { name: 'バレンタインデー', rule: fixed(2, 14) },
+  { name: 'ひな祭り', rule: fixed(3, 3) },
+  { name: 'ホワイトデー', rule: fixed(3, 14) },
+  { name: '母の日', rule: nthSunday(5, 2) },
+  { name: '父の日', rule: nthSunday(6, 3) },
+  { name: '夏至', rule: solarTerm(90) },
+  { name: '七夕', rule: fixed(7, 7) },
+  { name: 'ハロウィン', rule: fixed(10, 31) },
+  { name: '冬至', rule: solarTerm(270) },
+  { name: 'クリスマスイブ', rule: fixed(12, 24) },
+  { name: 'クリスマス', rule: fixed(12, 25) },
+  { name: '大晦日', rule: fixed(12, 31) },
+];
+
 /** 振替休日の制度が始まった日。この日より前の祝日が日曜でも、振替休日はない。 */
 const SUBSTITUTE_HOLIDAY_START: DateStr = '1973-04-12';
 /** 国民の休日の制度が始まった年。 */
@@ -105,7 +144,7 @@ function resolveDateRule(year: number, rule: DateRule): DateStr {
     case 'nthWeekday':
       return nthWeekday(year, rule.month, rule.weekday, rule.n);
     case 'solarTerm':
-      return solarTermDate(year, rule.longitude);
+      return addDays(solarTermDate(year, rule.longitude), rule.offsetDays ?? 0);
   }
 }
 
@@ -192,4 +231,47 @@ export function holidayName(
   overrides: readonly HolidayOverride[] = HOLIDAY_OVERRIDES,
 ): string | null {
   return holidaysOfYear(dateToYmd(date).year, overrides).get(date) ?? null;
+}
+
+const observanceCache = new Map<number, readonly Observance[]>();
+
+/**
+ * year 年の記念日（休日ではない）。日付順。同じ日に重なることがある（例: 2026 年の夏至と父の日）。
+ * 1900〜2199 年に対応する。範囲外は例外を投げる。
+ */
+export function observancesOfYear(year: number): readonly Observance[] {
+  const cached = observanceCache.get(year);
+  if (cached !== undefined) return cached;
+
+  assertSupportedYear(year);
+  const observances = OBSERVANCE_RULES.map(({ name, rule }) => ({
+    date: resolveDateRule(year, rule),
+    name,
+  })).sort((a, b) => dateToDays(a.date) - dateToDays(b.date));
+  observanceCache.set(year, observances);
+  return observances;
+}
+
+/**
+ * 休日（土曜・日曜・祝日・年末年始の 12/29〜1/3）かどうか。記念日は休日に含めない。
+ * 祝日（holiday）より広いので、名前を分けている。
+ */
+export function isDayOff(
+  date: DateStr,
+  overrides: readonly HolidayOverride[] = HOLIDAY_OVERRIDES,
+): boolean {
+  const { year, month, day } = dateToYmd(date);
+  // 土日でも先に引くのは、対応外の年を、曜日によらず同じ例外にそろえるため。
+  const isHoliday = holidaysOfYear(year, overrides).has(date);
+  const weekday = dayOfWeek(date);
+  const isNewYear = (month === 12 && day >= 29) || (month === 1 && day <= 3);
+  return weekday === SUNDAY || weekday === SATURDAY || isNewYear || isHoliday;
+}
+
+/** 平日（休日でない日）かどうか。 */
+export function isWeekday(
+  date: DateStr,
+  overrides: readonly HolidayOverride[] = HOLIDAY_OVERRIDES,
+): boolean {
+  return !isDayOff(date, overrides);
 }

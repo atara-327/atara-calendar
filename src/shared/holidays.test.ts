@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { dateToDays } from './date';
-import { holidayName, holidaysOfYear, HOLIDAY_OVERRIDES } from './holidays';
+import { addDays, dateToDays } from './date';
+import {
+  HOLIDAY_OVERRIDES,
+  holidayName,
+  holidaysOfYear,
+  isDayOff,
+  isWeekday,
+  observancesOfYear,
+} from './holidays';
 
 interface CabinetOfficeRow {
   date: string;
@@ -254,5 +261,165 @@ describe('HD-5: 上書き一覧（設計書 Q8）', () => {
     expect(() => holidayName('2026-10-13', [{ date: '2026-02-30', name: 'x' }])).toThrow(
       RangeError,
     );
+  });
+});
+
+describe('HD-3: 記念日', () => {
+  it('2026年の13件の日付', () => {
+    expect(observancesOfYear(2026)).toEqual([
+      { date: '2026-02-03', name: '節分' },
+      { date: '2026-02-14', name: 'バレンタインデー' },
+      { date: '2026-03-03', name: 'ひな祭り' },
+      { date: '2026-03-14', name: 'ホワイトデー' },
+      { date: '2026-05-10', name: '母の日' },
+      { date: '2026-06-21', name: '父の日' },
+      { date: '2026-06-21', name: '夏至' },
+      { date: '2026-07-07', name: '七夕' },
+      { date: '2026-10-31', name: 'ハロウィン' },
+      { date: '2026-12-22', name: '冬至' },
+      { date: '2026-12-24', name: 'クリスマスイブ' },
+      { date: '2026-12-25', name: 'クリスマス' },
+      { date: '2026-12-31', name: '大晦日' },
+    ]);
+  });
+
+  it.each([2021, 2025])('%i年の節分は 2/2（立春が 2/3 になる年）', (year) => {
+    const date = observancesOfYear(year).find(({ name }) => name === '節分')?.date;
+
+    expect(date).toBe(`${String(year)}-02-02`);
+  });
+
+  it.each([2022, 2023, 2024, 2026])('%i年の節分は 2/3（立春が 2/4 になる年）', (year) => {
+    const date = observancesOfYear(year).find(({ name }) => name === '節分')?.date;
+
+    expect(date).toBe(`${String(year)}-02-03`);
+  });
+
+  it.each([
+    [2025, '2025-05-11', '2025-06-15'],
+    [2026, '2026-05-10', '2026-06-21'],
+    [2027, '2027-05-09', '2027-06-20'],
+    [2028, '2028-05-14', '2028-06-18'],
+  ])('%i年の母の日は %s、父の日は %s', (year, mothersDay, fathersDay) => {
+    const dateOf = (name: string) => observancesOfYear(year).find((o) => o.name === name)?.date;
+
+    expect(dateOf('母の日')).toBe(mothersDay);
+    expect(dateOf('父の日')).toBe(fathersDay);
+  });
+
+  it('夏至・冬至・節分は、国立天文台の暦要項（2004〜2027年）と同じ日になる', () => {
+    const csv = readFileSync(
+      new URL('../../test/fixtures/naoj-solar-terms.csv', import.meta.url),
+      'utf8',
+    );
+    const rows = csv
+      .trim()
+      .split('\n')
+      .slice(1)
+      .map((line) => line.split(','));
+
+    for (const [year = '', term = '', , date = ''] of rows) {
+      const observances = observancesOfYear(Number(year));
+      const dateOf = (name: string) => observances.find((o) => o.name === name)?.date;
+
+      if (term === '夏至') expect(dateOf('夏至')).toBe(date);
+      if (term === '冬至') expect(dateOf('冬至')).toBe(date);
+      if (term === '立春') expect(dateOf('節分')).toBe(addDays(date, -1));
+    }
+  });
+
+  it('毎年 13 件あり、日付順に並ぶ', () => {
+    for (const year of [1900, 2000, 2026, 2199]) {
+      const observances = observancesOfYear(year);
+      const days = observances.map(({ date }) => dateToDays(date));
+
+      expect(observances).toHaveLength(13);
+      expect(days).toEqual([...days].sort((a, b) => a - b));
+    }
+  });
+
+  it('記念日は祝日に含まれない', () => {
+    expect(holidayName('2026-02-14')).toBeNull();
+    expect(holidayName('2026-12-25')).toBeNull();
+    expect(holidaysOfYear(2026).has('2026-06-21')).toBe(false);
+  });
+
+  it('同じ年の結果はキャッシュされ、同じものが返る', () => {
+    expect(observancesOfYear(2026)).toBe(observancesOfYear(2026));
+  });
+
+  it.each([1899, 2200])('対応外の年 %s は例外を投げる', (year) => {
+    expect(() => observancesOfYear(year)).toThrow(RangeError);
+  });
+});
+
+describe('RP-5: 休日と平日の判定', () => {
+  it('土曜・日曜は休日', () => {
+    expect(isDayOff('2026-10-17')).toBe(true);
+    expect(isDayOff('2026-10-18')).toBe(true);
+    expect(isWeekday('2026-10-17')).toBe(false);
+    expect(isWeekday('2026-10-18')).toBe(false);
+  });
+
+  it('祝日でない月〜金は平日', () => {
+    expect(isDayOff('2026-10-19')).toBe(false);
+    expect(isWeekday('2026-10-19')).toBe(true);
+    expect(isWeekday('2026-10-23')).toBe(true);
+  });
+
+  it('平日にあたる祝日は休日', () => {
+    // 2026-10-12（月）はスポーツの日
+    expect(isDayOff('2026-10-12')).toBe(true);
+    expect(isWeekday('2026-10-12')).toBe(false);
+  });
+
+  it('平日にあたる振替休日・国民の休日は休日', () => {
+    // 2026-05-06（水）は振替休日、2026-09-22（火）は国民の休日
+    expect(isDayOff('2026-05-06')).toBe(true);
+    expect(isDayOff('2026-09-22')).toBe(true);
+    expect(isWeekday('2026-05-06')).toBe(false);
+    expect(isWeekday('2026-09-22')).toBe(false);
+  });
+
+  it('年末年始（12/29〜1/3）は、平日にあたっても休日', () => {
+    // 2025-12-29（月）〜 2025-12-31（水）、2028-01-03（月）
+    for (const date of ['2025-12-29', '2025-12-30', '2025-12-31', '2026-01-02', '2028-01-03']) {
+      expect(isDayOff(date)).toBe(true);
+      expect(isWeekday(date)).toBe(false);
+    }
+  });
+
+  it('年末年始の前後（12/28 と 1/4）の平日は、平日のまま', () => {
+    // 2026-12-28（月）、2028-01-04（火）、2026-01-05（月）
+    expect(isWeekday('2026-12-28')).toBe(true);
+    expect(isWeekday('2028-01-04')).toBe(true);
+    expect(isWeekday('2026-01-05')).toBe(true);
+  });
+
+  it('年末年始は休日の判定にだけ使い、祝日にはならない', () => {
+    expect(holidayName('2025-12-29')).toBeNull();
+    expect(holidayName('2026-01-02')).toBeNull();
+    expect(holidaysOfYear(2025).has('2025-12-30')).toBe(false);
+  });
+
+  it('記念日の日は、平日のまま', () => {
+    // 2026-07-07（火）七夕、2026-12-24（木）クリスマスイブ、2026-02-03（火）節分
+    for (const date of ['2026-07-07', '2026-12-24', '2026-02-03', '2026-03-03']) {
+      expect(observancesOfYear(2026).some((o) => o.date === date)).toBe(true);
+      expect(isDayOff(date)).toBe(false);
+      expect(isWeekday(date)).toBe(true);
+    }
+  });
+
+  it('上書き一覧の追加・削除が、休日の判定に反映される', () => {
+    expect(isWeekday('2026-10-13', [{ date: '2026-10-13', name: '臨時の祝日' }])).toBe(false);
+    expect(isWeekday('2026-10-12', [{ date: '2026-10-12', name: null }])).toBe(true);
+    // 土日は、祝日から外しても休日のまま
+    expect(isDayOff('2026-10-18', [{ date: '2026-10-18', name: null }])).toBe(true);
+  });
+
+  it.each(['1899-12-31', '2200-01-01'])('対応外の日付 %s は、土日でも例外を投げる', (date) => {
+    expect(() => isDayOff(date)).toThrow(RangeError);
+    expect(() => isWeekday(date)).toThrow(RangeError);
   });
 });
