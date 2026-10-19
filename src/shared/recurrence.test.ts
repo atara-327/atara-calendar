@@ -121,7 +121,7 @@ describe('RP-1: 毎年（開始日と同じ月日）', () => {
   });
 });
 
-describe('RP-2: 2/29 の毎年は、うるう年だけが回になる', () => {
+describe('Q9: 2/29 の毎年は、うるう年だけが回になる', () => {
   const rule = series({ freq: 'yearly' }, '2024-02-29');
 
   it('うるう年でない年の 2/28 と 3/1 は回ではない', () => {
@@ -789,6 +789,32 @@ describe('RP-4: 例外の行の展開', () => {
     expect(occurrences.map(({ title }) => title)).toEqual(['新しい']);
   });
 
+  it('同じ回の例外が 2 行あって編集時刻も同じなら、id が大きい方だけを使う（入力の並びによらない）', () => {
+    const small = exception({
+      id: 'ex-a',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-21',
+      endDate: '2026-10-21',
+      title: 'id が小さい',
+      editedAt: 1000,
+    });
+    const large = exception({
+      id: 'ex-b',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-21',
+      endDate: '2026-10-21',
+      title: 'id が大きい',
+      editedAt: 1000,
+    });
+    for (const entries of [
+      [daily, small, large],
+      [daily, large, small],
+    ]) {
+      const occurrences = expandOccurrences(entries, '2026-10-21', '2026-10-21');
+      expect(occurrences.map(({ title }) => title)).toEqual(['id が大きい']);
+    }
+  });
+
   it('削除済みの例外は無視され、元の回が戻る', () => {
     const ex = exception({
       id: 'ex1',
@@ -812,6 +838,20 @@ describe('RP-4: 例外の行の展開', () => {
     });
     const deleted = { ...daily, deletedAt: 5000 };
     expect(expandOccurrences([deleted, ex], '2026-10-01', '2026-10-31')).toEqual([]);
+  });
+
+  it('繰り返さない予定に付いた例外の行は、出さない（その予定だけが出る）', () => {
+    const single = makeEntry({ id: 'e1', startDate: '2026-10-21' });
+    const orphan = exception({
+      id: 'ex1',
+      seriesId: 'e1',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-22',
+      endDate: '2026-10-22',
+    });
+    expect(labels(expandOccurrences([single, orphan], '2026-10-20', '2026-10-23'))).toEqual([
+      'e1@2026-10-21',
+    ]);
   });
 
   it('系列の行が見つからない例外の行は出さない', () => {
@@ -959,6 +999,117 @@ describe('展開: 並び順', () => {
     expect(labels(expandOccurrences([a, b], '2026-10-19', '2026-10-19'))).toEqual(
       labels(expandOccurrences([b, a], '2026-10-19', '2026-10-19')),
     );
+  });
+});
+
+describe('展開: 期間を区切って展開した結果は、まとめて展開した結果と同じになる', () => {
+  const FROM = '2026-10-19';
+  const TO = '2026-12-31';
+
+  const entries = [
+    // 日付をまたぐ、毎日のタイムブロック（23:00〜翌 7:00）
+    makeEntry({
+      id: 'sleep',
+      kind: 'block',
+      workspaceId: null,
+      allDay: false,
+      rrule: { freq: 'daily' },
+      startDate: '2026-10-19',
+      startTime: '23:00',
+      endDate: '2026-10-20',
+      endTime: '07:00',
+      notifyEnabled: false,
+    }),
+    // 複数日（3 日間）の毎週 水・金
+    makeEntry({
+      id: 'trip',
+      rrule: { freq: 'weekly', days: [3, 5] },
+      startDate: '2026-10-21',
+      endDate: '2026-10-23',
+    }),
+    // 毎月 31 日（31 日がない月はスキップ）。終わりがある
+    makeEntry({
+      id: 'rent',
+      rrule: { freq: 'monthly' },
+      startDate: '2026-10-31',
+      untilDate: '2026-12-31',
+    }),
+    // 平日の日中。例外が 3 つ（別の週へ移した回、削除した回、複数日の終日に変えた回）
+    makeEntry({
+      id: 'work',
+      allDay: false,
+      rrule: { freq: 'weekday' },
+      startDate: '2026-10-19',
+      startTime: '09:00',
+      endTime: '18:00',
+    }),
+    makeEntry({
+      id: 'work-moved',
+      seriesId: 'work',
+      originalDate: '2026-11-04',
+      allDay: false,
+      startDate: '2026-11-11',
+      startTime: '20:00',
+      endTime: '21:00',
+    }),
+    makeEntry({
+      id: 'work-cancelled',
+      seriesId: 'work',
+      originalDate: '2026-11-05',
+      cancelled: true,
+    }),
+    makeEntry({
+      id: 'work-long',
+      seriesId: 'work',
+      originalDate: '2026-11-09',
+      startDate: '2026-11-09',
+      endDate: '2026-11-15',
+    }),
+    // 休日
+    makeEntry({ id: 'off', rrule: { freq: 'holiday' }, startDate: '2026-10-24' }),
+    // 繰り返さない予定。週をまたぐ複数日と、終了が 00:00 の時間指定
+    makeEntry({ id: 'camp', startDate: '2026-10-30', endDate: '2026-11-08' }),
+    makeEntry({
+      id: 'late',
+      allDay: false,
+      startDate: '2026-11-14',
+      startTime: '20:00',
+      endDate: '2026-11-15',
+      endTime: '00:00',
+    }),
+  ];
+
+  /** 区切った期間ごとに展開し、前の期間にもかかっていた回は、1 回だけ数えて、つなげる。 */
+  function expandInChunks(chunkDays: number): Occurrence[] {
+    const seen = new Set<string>();
+    const result: Occurrence[] = [];
+    for (let first = dateToDays(FROM); first <= dateToDays(TO); first += chunkDays) {
+      const last = Math.min(first + chunkDays - 1, dateToDays(TO));
+      for (const occurrence of expandOccurrences(entries, daysToDate(first), daysToDate(last))) {
+        const key = `${occurrence.entryId}@${occurrence.occurrenceDate}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(occurrence);
+      }
+    }
+    return result;
+  }
+
+  const whole = expandOccurrences(entries, FROM, TO);
+
+  it('入力に、複数日・日付をまたぐ回・別の週へ移した例外・削除した回が入っている', () => {
+    const found = labels(whole);
+    expect(found).toContain('trip@2026-10-21');
+    expect(found).toContain('sleep@2026-10-19');
+    expect(found).toContain('camp@2026-10-30');
+    expect(found).toContain('work-moved@2026-11-04');
+    expect(found).toContain('work-long@2026-11-09');
+    expect(found).not.toContain('work@2026-11-04');
+    expect(found).not.toContain('work-cancelled@2026-11-05');
+  });
+
+  it.each([7, 1])('%i 日ごとに区切って展開してつなげると、並びも含めて同じになる', (chunkDays) => {
+    expect(expandInChunks(chunkDays)).toEqual(whole);
   });
 });
 
