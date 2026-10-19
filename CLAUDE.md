@@ -64,8 +64,9 @@ Cloudflare（Workers + D1 + Access）に載せ、通知は Discord に送る。
 - **コミットは、1つの論理的な変更ごとに分ける**。無関係な変更を混ぜない。壊れた状態のコミットも作らない。
 - push する前に、次の確認をすべて通す。失敗したまま push しない。
   ```sh
-  npx tsc --noEmit
+  npm run typecheck
   npm run lint
+  npm run format:check
   npm test
   ```
 - ブランチは機能ごとに切る（例: `feature/holidays`、`fix/notify-duplicate`）。main に直接コミットしない。
