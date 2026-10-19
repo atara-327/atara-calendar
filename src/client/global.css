@@ -1,0 +1,17 @@
+:root {
+  --color-bg: #1f1f1f;
+  --color-text: #e3e3e3;
+  --color-grid: #3c4043;
+  --color-month-border: #8e918f;
+  --color-year-border: #e3e3e3;
+  --color-holiday: #f28b82;
+  --color-observance: #9aa0a6;
+  --color-timeblock: #3d4a5c;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Noto Sans JP', sans-serif;
+}

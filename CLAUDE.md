@@ -64,9 +64,11 @@ Cloudflare（Workers + D1 + Access）に載せ、通知は Discord に送る。
 - **コミットは、1つの論理的な変更ごとに分ける**。無関係な変更を混ぜない。壊れた状態のコミットも作らない。
 - push する前に、次の確認をすべて通す。失敗したまま push しない。
   ```sh
-  npx tsc --noEmit
+  npm run typecheck
   npm run lint
+  npm run format:check
   npm test
+  npm run build
   ```
 - ブランチは機能ごとに切る（例: `feature/holidays`、`fix/notify-duplicate`）。main に直接コミットしない。
 - **main へのマージは、必ずユーザーが行う**。Claude（メインセッション・サブエージェントとも）はマージしない。main に取り込まれると本番に反映されるので（設計書 Q7）、リリースの判断をユーザーに残すため。

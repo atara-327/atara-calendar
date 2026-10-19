@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "atara-calendar",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-12",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+}
