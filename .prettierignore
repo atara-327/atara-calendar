@@ -1,0 +1,7 @@
+dist
+.wrangler
+worker-configuration.d.ts
+package-lock.json
+docs
+*.md
+.claude

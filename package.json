@@ -10,6 +10,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
