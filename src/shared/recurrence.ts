@@ -773,14 +773,16 @@ function changeFollowing(
     seriesLength(series, displayed, changes),
   );
   // untilDate を引き継ぐのは、元の系列が、前に「これ以降すべて」で後ろを切られていたとき、
-  // 新しい系列がその先まで続いてしまわないようにするため。
+  // 新しい系列がその先まで続いてしまわないようにするため。日付をずらしたら、「すべて」と同じく
+  // untilDate も Δ ずらす。ずらさないと、ずらした後の回の数が変わり、Δ が大きいと回が 1 つも残らない。
   const created: Entry = {
     id: newId,
     ...withTimes(withDetails(copyContent(series), changes), changes),
     startDate,
     endDate,
     rrule,
-    untilDate: rrule === null ? null : series.untilDate,
+    untilDate:
+      rrule === null || series.untilDate === null ? null : addDays(series.untilDate, delta),
     seriesId: null,
     originalDate: null,
     cancelled: false,
