@@ -298,7 +298,8 @@ function pick<T>(changed: T | undefined, current: T): T {
   return changed === undefined ? current : changed;
 }
 
-const DETAIL_KEYS = [
+/** 例外の行に変更を当てたとき、値が変わったかどうかを調べる項目。 */
+const COMPARED_KEYS = [
   'title',
   'workspaceId',
   'location',
@@ -306,6 +307,11 @@ const DETAIL_KEYS = [
   'memo',
   'notifyEnabled',
   'notifyOffsetMin',
+  'allDay',
+  'startDate',
+  'startTime',
+  'endDate',
+  'endTime',
 ] as const;
 
 /** 日付・時刻・終日以外の項目（タイトル、ワークスペース、場所、URL、メモ、通知）の変更を当てる。 */
@@ -329,6 +335,17 @@ function withTimes<T extends ContentFields>(row: T, changes: EntryChanges): T {
     allDay: pick(changes.allDay, row.allDay),
     startTime: pick(changes.startTime, row.startTime),
     endTime: pick(changes.endTime, row.endTime),
+  };
+}
+
+/**
+ * 1 回だけの行（例外の行）に、変更をすべて当てる（日時・終日を含む）。
+ * 日付は、フォームに出ていた日付（displayed）に対する変更後の値。
+ */
+function applyToOccurrence(row: Entry, displayed: DateRange, changes: EntryChanges): Entry {
+  return {
+    ...withTimes(withDetails(row, changes), changes),
+    ...resolveOccurrenceSchedule(displayed, changes),
   };
 }
 
@@ -468,23 +485,41 @@ function locateOccurrence(
   };
 }
 
-interface Schedule extends DateRange {
-  /** 表示上の開始日から、変更後の開始日までの日数（Δ）。 */
-  delta: number;
+/**
+ * フォームに出ていた日付（displayed）に対する、変更後の開始日・終了日（1 回だけの行の日付）。
+ * 開始日だけを変えたときは、1 回の長さを保つように、終了日も同じだけ動かす。
+ */
+function resolveOccurrenceSchedule(displayed: DateRange, changes: EntryChanges): DateRange {
+  const startDate = pick(changes.startDate, displayed.startDate);
+  const shift = diffDays(displayed.startDate, startDate);
+  return { startDate, endDate: pick(changes.endDate, addDays(displayed.endDate, shift)) };
 }
 
 /**
- * フォームに出ていた日付（displayed）に対する、変更後の開始日・終了日。
- * 開始日だけを変えたときは、1 回の長さを保つように、終了日も同じだけ動かす。
+ * 「これ以降すべて」「すべて」で、系列をずらす日数 Δ。変更後の開始日 − その回の日付
+ * （例外の行なら originalDate）。開始日を変えていなければ 0。
+ * 表示上の開始日（移した例外なら移した先）から数えないのは、別の日に移した回を開いて日付を変えたとき、
+ * 移した日数の分だけずれた日にその回が出てしまい、ユーザーが選んだ日にならないため。
  */
-function resolveSchedule(displayed: DateRange, changes: EntryChanges): Schedule {
-  const startDate = pick(changes.startDate, displayed.startDate);
-  const delta = diffDays(displayed.startDate, startDate);
-  return {
-    startDate,
-    endDate: pick(changes.endDate, addDays(displayed.endDate, delta)),
-    delta,
-  };
+function shiftDays(occurrenceDate: DateStr, changes: EntryChanges): number {
+  return changes.startDate === undefined ? 0 : diffDays(occurrenceDate, changes.startDate);
+}
+
+// daily・weekday・holiday の開始日は、どの日に回があるかを決めない。ずらしても回は動かず、
+// 最初の回が消えたり、例外が黙って消えたりするだけなので、ずらせるようにしない（日付を動かしたい
+// ときは「この予定のみ」にする）。
+const SHIFTABLE_FREQS: ReadonlySet<Rrule['freq']> = new Set<Rrule['freq']>([
+  'weekly',
+  'monthly',
+  'yearly',
+]);
+
+function assertShiftable(rrule: Rrule | null, delta: number): void {
+  if (rrule !== null && delta !== 0 && !SHIFTABLE_FREQS.has(rrule.freq)) {
+    throw new InvalidChangeError(
+      `${rrule.freq} の繰り返しは、開始日をずらせません。日付を変えるなら「この予定のみ」にしてください`,
+    );
+  }
 }
 
 /**
@@ -513,10 +548,10 @@ function rescheduled(rrule: Rrule | null, startDate: DateStr, length: number): D
  * 変えていないのに displayed から求めないのは、例外の回が系列と違う長さのとき、
  * タイトルを変えただけで系列の長さが変わってしまうため。
  */
-function seriesLength(series: Entry, schedule: Schedule, changes: EntryChanges): number {
+function seriesLength(series: Entry, displayed: DateRange, changes: EntryChanges): number {
   return changes.endDate === undefined
     ? diffDays(series.startDate, series.endDate)
-    : diffDays(schedule.startDate, schedule.endDate);
+    : diffDays(pick(changes.startDate, displayed.startDate), changes.endDate);
 }
 
 /** 例外の行を作る。内容は系列のコピーで、日付はその回のもの。 */
@@ -581,29 +616,31 @@ export function changeEntry({
 
   if (rrule === null) return [changeSingle(series, changes, editedAt)];
 
-  const { exception, displayed } = locateOccurrence(entries, series, rrule, target.occurrenceDate);
+  const located = locateOccurrence(entries, series, rrule, target.occurrenceDate);
 
   if (scope === 'this') {
-    return [
-      changeThis(series, exception, displayed, target.occurrenceDate, changes, { newId, editedAt }),
-    ];
+    return [changeThis(series, located, target.occurrenceDate, changes, { newId, editedAt })];
   }
 
   // 最初の回から「これ以降すべて」にするのは、「すべて」と同じ。系列を切ると、1 回も残らない系列ができてしまう。
   if (scope === 'all' || target.occurrenceDate === series.startDate) {
-    return changeAll(entries, series, rrule, displayed, changes, editedAt);
+    return changeAll(entries, series, rrule, target.occurrenceDate, located, changes, editedAt);
   }
-  return changeFollowing(entries, series, rrule, target.occurrenceDate, displayed, changes, {
-    newId,
-    editedAt,
-  });
+  return changeFollowing(
+    entries,
+    series,
+    rrule,
+    target.occurrenceDate,
+    located.displayed,
+    changes,
+    { newId, editedAt },
+  );
 }
 
 /** 「この予定のみ」。例外の行があればそれを書き換え、なければ系列のコピーから例外の行を作る。 */
 function changeThis(
   series: Entry,
-  exception: Entry | undefined,
-  displayed: DateRange,
+  { exception, displayed }: LocatedOccurrence,
   occurrenceDate: DateStr,
   changes: EntryChanges,
   stamp: { newId: string; editedAt: number },
@@ -612,21 +649,14 @@ function changeThis(
   if (changes.rrule !== undefined) {
     throw new InvalidChangeError('「この予定のみ」では、繰り返しのルールを変えられません');
   }
-  const schedule = resolveSchedule(displayed, changes);
   const base = exception ?? newException(series, occurrenceDate, displayed, stamp);
-  return {
-    ...withTimes(withDetails(base, changes), changes),
-    startDate: schedule.startDate,
-    endDate: schedule.endDate,
-    editedAt: stamp.editedAt,
-  };
+  return { ...applyToOccurrence(base, displayed, changes), editedAt: stamp.editedAt };
 }
 
 /** 繰り返さない予定。範囲は無視して、その行を書き換える。ルールを付ければ、繰り返す予定になる。 */
 function changeSingle(row: Entry, changes: EntryChanges, editedAt: number): Entry {
-  const schedule = resolveSchedule(row, changes);
+  const range = resolveOccurrenceSchedule(row, changes);
   const rrule = pick(changes.rrule, row.rrule);
-  const range = { startDate: schedule.startDate, endDate: schedule.endDate };
   const { startDate, endDate } = rrule === null ? range : normalizeStart(rrule, range);
   return {
     ...withTimes(withDetails(row, changes), changes),
@@ -641,22 +671,26 @@ function changeAll(
   entries: readonly Entry[],
   series: Entry,
   currentRrule: Rrule,
-  displayed: DateRange,
+  occurrenceDate: DateStr,
+  { exception: target, displayed }: LocatedOccurrence,
   changes: EntryChanges,
   editedAt: number,
 ): Entry[] {
-  const schedule = resolveSchedule(displayed, changes);
-  const rrule = nextRrule(currentRrule, changes, schedule.delta);
+  const delta = shiftDays(occurrenceDate, changes);
+  const rrule = nextRrule(currentRrule, changes, delta);
+  assertShiftable(rrule, delta);
   const { startDate, endDate } = rescheduled(
     rrule,
-    addDays(series.startDate, schedule.delta),
-    seriesLength(series, schedule, changes),
+    addDays(series.startDate, delta),
+    seriesLength(series, displayed, changes),
   );
   const changed: Entry = {
     ...withTimes(withDetails(series, changes), changes),
     rrule,
     // ルールをなくして繰り返さない予定にしたら、系列の「終わり」の印も要らない。
-    untilDate: rrule === null ? null : series.untilDate,
+    // そうでなければ、開始日と同じだけずらす。ずらさないと、ずらした後で回の数が変わってしまう。
+    untilDate:
+      rrule === null || series.untilDate === null ? null : addDays(series.untilDate, delta),
     startDate,
     endDate,
     editedAt,
@@ -665,17 +699,28 @@ function changeAll(
   // ルールか開始日が変わると、どの例外がどの回に当たるのかが変わるので、例外はすべて消す。
   const exceptions = liveExceptionsOf(entries, series.id);
   const ruleChanged = changes.rrule !== undefined && !isSameRrule(changes.rrule, currentRrule);
-  if (ruleChanged || schedule.delta !== 0) {
+  if (ruleChanged || delta !== 0) {
     return [changed, ...exceptions.map((exception) => markDeleted(exception, editedAt))];
   }
 
   // そうでなければ、削除した回はそのまま残し、個別に変えた回には、今回変えた項目だけを当てる。
-  // 日時は、その回に個別に決めた値を保つので当てない。値が変わらない行は書き込まない。
+  // 日時・終日は、その回に個別に決めた値を保つので当てない。ただし、開いていた回の例外だけは、
+  // 日時・終日も含めて、変更をすべて当てる（時刻を変えたのに、その回だけ変わらないのは不自然なため）。
+  // 値が変わらない行は書き込まない。
   const patched: Entry[] = [];
   for (const exception of exceptions) {
     if (exception.cancelled) continue;
-    const patch = withDetails(exception, changes);
-    if (DETAIL_KEYS.some((key) => patch[key] !== exception[key])) {
+    const applied =
+      exception.id === target?.id
+        ? applyToOccurrence(exception, displayed, changes)
+        : withDetails(exception, changes);
+    // notifyOffsetMin は、終日と時間指定で意味が違う（設計書 4.3）。終日かどうかが系列と違う行に
+    // 当てると、終日の「朝 6 時 = -360」が時間指定の行に入って、開始の 360 分後に通知してしまう。
+    const patch =
+      applied.allDay === changed.allDay
+        ? applied
+        : { ...applied, notifyOffsetMin: exception.notifyOffsetMin };
+    if (COMPARED_KEYS.some((key) => patch[key] !== exception[key])) {
       patched.push({ ...patch, editedAt });
     }
   }
@@ -691,12 +736,13 @@ function changeFollowing(
   changes: EntryChanges,
   { newId, editedAt }: { newId: string; editedAt: number },
 ): Entry[] {
-  const schedule = resolveSchedule(displayed, changes);
-  const rrule = nextRrule(currentRrule, changes, schedule.delta);
+  const delta = shiftDays(occurrenceDate, changes);
+  const rrule = nextRrule(currentRrule, changes, delta);
+  assertShiftable(rrule, delta);
   const { startDate, endDate } = rescheduled(
     rrule,
-    addDays(occurrenceDate, schedule.delta),
-    seriesLength(series, schedule, changes),
+    addDays(occurrenceDate, delta),
+    seriesLength(series, displayed, changes),
   );
   // untilDate を引き継ぐのは、元の系列が、前に「これ以降すべて」で後ろを切られていたとき、
   // 新しい系列がその先まで続いてしまわないようにするため。
