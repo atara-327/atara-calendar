@@ -47,7 +47,8 @@ export function isOccurrenceDate(series: SeriesRule, date: DateStr): boolean {
 }
 
 // ずらす必要があるのは weekly・weekday・holiday だけ（daily・monthly・yearly は開始日が基準なので、必ず合う）。
-// どれも 1 週間以内に合う日が来る。366 日は、合う日が見つからないルール（曜日が空の weekly など）で、
+// weekly は 1 週間以内に合うが、weekday は大型連休が続くと 10 日以上かかる（2019-04-27 → 05-07 など）。
+// 366 日は、それより十分に長く、合う日が見つからないルール（曜日が空の weekly など）で、
 // 無限に探さないための上限。
 const MAX_NORMALIZE_DAYS = 366;
 
@@ -373,7 +374,7 @@ function sortedDays(days: readonly number[]): number[] {
   return [...days].sort((a, b) => a - b);
 }
 
-/** 曜日の並びや重複によらず、同じ曜日の組なら同じルールとみなす。 */
+/** 曜日の並びによらず、同じ曜日の組なら同じルールとみなす。曜日の重複は、スキーマが弾く前提で、ここでは考えない。 */
 function isSameRrule(a: Rrule | null, b: Rrule | null): boolean {
   if (a === null || b === null) return a === b;
   if (a.freq === 'weekly' && b.freq === 'weekly') {
