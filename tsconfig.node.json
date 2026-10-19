@@ -20,7 +20,7 @@
     "vite.config.ts",
     "vitest.config.ts",
     "eslint.config.js",
-    "scripts/*.mjs",
+    "scripts/**/*.mjs",
     "src/shared/astronomia.d.ts"
   ]
 }
