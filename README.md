@@ -4,4 +4,5 @@
 
 ## ドキュメント
 
-- [要件ヒアリングシート](docs/requirements/hearing-sheet.md) — 要望を書き込むシート（現在ここ）
+- [要件ヒアリングシート](docs/requirements/hearing-sheet.md) — 1次ヒアリング（回答済み）
+- [2次ヒアリングシート](docs/requirements/hearing-sheet-2.md) — 追加確認（現在ここ）
