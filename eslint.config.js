@@ -18,6 +18,16 @@ export default defineConfig(
     },
   },
   {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { paths: [{ name: 'vitest', message: 'テスト以外のコードから vitest を import しない' }] },
+      ],
+    },
+  },
+  {
     files: ['src/client/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     extends: [reactHooks.configs.flat.recommended],

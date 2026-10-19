@@ -15,5 +15,6 @@
     "noFallthroughCasesInSwitch": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/client", "src/shared"]
+  "include": ["src/client", "src/shared"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
