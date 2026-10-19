@@ -289,6 +289,12 @@ describe('4.4: 開始日の正規化', () => {
     ).toEqual({ startDate: '2026-05-07', endDate: '2026-05-07' });
   });
 
+  it('平日を、大型連休の初日（2019-04-27）から始めると、10 日後の 05-07 になる（1 週間では足りない）', () => {
+    expect(
+      normalizeStart({ freq: 'weekday' }, { startDate: '2019-04-27', endDate: '2019-04-27' }),
+    ).toEqual({ startDate: '2019-05-07', endDate: '2019-05-07' });
+  });
+
   it('平日を、年末年始（2026-12-29）から始めると、1/4 になる', () => {
     expect(
       normalizeStart({ freq: 'weekday' }, { startDate: '2026-12-29', endDate: '2026-12-29' }),
