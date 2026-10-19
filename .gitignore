@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.wrangler/
+
+# 秘密情報（Webhook URL・メールアドレスなど）
+.dev.vars
+.dev.vars.*
+.env
+.env.*
