@@ -175,11 +175,22 @@ function computeHolidays(year: number): Map<DateStr, string> {
   assertSupportedYear(year);
 
   const national = new Map<DateStr, string>();
+  // 表の行が同じ日に重なったら、後の行で黙って上書きせず例外にする。
+  // 年を限った行（五輪の移動など）の期間の書き間違いを、その年になるまで見逃さないため。
+  const addNational = (date: DateStr, name: string): void => {
+    const existing = national.get(date);
+    if (existing !== undefined) {
+      throw new Error(
+        `祝日の表で、同じ日に 2 つの祝日が重なっています: ${date}（${existing}・${name}）`,
+      );
+    }
+    national.set(date, name);
+  };
   for (const { name, rule, ...years } of HOLIDAY_RULES) {
-    if (isInYears(year, years)) national.set(resolveDateRule(year, rule), name);
+    if (isInYears(year, years)) addNational(resolveDateRule(year, rule), name);
   }
   for (const { date, name } of ONE_OFF_HOLIDAYS) {
-    if (dateToYmd(date).year === year) national.set(date, name);
+    if (dateToYmd(date).year === year) addNational(date, name);
   }
 
   const all = new Map(national);

@@ -133,6 +133,22 @@ describe('HD-5: 祝日の個別のルール', () => {
     expect(holidayName('2021-09-23')).toBe('秋分の日');
   });
 
+  it('1948〜2199年のすべての年で、例外なく計算できる（祝日の表で、同じ日に2つの祝日が重ならない）', () => {
+    const failures: string[] = [];
+
+    for (let year = 1948; year <= 2199; year++) {
+      try {
+        holidaysOfYear(year);
+      } catch (error) {
+        failures.push(
+          `${String(year)}年: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
   it('対応する年（1900〜2199年）の端でも求められる', () => {
     expect(holidaysOfYear(1900).size).toBe(0);
     expect(holidaysOfYear(2199).size).toBeGreaterThanOrEqual(16);
