@@ -24,10 +24,10 @@ iconv -f SHIFT_JIS -t UTF-8 /tmp/syukujitsu.csv | tr -d '\r' > test/fixtures/syu
 
 | 項目 | 内容 |
 | --- | --- |
-| 入手元 | 国立天文台 暦計算室「暦要項」の「二十四節気および雑節」（https://eco.mtk.nao.ac.jp/koyomi/yoko/ の各年の `rekiyou{年の下2桁}2.html`） |
+| 入手元 | 国立天文台 暦計算室「暦要項」の「二十四節気および雑節」（`https://eco.mtk.nao.ac.jp/koyomi/yoko/{年}/rekiyou{年の下2桁}2.html`。例: 2026 年は https://eco.mtk.nao.ac.jp/koyomi/yoko/2026/rekiyou262.html） |
 | 取得日 | 2026-10-19 |
 | 範囲 | 2004年〜2027年（Web で公開されている年） |
 | 列 | 年, 名前, 太陽の黄経（度）, 日付, 時刻（日本時間。暦要項の表記どおり分まで） |
 | 変換 | 各年のページの表から、立春・春分・夏至・秋分・冬至の行だけを抜き出した |
 
-内閣府の一覧には夏至・冬至・立春（節分の計算に使う）がないため、国立天文台の値を正解にしている。
+国立天文台の値を正解にしている理由は、[設計書 8.4](../../docs/design/design.md#84-正しさの確認) を参照。
