@@ -560,6 +560,10 @@ describe('applyWrite', () => {
       await applyWrite(db(), { entries: [stored] });
     });
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('今の行より古い edited_at の依頼は、全体が捨てられて、DB は変わらない', async () => {
       const before = await dump();
 
@@ -680,30 +684,84 @@ describe('applyWrite', () => {
       expect(await dump()).toEqual(before);
     });
 
-    it('確認と書き込みの間に別の書き込みが割り込んでも、新しい行を古い行で上書きしない', async () => {
+    /** 1 回目の batch（edited_at の確認）の後、2 回目（書き込み）の前に、別の端末の書き込みを割り込ませる db。 */
+    function interleavedWith(interleavingWrite: WriteRequest): Database {
       let batches = 0;
-      const interleaving: Database = {
+      return {
         prepare: (query) => db().prepare(query),
         batch: async <T>(statements: D1PreparedStatement[]) => {
           batches += 1;
-          // 1 回目の batch は edited_at の確認。2 回目の（書き込みの）前に、別の端末の書き込みを割り込ませる。
-          if (batches === 2) {
-            await applyWrite(db(), {
-              entries: [makeEntry({ id: 'a', title: '別の端末の新しい編集', editedAt: 3000 })],
-            });
-          }
+          if (batches === 2) await applyWrite(db(), interleavingWrite);
           return db().batch<T>(statements);
         },
       };
+    }
 
-      await applyWrite(interleaving, {
-        entries: [makeEntry({ id: 'a', title: '遅れて届いた編集', editedAt: 2000 })],
+    describe('確認と書き込みの間に、別の書き込みが割り込んだとき', () => {
+      it('新しい行を古い行で上書きしない', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const interleaving = interleavedWith({
+          entries: [makeEntry({ id: 'a', title: '別の端末の新しい編集', editedAt: 3000 })],
+        });
+
+        await applyWrite(interleaving, {
+          entries: [makeEntry({ id: 'a', title: '遅れて届いた編集', editedAt: 2000 })],
+        });
+
+        const { entries } = await readChanges(db(), 0);
+        expect(entries.map(({ entry }) => [entry.title, entry.editedAt])).toEqual([
+          ['別の端末の新しい編集', 3000],
+        ]);
       });
 
-      const { entries } = await readChanges(db(), 0);
-      expect(entries.map(({ entry }) => [entry.title, entry.editedAt])).toEqual([
-        ['別の端末の新しい編集', 3000],
-      ]);
+      it('一部の行だけが弾かれたら、表と行数をログに出す（id と内容は出さない）。結果は applied: true のまま', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const interleaving = interleavedWith({
+          entries: [makeEntry({ id: 'secret-id', title: '別の端末の編集', editedAt: 3000 })],
+        });
+
+        const result = await applyWrite(interleaving, {
+          entries: [
+            makeEntry({ id: 'secret-id', title: '秘密のタイトル', editedAt: 2000 }),
+            makeEntry({ id: 'other', editedAt: 2000 }),
+          ],
+        });
+
+        expect(result).toMatchObject({ applied: true });
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]?.[0]);
+        expect(message).toContain('entries の 2 行のうち、書けたのは 1 行');
+        expect(message).not.toContain('secret-id');
+        expect(message).not.toContain('秘密のタイトル');
+      });
+
+      it('ワークスペースの表で弾かれたときは、その表について出す', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const interleaving = interleavedWith({
+          workspaces: [makeWorkspace({ id: 'w2', editedAt: 3000 })],
+        });
+
+        await applyWrite(interleaving, {
+          workspaces: [makeWorkspace({ id: 'w2', editedAt: 2000 })],
+          entries: [makeEntry({ id: 'other', editedAt: 2000 })],
+        });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain(
+          'workspaces の 1 行のうち、書けたのは 0 行',
+        );
+      });
+    });
+
+    it('割り込まれずに全部の行が書けたときは、ログを出さない', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      await applyWrite(db(), {
+        workspaces: [makeWorkspace({ id: 'w2' })],
+        entries: [makeEntry({ id: 'a', title: '更新', editedAt: 2000 }), makeEntry({ id: 'b' })],
+      });
+
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 

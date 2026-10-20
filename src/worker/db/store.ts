@@ -35,12 +35,16 @@ const revRowSchema = z.object({ rev: z.number().int() });
 const editedAtRowSchema = z.object({ id: z.string(), edited_at: z.number().int() });
 
 /** D1 の batch() は、文の数だけ結果を返す。noUncheckedIndexedAccess のために、足りないときは例外にする。 */
-function rowsAt(results: readonly D1Result[], index: number): unknown[] {
+function resultAt(results: readonly D1Result[], index: number): D1Result {
   const result = results[index];
   if (result === undefined) {
     throw new Error(`D1 の batch の結果が足りません（${String(index)} 番目）`);
   }
-  return result.results;
+  return result;
+}
+
+function rowsAt(results: readonly D1Result[], index: number): unknown[] {
+  return resultAt(results, index).results;
 }
 
 /**
@@ -216,15 +220,26 @@ export async function applyWrite(
   // 確認（上）と書き込み（下）の間に、別の書き込みが割り込む可能性は残る。1 回の処理にしていないのは、
   // 自分 1 人の利用で、2 台がほぼ同時に同じ行を書く確率がごく小さいため。割り込まれても、
   // upsert の WHERE が、新しい行を古い行で上書きすることだけは防ぐ。
+  // workspaces を先に書く。entries の workspace_id は外部キーで、同じ依頼で作るワークスペースを指すことがあるため。
+  const writes: { table: string; sql: string; rows: readonly unknown[] }[] = [
+    { table: 'workspaces', sql: UPSERT_WORKSPACES, rows: workspaces.map(workspaceToRow) },
+    { table: 'entries', sql: UPSERT_ENTRIES, rows: entries.map(entryToRow) },
+  ].filter(({ rows }) => rows.length > 0);
   const results = await db.batch([
     db.prepare('UPDATE meta SET rev = rev + 1 WHERE id = 1 RETURNING rev'),
-    // workspaces を先に書く。entries の workspace_id は外部キーで、同じ依頼で作るワークスペースを指すことがあるため。
-    ...(workspaces.length === 0
-      ? []
-      : [db.prepare(UPSERT_WORKSPACES).bind(JSON.stringify(workspaces.map(workspaceToRow)))]),
-    ...(entries.length === 0
-      ? []
-      : [db.prepare(UPSERT_ENTRIES).bind(JSON.stringify(entries.map(entryToRow)))]),
+    ...writes.map(({ sql, rows }) => db.prepare(sql).bind(JSON.stringify(rows))),
   ]);
+  // 1 つ目の結果は rev の UPDATE なので、writes[i] の結果は i + 1 番目。
+  // 書けた行数が少ないのは、確認の後に別の書き込みが同じ行を新しく書き、upsert の WHERE が弾いたとき。
+  // 割り込みは許容しているので（上）、例外にも applied: false にもせず、起きたことだけをログに残す。
+  // id や内容は出さない（予定のタイトルなどが、ログに残らないように）。
+  writes.forEach(({ table, rows }, index) => {
+    const written = resultAt(results, index + 1).meta.changes;
+    if (written < rows.length) {
+      console.warn(
+        `applyWrite: ${table} の ${String(rows.length)} 行のうち、書けたのは ${String(written)} 行でした（別の書き込みに割り込まれた可能性があります）`,
+      );
+    }
+  });
   return { applied: true, rev: revRowSchema.parse(rowsAt(results, 0)[0]).rev };
 }
