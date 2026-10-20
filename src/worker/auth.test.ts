@@ -284,7 +284,7 @@ describe('Access の JWT の検証（AU-1・NF-2）', () => {
       .join('\n');
     expect(logged).toContain('claim: aud');
     expect(logged).toContain('claim: iss');
-    for (const value of [jwtAudience, jwtIssuer, AUD, TEAM_DOMAIN]) {
+    for (const value of [jwtAudience, jwtIssuer, AUD, TEAM_DOMAIN, EMAIL]) {
       expect(logged).not.toContain(value);
     }
   });
@@ -555,6 +555,31 @@ describe('公開鍵の取得（remoteKeyResolver）', () => {
     );
 
     expect(res.status).toBe(403);
+  });
+
+  it('ACCESS_TEAM_DOMAIN が大文字小文字の違いだけなら、鍵は取れて署名は通り、iss の食い違いとして 403 にする', async () => {
+    // 鍵の一覧を差し替えず既定の取得を使うのは、URL のホスト名が小文字に直されて鍵が取れることまで確かめるため。
+    const domain = 'case-test.cloudflareaccess.com';
+    const fetchMock = vi.fn(() => Promise.resolve(Response.json({ keys: [publicJwk] })));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = new Hono<AppEnv>();
+    app.use('/api/*', accessAuth());
+    app.get('/api/whoami', (c) => c.json(c.var.actor));
+
+    const res = await app.request(
+      '/api/whoami',
+      { headers: { 'Cf-Access-Jwt-Assertion': await makeJwt({ issuer: `https://${domain}` }) } },
+      { ...baseEnv, ACCESS_TEAM_DOMAIN: 'Case-Test.Cloudflareaccess.com' },
+    );
+
+    expect(res.status).toBe(403);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `https://${domain}/cdn-cgi/access/certs`,
+      expect.anything(),
+    );
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('ERR_JWT_CLAIM_VALIDATION_FAILED (claim: iss, reason: check_failed)'),
+    );
   });
 
   it('JOSEError でない例外（鍵を取れないなど）は、ログに message も残す', async () => {
