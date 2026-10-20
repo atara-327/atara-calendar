@@ -28,7 +28,7 @@ export function badRequest(detail: string): ApiError {
 const MESSAGES: Record<ApiErrorKind, string> = {
   invalid_request: '入力が正しくありません',
   invalid_change: '変更の内容を受け付けられません',
-  builtin_workspace: '組み込みのワークスペースは、表示と並び順のほかは変えられません',
+  builtin_workspace: '組み込みのワークスペースには、この操作はできません',
   last_workspace: '最後のワークスペースは削除できません',
   edited_at_in_future: '編集した時刻が未来すぎます',
   conflict: '依頼の内容が、保存されているデータと食い違っています',

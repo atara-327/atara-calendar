@@ -116,7 +116,7 @@ function writeFailingDb(): D1Database {
 
 const builtinWorkspace = {
   error: 'builtin_workspace',
-  message: '組み込みのワークスペースは、表示と並び順のほかは変えられません',
+  message: '組み込みのワークスペースには、この操作はできません',
 };
 
 /** 毎日の、終日の系列 's'（2026-10-19 から）を入れる。 */

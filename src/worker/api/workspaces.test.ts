@@ -170,7 +170,7 @@ describe('PUT /api/workspaces/:id（作成・更新）', () => {
       expect(res.status).toBe(400);
       expect(res.body).toEqual({
         error: 'builtin_workspace',
-        message: '組み込みのワークスペースは、表示と並び順のほかは変えられません',
+        message: '組み込みのワークスペースには、この操作はできません',
       });
       expect(await dumpTables(db())).toEqual(before);
     });

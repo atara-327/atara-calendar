@@ -46,9 +46,12 @@ export type PutEntryRequest = z.infer<typeof putEntryRequestSchema>;
 export type PatchEntryRequest = z.infer<typeof patchEntryRequestSchema>;
 export type DeleteEntryRequest = z.infer<typeof deleteEntryRequestSchema>;
 
-// 応答の型も、Zod のスキーマから導く。画面の同期（実装 #6）が、サーバーの応答を実行時に確かめられるように、
-// 値のスキーマとしても公開する。厳密（strictObject）にしないのは、サーバーが後から項目を足したときに、
+// 応答の型も、Zod のスキーマから導く。厳密（strictObject）にしないのは、サーバーが後から項目を足したときに、
 // 古い画面が、応答を読めなくならないため。
+// このスキーマは、応答の形（型）を表す。実行時に応答を確かめる（画面の同期。実装 #6）のに、そのまま使わないこと。
+// 行の部分が entrySchema・workspaceSchema なので、入力のルール（時刻は 15 分刻み、色は #RRGGBB など）を含み、
+// ルールを満たさない行が DB に 1 つあるだけで、応答全体が失敗し、全端末の受け取りが止まる（設計書 6.3 が避けている状態）。
+// 実行時に確かめるなら、行の部分は、構造だけを見るスキーマにする。
 
 /**
  * GET /api/changes の応答。行ごとの rev と nextNotifyAt は、サーバーの都合の値なので含めない。
