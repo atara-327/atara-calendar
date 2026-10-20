@@ -69,7 +69,9 @@
      - **Why**: ポリシーは、作っただけではアプリのルールになりません。付いていないと、Google でログインした後、Access の「That account does not have access.」の画面で止まります。
 4. 保存した後、**ドメインが `calendar.ataraman.com` のアプリ**の概要（Overview）にある **Application Audience (AUD) Tag** を控える。→ Claude に伝える値
    - **Why**: Worker は、Access が付けたログイン情報（JWT）がこのアプリ宛てかどうかを、この値で確かめます（[設計書 10.2](design/design.md#102-worker-側の確認二重の守り)）。
-   - **Why アプリのドメインまで確かめるのか**: Access のアプリが複数あると、AUD Tag の一覧で別のアプリの値を控えやすいからです。取り違えると、Worker はすべての API を 403 で拒否します（8 の表）。
+   - **Why アプリのドメインまで確かめるのか**: Access のアプリが複数あると、別のアプリを開いて、その値を控えやすいからです。取り違えると、Worker はすべての API を 403 で拒否します（8 の表）。
+   - **Access のアプリを作り直すと、AUD は変わります。** 作り直したら、新しい値を Claude に伝え直す（5）。
+     - **Why**: AUD は、アプリごとに Access が決める値で、`wrangler.jsonc` に入れた古い値のままだと、上の取り違えと同じく 403 になるためです。
 
 ## 4. GitHub から自動でデプロイできるようにする
 
@@ -97,9 +99,8 @@
    | `CLOUDFLARE_ACCOUNT_ID` | 4.1 の Account ID |
    | `CLOUDFLARE_ACCOUNT_EMAIL` | Cloudflare にログインするメールアドレス（4.1 のトークンを作ったアカウント。Cloudflare の表記と同じ大文字小文字で） |
 
-   - **登録するのは、この3つだけ。** `ALLOWED_EMAIL`（Access で許可する Gmail）は、GitHub には入れない。Worker の Secret として、7 で Cloudflare に入れる。
+   - **登録するのは、この3つだけ。** `ALLOWED_EMAIL`（Access で許可する Gmail）は、GitHub には入れない。Worker の Secret として、7 で Cloudflare に入れる。**登録してしまったときは、環境 `production` の Environment secrets から削除する。**
      - **Why**: デプロイの workflow は `ALLOWED_EMAIL` を読まないので、GitHub に入れても使われず、メールアドレスの置き場所が増えるだけだからです。
-
    - 以前の手順で、トークンをリポジトリの Secret に登録済みで、値を控えていないときは、Cloudflare の **プロフィール → API Tokens** の一覧で、そのトークンを **Roll**（作り直す）して、新しい値を登録する。古い値は使えなくなる。
      - **Why**: トークンの値は、作ったときにしか表示されません。GitHub の Secret も、いったん登録すると読み出せないためです。
 
@@ -131,7 +132,7 @@
 1. Cloudflare の **DNS → Records** で、`calendar.ataraman.com` のレコードがないか確かめる。残したいものがあれば、先に別の名前に移す。
    - **Why**: すでに `calendar.ataraman.com` のレコード（CNAME など）があると、デプロイが確認なしに置き換えます（CI では確認を出せないため）。Worker の Custom Domain は、DNS のレコードと証明書を Cloudflare が自動で作るので、同じ名前の既存のレコードとぶつかるからです。
 2. リポジトリの **Settings → Secrets and variables → Actions** の **Variables** タブを開き、**下の Repository variables の欄**の **New repository variable** で、`DEPLOY_ENABLED` に `true` を登録する。
-   - **上の Environment variables の欄（環境 `production` の変数）には入れない。** この画面は、上に Environment variables、下に Repository variables の欄が並んでいる。Environment variables に入れると、deploy が skipped（動かない）になる。理由は、[4.2](#42-github-の環境environmentに登録する) の `DEPLOY_ENABLED` の項目のとおり。
+   - **上の Environment variables の欄（環境 `production` の変数）には入れない。** この画面は、上に Environment variables、下に Repository variables の欄が並んでいる。Environment variables に入れると、deploy が skipped（動かない）になる（理由は、[4.2](#42-github-の環境environmentに登録する) の `DEPLOY_ENABLED` の項目のとおり）。**入れてしまったときは、そこから削除して**、下の欄に入れ直す。
    - **Why PR のマージの後なのか**: これを `true` にした時点から、main に取り込むたびに本番へ自動でデプロイされるからです。本番用の値（5）が `wrangler.jsonc` に入る前に動くと、デプロイが失敗します。
 3. リポジトリの **Actions → CI → Run workflow** で、main を選んで実行する（Claude に頼んでもよい。Claude の環境から動かせない場合は、自分で動かす）。
 4. 「deploy」が成功したら、Cloudflare に Worker `atara-calendar` ができ、`https://calendar.ataraman.com` で画面が開けるようになる（Google でのログインを求められる）。
@@ -148,6 +149,7 @@
 ## 8. 動作を確認する
 
 1. PC のブラウザで `https://calendar.ataraman.com` を開く（Google でのログインを求められる）。
+   - Google でログインした後に、Access の「That account does not have access.」で止まったときは、[3](#3-access-のアプリを作る) の手順 3（ポリシーがアプリに付いているか）を見る。
 2. ログインして `calendar.ataraman.com` の画面が開いたら、そのページで、開発者ツール（F12）の **Console** で、次を実行する。
 
    ```js
@@ -162,12 +164,16 @@
 
      | ログの行 | 原因 | 確かめるところ |
      | --- | --- | --- |
-     | `JWT の検証に失敗しました (ERR_JWT_CLAIM_VALIDATION_FAILED)` | AUD（またはチームのドメイン）が、Access のアプリと食い違っている | `wrangler.jsonc` の `ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` を、ドメインが `calendar.ataraman.com` のアプリの値（2.1・3）と見比べる |
+     | `JWT の検証に失敗しました (ERR_JWT_CLAIM_VALIDATION_FAILED)` | `ACCESS_AUD` が、Access のアプリと食い違っている | `wrangler.jsonc` の `ACCESS_AUD` を、3 の AUD Tag（ドメインが `calendar.ataraman.com` のアプリの値）と見比べる |
+     | `JWT の検証に失敗しました (...)` の括弧の中が、`ERR_JWKS_NO_MATCHING_KEY`・`ERR_JOSE_GENERIC`・`unknown: ...` のどれか | `ACCESS_TEAM_DOMAIN` が、チームのドメインと食い違っている | `wrangler.jsonc` の `ACCESS_TEAM_DOMAIN` を、2.1 のチームのドメインと見比べる |
      | `許可されていない相手です` | ログインしたアカウントのメールアドレスが、Worker の `ALLOWED_EMAIL` と違う | `ALLOWED_EMAIL`（7）を、ログインしたアカウントのメールアドレスと見比べる |
      | `JWT のヘッダーがありません` | Access を通っていない | 3 のアプリのドメインが `calendar.ataraman.com`（パスは空）か |
-     | `[auth] 403` の行がない | 他のサイトからのリクエストとして弾かれた（[設計書 10.3](design/design.md#103-その他の対策)） | Console を、`calendar.ataraman.com` の画面を開いて使っているか（下の注記も参照） |
+     | `[auth] 403` の行がない | 他のサイトからのリクエストとして弾かれた（[設計書 10.3](design/design.md#103-その他の対策)） | アドレス欄に `/api/health` を直接入れて開いていないか（ほとんどはこれ。下の注記を参照）。Console は、`calendar.ataraman.com` の画面を開いて使っているか |
 
-   - **500** のとき: Worker の `ALLOWED_EMAIL` が未登録です（7）。
+     - `ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` の値が違っていたら、5 と同じく、正しい値を Claude に伝える（`wrangler.jsonc` は Claude が直して PR を出す）。
+     - **Why 括弧の中のコードで分けるのか**: JWT は、署名を先に確かめ、そのあとで発行元（`iss`）と宛先（`aud`）を確かめます。`ACCESS_TEAM_DOMAIN` が違うと、公開鍵を別の URL から取るので、`aud` の確認まで進まず、署名の段階で失敗するためです。
+
+   - **500** のとき: ログの `[auth]` の行で原因が分かります。よくある原因は、Worker の `ALLOWED_EMAIL` の未登録です（7）。`ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` が空のときや、`ACCESS_TEAM_DOMAIN` の書式が違うとき（`https://` が付いているなど）も 500 になります。
 3. 別の Google アカウントで開いて（シークレットウィンドウなど）、弾かれることも確かめる（要件 AU-1）。Google の画面でブロックされるか、Access の画面で弾かれれば OK です。
    - 2.2 でテストユーザーを自分だけにしているので、ふつうは Google の画面で「アクセスをブロック」（Error 403: access_denied）と出て止まります。
 
