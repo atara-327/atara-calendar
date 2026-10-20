@@ -1,11 +1,12 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { changeEntry, createEntry, deleteEntry } from '../../shared/recurrence';
 import type { Entry, EntryDraft } from '../../shared/schema';
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { CorruptRowError } from './rows';
-import { applyWrite, readChanges, type Database } from './store';
+import { applyWrite, readChanges, type Database, type WriteRequest } from './store';
 
 let testDatabase: TestDatabase;
 
@@ -312,6 +313,76 @@ describe('applyWrite', () => {
       const rows = [makeEntry({ id: 'a', editedAt: 1000 }), makeEntry({ id: 'a', editedAt: 2000 })];
 
       await expect(applyWrite(db(), { entries: rows })).rejects.toThrow(/同じ id/);
+    });
+  });
+
+  describe('書く前の検証（entrySchema・workspaceSchema）', () => {
+    it.each<{ reason: string; invalid: WriteRequest }>([
+      {
+        reason: '時刻が 15 分刻みでない予定',
+        invalid: { entries: [makeEntry({ id: 'bad', allDay: false, startTime: '15:10' })] },
+      },
+      {
+        reason: '存在しない日付の予定',
+        invalid: { entries: [makeEntry({ id: 'bad', startDate: '2026-02-30' })] },
+      },
+      {
+        reason: '曜日のない weekly の予定',
+        invalid: { entries: [makeEntry({ id: 'bad', rrule: { freq: 'weekly', days: [] } })] },
+      },
+      {
+        reason: '色の形が違うワークスペース',
+        invalid: { workspaces: [makeWorkspace({ id: 'bad', color: 'red' })] },
+      },
+    ])(
+      '$reason が 1 つでもあれば、ほかの正しい行も含めて何も書かず、例外にする',
+      async ({ invalid }) => {
+        const before = await dump();
+
+        const write = applyWrite(db(), {
+          entries: [makeEntry({ id: 'good', editedAt: 2000 }), ...(invalid.entries ?? [])],
+          workspaces: [
+            makeWorkspace({ id: 'good-ws', editedAt: 2000 }),
+            ...(invalid.workspaces ?? []),
+          ],
+        });
+
+        await expect(write).rejects.toThrow(z.ZodError);
+        expect(await dump()).toEqual(before);
+      },
+    );
+
+    it('検証を通る行は、境界の値でも、書けて、読み直すと同じ行になる（書けた行は必ず読める）', async () => {
+      const entries = [
+        makeEntry({
+          id: 'min',
+          title: '',
+          allDay: false,
+          startDate: '0001-01-01',
+          startTime: '00:00',
+          endDate: '0001-01-01',
+          endTime: '00:00',
+          notifyOffsetMin: -1440,
+        }),
+        makeEntry({
+          id: 'max',
+          allDay: false,
+          startDate: '9999-12-31',
+          startTime: '23:45',
+          endDate: '9999-12-31',
+          endTime: '23:45',
+          rrule: { freq: 'weekly', days: [0, 6] },
+        }),
+      ];
+      const workspaces = [makeWorkspace({ id: 'w-lower', color: '#abcdef', name: '' })];
+
+      await applyWrite(db(), { entries, workspaces });
+
+      const changes = await readChanges(db(), 0);
+      expect(byId(changes.entries.map(({ entry }) => entry))).toEqual(byId(entries));
+      expect(
+        changes.workspaces.find(({ workspace }) => workspace.id === 'w-lower')?.workspace,
+      ).toEqual(workspaces[0]);
     });
   });
 

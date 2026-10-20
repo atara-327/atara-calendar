@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Entry, Workspace } from '../../shared/schema';
+import { entrySchema, workspaceSchema, type Entry, type Workspace } from '../../shared/schema';
 import {
   CorruptRowError,
   ENTRY_COLUMNS,
@@ -157,11 +157,16 @@ function assertNoDuplicateIds(ids: readonly string[]): void {
  * どれか 1 行でも、今の行の edited_at が書き込む行の edited_at 以上なら、依頼全体を捨てる。
  * 「以上」にするのは、同じ依頼をもう一度送られたとき、2 回目を「もう反映済み」として捨てるため（設計書 6.2）。
  * 一部の行だけを書くと、系列が二重になるなど、データの形が壊れる。
+ * 書く前に、すべての行を entrySchema・workspaceSchema で確かめ、合わない行が 1 つでもあれば（ZodError）、何も書かない。
  */
 export async function applyWrite(
   db: Database,
-  { entries = [], workspaces = [] }: WriteRequest,
+  { entries: entryInputs = [], workspaces: workspaceInputs = [] }: WriteRequest,
 ): Promise<WriteResult> {
+  // API の入力の検証だけに任せないのは、サーバーが計算した行（recurrence.ts の結果）も、ここを通って
+  // 書かれるため。ここで確かめれば、「書けた行は、必ず読める」（rows.ts）が、呼び出し側によらず成り立つ。
+  const entries = entryInputs.map((entry) => entrySchema.parse(entry));
+  const workspaces = workspaceInputs.map((workspace) => workspaceSchema.parse(workspace));
   if (entries.length === 0 && workspaces.length === 0) {
     const meta = revRowSchema.parse(await db.prepare('SELECT rev FROM meta WHERE id = 1').first());
     return { applied: true, rev: meta.rev };
