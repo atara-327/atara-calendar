@@ -435,7 +435,7 @@ describe('applyWrite', () => {
       ],
     });
 
-    await expect(write).rejects.toThrow();
+    await expect(write).rejects.toThrow(/FOREIGN KEY/);
     expect(await dump()).toEqual(before);
   });
 
