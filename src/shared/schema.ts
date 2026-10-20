@@ -17,7 +17,11 @@ export const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):(00|15|30|45)
 
 const weekdayNumberSchema = z.number().int().min(0).max(6);
 
-/** 繰り返しのルール（設計書 4.4）。weekly の days は 0 = 日曜 〜 6 = 土曜。 */
+/**
+ * 繰り返しのルール（設計書 4.4）。weekly の days は 0 = 日曜 〜 6 = 土曜。
+ * rows.ts の DB の読み込み（rrule の列）でも使う。ルールを厳しくすると、すでに DB にある行が読めなくなり、
+ * readChanges が例外になって、全端末の同期が止まる。厳しくするなら、先に rows.ts のスキーマを分ける。
+ */
 export const rruleSchema = z.discriminatedUnion('freq', [
   z.strictObject({ freq: z.literal('daily') }),
   z.strictObject({
@@ -37,6 +41,10 @@ export const rruleSchema = z.discriminatedUnion('freq', [
 
 export type Rrule = z.infer<typeof rruleSchema>;
 
+/**
+ * rows.ts の DB の読み込みと、store.ts の今の行の kind の確認でも使う。値を減らしたり名前を変えたりすると、
+ * すでに DB にある行が読めなくなり、全端末の同期が止まる。増やすときは、DB の CHECK 制約（migrations）も変える。
+ */
 export const entryKindSchema = z.enum(['event', 'block']);
 
 /**
@@ -112,6 +120,8 @@ export const workspaceSchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: "色は '#RRGGBB' で指定してください" }),
   sortOrder: z.number().int(),
   visible: z.boolean(),
+  // rows.ts の DB の読み込み（workspaceSchema.shape.builtin）でも使う。値を減らしたり名前を変えたりすると、
+  // すでに DB にある行が読めなくなり、全端末の同期が止まる。
   builtin: z.enum(['holiday', 'observance']).nullable(),
   editedAt: z.number().int(),
   deletedAt: z.number().int().nullable(),
