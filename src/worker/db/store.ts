@@ -110,6 +110,12 @@ export async function readSeriesEntries(db: Database, seriesId: string): Promise
   return parseRows(results, entryFromRow);
 }
 
+/** id 1 つの予定の行。削除済みも含める（新しい行の id が、別の行とぶつからないかを、API が確かめるため）。なければ undefined。 */
+export async function readEntry(db: Database, id: string): Promise<StoredEntry | undefined> {
+  const row = await db.prepare('SELECT * FROM entries WHERE id = ?1').bind(id).first();
+  return row === null ? undefined : parseRows([row], entryFromRow)[0];
+}
+
 /**
  * ワークスペースの中の、削除されていない予定。そのワークスペースの系列の例外は、例外の行自身が別の
  * ワークスペースを指していても含める（ワークスペースの削除で、系列と例外をまとめて消すため。設計書 Q6）。

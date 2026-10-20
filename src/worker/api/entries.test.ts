@@ -1,6 +1,12 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
-import { callApi, dumpTables, fetchChanges, seedWorkspace } from '../../../test/helpers/api';
+import {
+  callApi,
+  dumpTables,
+  fetchChanges,
+  seedWorkspace,
+  type ApiResponse,
+} from '../../../test/helpers/api';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import type { Entry } from '../../shared/schema';
@@ -534,6 +540,200 @@ describe('サーバーが計算した行の日付は、年の範囲（1900〜219
     });
 
     expect(res.body).toEqual({ applied: true });
+  });
+});
+
+describe('新しい行の id が、保存されている別の行とぶつかったとき（5.1）', () => {
+  /** 毎日の系列 's' と、10-21 の回の例外 'x' と、削除済みの行 'd'、無関係な予定 'other'。どれも edited_at は 1000。 */
+  async function seedRows() {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' }),
+        makeEntry({
+          id: 'x',
+          seriesId: 's',
+          originalDate: '2026-10-21',
+          startDate: '2026-10-21',
+          title: '個別',
+        }),
+        makeEntry({ id: 'd', editedAt: 1000, deletedAt: 1000 }),
+        makeEntry({ id: 'other', title: '無関係', startDate: '2026-11-01' }),
+      ],
+    });
+  }
+
+  const collisions: { name: string; send: (editedAt: number) => Promise<ApiResponse> }[] = [
+    {
+      name: '例外を持つ系列の id への PUT',
+      send: (editedAt) => putEntry('s', { draft: draft(), editedAt }),
+    },
+    {
+      name: '例外の行の id への PUT',
+      send: (editedAt) => putEntry('x', { draft: draft(), editedAt }),
+    },
+    {
+      name: '削除済みの行の id への PUT',
+      send: (editedAt) => putEntry('d', { draft: draft(), editedAt }),
+    },
+    {
+      name: '「この予定のみ」の変更で、newId が無関係な予定の id',
+      send: (editedAt) =>
+        patchEntry('s', {
+          scope: 'this',
+          occurrenceDate: '2026-10-20',
+          changes: { title: '新' },
+          newId: 'other',
+          editedAt,
+        }),
+    },
+    {
+      name: '「この予定のみ」の変更で、newId が、同じ系列の別の回の例外の id',
+      send: (editedAt) =>
+        patchEntry('s', {
+          scope: 'this',
+          occurrenceDate: '2026-10-20',
+          changes: { title: '新' },
+          newId: 'x',
+          editedAt,
+        }),
+    },
+    {
+      name: '「この予定のみ」の削除で、newId が無関係な予定の id',
+      send: (editedAt) =>
+        deleteEntry('s', {
+          scope: 'this',
+          occurrenceDate: '2026-10-20',
+          newId: 'other',
+          editedAt,
+        }),
+    },
+    {
+      name: '「これ以降すべて」の変更で、newId が、切らずに残る例外の id',
+      send: (editedAt) =>
+        patchEntry('s', {
+          scope: 'following',
+          occurrenceDate: '2026-10-22',
+          changes: { title: '新' },
+          newId: 'x',
+          editedAt,
+        }),
+    },
+  ];
+
+  it.each(collisions)(
+    '$name: 保存されている行が依頼より古ければ 409（conflict）で、DB は変わらない',
+    async ({ send }) => {
+      await seedRows();
+      const before = await dumpTables(db());
+
+      const res = await send(2000);
+
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual(conflict);
+      expect(await dumpTables(db())).toEqual(before);
+    },
+  );
+
+  it.each(collisions)(
+    '$name: 保存されている行が依頼と同じか新しければ stale で捨て、DB は変わらない',
+    async ({ send }) => {
+      await seedRows();
+      const before = await dumpTables(db());
+
+      const same = await send(1000);
+      const older = await send(500);
+
+      expect(same.status).toBe(200);
+      expect(same.body).toEqual({ applied: false, reason: 'stale' });
+      expect(older.body).toEqual({ applied: false, reason: 'stale' });
+      expect(await dumpTables(db())).toEqual(before);
+    },
+  );
+
+  describe('同じ回の例外の行は、ぶつかりではない（applyWrite の edited_at の比較に任せる）', () => {
+    /** 10-21 の回の例外 'x' を、1500 に削除した状態にする。 */
+    async function seedDeletedException() {
+      await applyWrite(db(), {
+        entries: [
+          makeEntry({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' }),
+          makeEntry({
+            id: 'x',
+            seriesId: 's',
+            originalDate: '2026-10-21',
+            startDate: '2026-10-21',
+            editedAt: 1500,
+            deletedAt: 1500,
+          }),
+        ],
+      });
+    }
+
+    it('削除済みの例外を、同じ回の「この予定のみ」の変更で作り直せる（依頼が新しいとき）', async () => {
+      await seedDeletedException();
+
+      const res = await patchEntry('s', {
+        scope: 'this',
+        occurrenceDate: '2026-10-21',
+        changes: { title: '作り直し' },
+        newId: 'x',
+        editedAt: 2000,
+      });
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await stored('x')).toMatchObject({
+        title: '作り直し',
+        series_id: 's',
+        original_date: '2026-10-21',
+        deleted_at: null,
+        edited_at: 2000,
+      });
+    });
+
+    it('削除済みの例外を、同じ回の「この予定のみ」の削除で作り直せる（依頼が新しいとき）', async () => {
+      await seedDeletedException();
+
+      const res = await deleteEntry('s', {
+        scope: 'this',
+        occurrenceDate: '2026-10-21',
+        newId: 'x',
+        editedAt: 2000,
+      });
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await stored('x')).toMatchObject({ cancelled: 1, deleted_at: null, edited_at: 2000 });
+    });
+
+    it('削除済みの例外への依頼が、削除より古ければ、stale で捨てる', async () => {
+      await seedDeletedException();
+      const before = await dumpTables(db());
+
+      const res = await patchEntry('s', {
+        scope: 'this',
+        occurrenceDate: '2026-10-21',
+        changes: { title: '古い依頼' },
+        newId: 'x',
+        editedAt: 1200,
+      });
+
+      expect(res.body).toEqual({ applied: false, reason: 'stale' });
+      expect(await dumpTables(db())).toEqual(before);
+    });
+
+    it('「すべて」の変更で、newId が、書き換わる例外の行の id と同じでも通る', async () => {
+      await seedRows();
+
+      const res = await patchEntry('s', {
+        scope: 'all',
+        occurrenceDate: '2026-10-19',
+        changes: { title: '全部' },
+        newId: 'x',
+        editedAt: 2000,
+      });
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await stored('s')).toMatchObject({ title: '全部', edited_at: 2000 });
+      expect(await stored('x')).toMatchObject({ title: '全部', edited_at: 2000 });
+    });
   });
 });
 

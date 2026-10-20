@@ -12,6 +12,7 @@ import {
   applyWrite,
   countLiveUserWorkspaces,
   readChanges,
+  readEntry,
   readLiveData,
   readSeriesEntries,
   readWorkspaceEntries,
@@ -1227,6 +1228,38 @@ describe('readSeriesEntries', () => {
       .run();
 
     await expect(readSeriesEntries(db(), 'broken')).rejects.toBeInstanceOf(CorruptRowError);
+  });
+});
+
+describe('readEntry', () => {
+  it('id の行を返す。削除済みの行も返す（API が、新しい行の id のぶつかりを確かめるため）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 'a' }),
+        makeEntry({ id: 'b', editedAt: 2000, deletedAt: 2000 }),
+        makeEntry({ id: 'c' }),
+      ],
+    });
+
+    expect((await readEntry(db(), 'a'))?.entry).toEqual(makeEntry({ id: 'a' }));
+    expect((await readEntry(db(), 'b'))?.entry.deletedAt).toBe(2000);
+  });
+
+  it('該当する行がなければ、undefined', async () => {
+    expect(await readEntry(db(), 'nothing')).toBeUndefined();
+  });
+
+  it('構造が壊れた行があれば、CorruptRowError（読み込みと同じ。付録 A.3）', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await db()
+      .prepare(
+        `INSERT INTO entries (id, kind, title, all_day, start_date, end_date, notify_enabled,
+           notify_offset_min, edited_at, rev)
+         VALUES ('broken', 'event', 't', 0, 'not-a-date', '2026-10-19', 1, 10, 1000, 1)`,
+      )
+      .run();
+
+    await expect(readEntry(db(), 'broken')).rejects.toBeInstanceOf(CorruptRowError);
   });
 });
 

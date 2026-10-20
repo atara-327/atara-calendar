@@ -48,8 +48,9 @@ entriesRoute.put('/:id', async (c) => {
   const { draft, editedAt } = await parseBody(c, putEntryRequestSchema);
   assertEditedAtNotInFuture(editedAt);
 
+  // 同じ id の行がすでにあっても、上書きしない（PUT は作成だけで、別の行を壊さないため。write.ts の checkNewId）。
   const rows = calculate(() => createEntry({ draft, newId: id, editedAt }));
-  return c.json(await commitEntries(c.env.DB, rows, editedAt));
+  return c.json(await commitEntries(c.env.DB, rows, editedAt, { newId: id, loaded: [] }));
 });
 
 entriesRoute.patch('/:id', async (c) => {
@@ -81,7 +82,7 @@ entriesRoute.patch('/:id', async (c) => {
         editedAt,
       ),
     );
-  return c.json(await commitEntries(db, rows, editedAt));
+  return c.json(await commitEntries(db, rows, editedAt, { newId, loaded: entries }));
 });
 
 entriesRoute.delete('/:id', async (c) => {
@@ -102,5 +103,5 @@ entriesRoute.delete('/:id', async (c) => {
         editedAt,
       ),
     );
-  return c.json(await commitEntries(db, rows, editedAt));
+  return c.json(await commitEntries(db, rows, editedAt, { newId, loaded: entries }));
 });
