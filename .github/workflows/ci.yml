@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # 最初のデプロイなど、main を手で動かしたいとき用（docs/setup.md の 6）。
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,3 +26,66 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+
+  # main に取り込まれたら、確認（check）が通った後に本番へデプロイする（設計書 Q7）。
+  # DEPLOY_ENABLED は、本番の下準備（docs/setup.md）が終わってからユーザーが true にする。
+  # それまでは動かないので、下準備の前に main へ取り込んでもデプロイは失敗しない。
+  # DEPLOY_ENABLED をリポジトリの変数にしているのは、この if の時点では、環境（environment）の変数がまだ読めないため。
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    # 同時に2つのデプロイが動かないよう、1つずつ動かす。
+    # ただし、ジョブ単位の concurrency では、デプロイの順番が「main に入った順」ではなく
+    # 「check が終わった順」になる。古いコミットが後から本番を上書きしないよう、
+    # 下の「main の最新でなければデプロイしない」で止める。
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    # Secret を、main だけが使える環境（Deployment branches）に置くため（docs/setup.md の 4.2）。
+    # リポジトリの Secret にすると、PR の側でワークフローを書き換えて、レビュー前のコードがトークンを使えてしまう。
+    environment: production
+    steps:
+      # wrangler は認証エラー（権限不足・期限切れ）のとき、自動で whoami を実行して、
+      # トークンの持ち主のメールアドレスとアカウント名をログに出す。
+      # このリポジトリは public でログを誰でも読めるので、どのステップより先に伏せ字にしておく。
+      # 伏せ字にするのは、トークンの持ち主（Cloudflare にログインするメールアドレス）。
+      # Worker の ALLOWED_EMAIL（Access で許可する Gmail）で代用すると、2つが違うときに伏せ字が効かないので、別の Secret にしている。
+      # 空だと伏せ字にならないまま whoami が出力されるので、未登録のときは止める。
+      - name: ログのメールアドレスを伏せ字にする
+        env:
+          EMAIL: ${{ secrets.CLOUDFLARE_ACCOUNT_EMAIL }}
+        run: |
+          if [ -z "$EMAIL" ]; then
+            echo "::error::環境 production の Secret CLOUDFLARE_ACCOUNT_EMAIL が未登録です（docs/setup.md の 4.2）。"
+            exit 1
+          fi
+          echo "::add-mask::$EMAIL"
+      - uses: actions/checkout@v5
+      # concurrency が守れるのは同時に動かないことだけで、順番は守れない。
+      # 古い実行の Re-run も、ここで止まる。
+      - name: main の最新でなければデプロイしない
+        run: |
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "::error::このコミット（$GITHUB_SHA）は main の最新（${latest:-取得できませんでした}）ではないので、デプロイしません。"
+            exit 1
+          fi
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID は、wrangler のステップにだけ渡す。
+      # ジョブ全体の env にすると、npm ci（依存パッケージのインストールスクリプト）や build にも渡り、
+      # 依存パッケージが乗っ取られたときに盗まれてしまう。
+      # 新しいコードが新しいテーブルの形を前提にできるよう、マイグレーションを先に当てる。
+      - run: npx wrangler d1 migrations apply atara-calendar --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

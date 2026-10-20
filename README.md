@@ -7,6 +7,7 @@
 - [要件定義書](docs/requirements/requirements.md) — 何を作るか
 - [設計書](docs/design/design.md) — どう作るか
 - [ロードマップ](docs/ROADMAP.md) — リリースまでの流れ
+- [本番の下準備](docs/setup.md) — Cloudflare・Google・GitHub で、一度だけ行う設定（ユーザーの作業）
 - [バックログ](docs/BACKLOG.md) — 後でやることのメモ
 - ヒアリング記録: [1次](docs/requirements/hearing-sheet.md) / [2次](docs/requirements/hearing-sheet-2.md) / [3次](docs/requirements/hearing-sheet-3.md)
 
