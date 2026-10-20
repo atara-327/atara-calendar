@@ -394,7 +394,8 @@ function cloneRow(row: Entry): Entry {
   return { ...row, rrule: row.rrule === null ? null : cloneRrule(row.rrule) };
 }
 
-function markDeleted(row: Entry, editedAt: number): Entry {
+/** 行を論理削除した行にする（deletedAt と editedAt を、削除の時刻にする）。ワークスペースの削除（workspace.ts）も使う。 */
+export function markDeleted(row: Entry, editedAt: number): Entry {
   return { ...cloneRow(row), deletedAt: editedAt, editedAt };
 }
 
