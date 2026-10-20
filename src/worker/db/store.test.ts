@@ -1306,15 +1306,56 @@ describe('readWorkspaceEntries', () => {
     expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['moved', 's1']);
   });
 
-  it('別のワークスペースの系列の例外でも、例外の行が、このワークスペースを指していれば返す', async () => {
+  it('別のワークスペースの系列の例外でも、例外の行が、このワークスペースを指していれば、その系列の行と一緒に返す', async () => {
     await applyWrite(db(), {
       entries: [
         makeEntry({ id: 's2', workspaceId: 'w2', rrule: { freq: 'daily' } }),
+        makeEntry({ id: 'moved', workspaceId: 'w1', seriesId: 's2', originalDate: '2026-10-20' }),
+        makeEntry({
+          id: 'other-exception',
+          workspaceId: 'w2',
+          seriesId: 's2',
+          originalDate: '2026-10-21',
+        }),
+      ],
+    });
+
+    expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['moved', 's2']);
+  });
+
+  it('このワークスペースを指す例外の系列が、削除済みなら、系列は返さない（例外は返す）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({
+          id: 's2',
+          workspaceId: 'w2',
+          rrule: { freq: 'daily' },
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
         makeEntry({ id: 'moved', workspaceId: 'w1', seriesId: 's2', originalDate: '2026-10-20' }),
       ],
     });
 
     expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['moved']);
+  });
+
+  it('このワークスペースを指す例外が、削除済みなら、その系列の行は返さない', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's2', workspaceId: 'w2', rrule: { freq: 'daily' } }),
+        makeEntry({
+          id: 'moved',
+          workspaceId: 'w1',
+          seriesId: 's2',
+          originalDate: '2026-10-20',
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+      ],
+    });
+
+    expect(await readWorkspaceEntries(db(), 'w1')).toEqual([]);
   });
 
   it('削除済みの系列の、削除されていない例外は返さない（系列が、このワークスペースを指していても）', async () => {

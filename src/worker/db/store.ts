@@ -117,8 +117,13 @@ export async function readEntry(db: Database, id: string): Promise<StoredEntry |
 }
 
 /**
- * ワークスペースの中の、削除されていない予定。そのワークスペースの系列の例外は、例外の行自身が別の
- * ワークスペースを指していても含める（ワークスペースの削除で、系列と例外をまとめて消すため。設計書 Q6）。
+ * ワークスペースの中の、削除されていない予定（ワークスペースの削除で、消す行や書き換える行を決めるため。設計書 Q6）。
+ * 次の行を含める。
+ * - そのワークスペースの系列の例外。例外の行自身が別のワークスペースを指していても含める。
+ * - そのワークスペースを指す例外の、系列の行。系列が別のワークスペースのものでも含める（その例外を、系列の
+ *   ワークスペースに戻すのに、系列の行の workspaceId が要る。系列の行自身は、書き換えない）。
+ * 削除済みの系列は含めない。その例外は、例外の行自身がそのワークスペースを指すものだけ含める（系列がないので、
+ * deleteWorkspace が論理削除する）。系列のワークスペースが指すだけの例外は、画面に出ない行なので含めない。
  */
 export async function readWorkspaceEntries(
   db: Database,
@@ -126,8 +131,13 @@ export async function readWorkspaceEntries(
 ): Promise<StoredEntry[]> {
   const { results } = await db
     .prepare(
-      `SELECT * FROM entries WHERE deleted_at IS NULL AND (workspace_id = ?1 OR series_id IN
-         (SELECT id FROM entries WHERE workspace_id = ?1 AND series_id IS NULL AND deleted_at IS NULL))
+      `SELECT * FROM entries WHERE deleted_at IS NULL AND (
+         workspace_id = ?1
+         OR series_id IN
+           (SELECT id FROM entries WHERE workspace_id = ?1 AND series_id IS NULL AND deleted_at IS NULL)
+         OR id IN
+           (SELECT series_id FROM entries WHERE workspace_id = ?1 AND series_id IS NOT NULL AND deleted_at IS NULL)
+       )
        ORDER BY id`,
     )
     .bind(workspaceId)

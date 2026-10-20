@@ -3,6 +3,7 @@ import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1'
 import { callApi, dumpTables, fetchChanges, seedWorkspace } from '../../../test/helpers/api';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
+import type { OccurrencesResponse } from '../../shared/api';
 import { applyWrite } from '../db/store';
 
 let testDatabase: TestDatabase;
@@ -367,6 +368,90 @@ describe('DELETE /api/workspaces/:id', () => {
     await deleteWorkspace('w1', 5000);
 
     expect((await fetchChanges(db(), 0)).entries).toEqual([]);
+  });
+
+  describe('別のワークスペースの系列の例外が、このワークスペースを指しているとき', () => {
+    /** w1 の毎日の系列 's' の、10-20 の回を、この予定のみで w2 に移し、10-25 にした例外 'x'。 */
+    async function seedMovedException() {
+      await seedWorkspace(db(), 'w2');
+      await applyWrite(db(), {
+        entries: [
+          makeEntry({ id: 's', rrule: { freq: 'daily' }, workspaceId: 'w1' }),
+          makeEntry({
+            id: 'x',
+            seriesId: 's',
+            originalDate: '2026-10-20',
+            startDate: '2026-10-25',
+            endDate: '2026-10-25',
+            workspaceId: 'w2',
+            title: '移した回',
+          }),
+        ],
+      });
+    }
+
+    async function occurrenceDates() {
+      const res = await callApi(db(), 'GET', '/api/occurrences?from=2026-10-19&to=2026-10-25');
+      // 応答の形そのものは、occurrences.test.ts が確かめる。ここは、中身を読むための型付け。
+      return (res.body as OccurrencesResponse).occurrences.map(({ entryId, startDate }) => [
+        entryId,
+        startDate,
+      ]);
+    }
+
+    it('Q6: 移していた回は消え、移す前の日（10-20）に、系列の回は戻らない。w1 の他の回は出る', async () => {
+      await seedMovedException();
+      expect(await occurrenceDates()).toContainEqual(['x', '2026-10-25']);
+
+      const res = await deleteWorkspace('w2', 5000);
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await occurrenceDates()).toEqual([
+        ['s', '2026-10-19'],
+        ['s', '2026-10-21'],
+        ['s', '2026-10-22'],
+        ['s', '2026-10-23'],
+        ['s', '2026-10-24'],
+        ['s', '2026-10-25'],
+      ]);
+    });
+
+    it('Q6: 例外の行は、論理削除せず、その回を削除した形で w1 に戻す。系列の行は書き換えない', async () => {
+      await seedMovedException();
+      const { rev } = await fetchChanges(db(), 0);
+
+      await deleteWorkspace('w2', 5000);
+
+      const changes = await fetchChanges(db(), rev);
+      expect(changes.entries).toHaveLength(1);
+      expect(changes.entries[0]).toMatchObject({
+        id: 'x',
+        cancelled: true,
+        workspaceId: 'w1',
+        editedAt: 5000,
+        deletedAt: null,
+      });
+      expect(changes.workspaces.map(({ id, deletedAt }) => [id, deletedAt])).toEqual([
+        ['w2', 5000],
+      ]);
+    });
+
+    it('系列が削除済みなら、例外の行は論理削除する', async () => {
+      await seedMovedException();
+      await applyWrite(db(), {
+        entries: [
+          makeEntry({ id: 's', rrule: { freq: 'daily' }, editedAt: 2000, deletedAt: 2000 }),
+        ],
+      });
+      const { rev } = await fetchChanges(db(), 0);
+
+      await deleteWorkspace('w2', 5000);
+
+      const changes = await fetchChanges(db(), rev);
+      expect(
+        changes.entries.map(({ id, cancelled, deletedAt }) => [id, cancelled, deletedAt]),
+      ).toEqual([['x', false, 5000]]);
+    });
   });
 
   it('SY-3: 同じ依頼を 2 回送ると、2 回目は stale で捨て、DB は変わらない', async () => {

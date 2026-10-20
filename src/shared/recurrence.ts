@@ -399,6 +399,14 @@ export function markDeleted(row: Entry, editedAt: number): Entry {
   return { ...cloneRow(row), deletedAt: editedAt, editedAt };
 }
 
+/**
+ * 例外の行を、その回を削除した形（cancelled）にする。「この予定のみ」の削除（cancelOccurrence）と、
+ * ワークスペースの削除（workspace.ts）が使う。
+ */
+export function markCancelled(row: Entry, editedAt: number): Entry {
+  return { ...row, cancelled: true, editedAt };
+}
+
 /** 下書きから行を作る。繰り返すなら、開始日をルールに合う最初の日へずらす（設計書 4.4）。 */
 export function createEntry({
   draft,
@@ -834,5 +842,5 @@ function cancelOccurrence(
 ): Entry {
   const { exception, displayed } = locateOccurrence(entries, series, rrule, occurrenceDate);
   const base = exception ?? newException(series, occurrenceDate, displayed, { newId, editedAt });
-  return { ...base, cancelled: true, editedAt };
+  return markCancelled(base, editedAt);
 }

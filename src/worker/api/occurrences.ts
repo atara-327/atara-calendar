@@ -51,8 +51,8 @@ occurrencesRoute.get('/', async (c) => {
   }
 
   const { entries, workspaceIds } = await readLiveData(c.env.DB);
-  // 削除済みのワークスペースの予定は出さない。ワークスペースの削除は中の予定も消すが、例外の行が
-  // 別のワークスペースを指していたり、書き込みが重なったりして、削除されていない行が残ることがある。
+  // 削除済みのワークスペースの予定は出さない。ワークスペースの削除は中の予定も消すが、書き込みが重なると
+  // （設計書 6.4）、削除したワークスペースを指す、削除されていない行が残ることがある。
   // 展開の前ではなく後で除くのは、先に除くと、除いた例外の行が抑えていた、元の系列の回が現れてしまうため。
   const occurrences = expandOccurrences(entries, from, to).filter(
     ({ workspaceId }) => workspaceId === null || workspaceIds.has(workspaceId),
