@@ -47,7 +47,7 @@ Claude はユーザーの Cloudflare アカウントや Discord を操作でき�
   - **Why**: 無料プランの Worker は CPU 時間が1回10ms までで（[設計書 付録A.2](design/design.md#a2-無料枠の見積もりnf-1)）、Node での実測だけでは、Worker で収まるかがわからないため。
 - **持ち越しの確認**: 繰り返しの展開の CPU 時間（Node の実測で、系列100件の1年分が約34ms）。#4 で `GET /api/occurrences` の期間に上限を設けるか、展開を速くするかを決める。
   - **Why**: 無料プランの Worker は CPU 時間が1回10ms までなので、Node の実測の時点で、収まらない恐れがあるため。
-- 各 PR は機能ごとのブランチで implementer が作り、reviewer のレビューを経てから、**ユーザーが main にマージ**します（[CLAUDE.md](../CLAUDE.md)）。
+- 各 PR の作り方とマージの条件は、[CLAUDE.md](../CLAUDE.md) の「PR とコミット」を参照してください。
 
 ## 4. 試用・受け入れ確認
 
