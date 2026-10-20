@@ -35,6 +35,15 @@ const fullEntry: Entry = makeEntry({
   deletedAt: 1_760_000_100_000,
 });
 
+function catchError(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('例外が投げられませんでした');
+}
+
 /** 書き込む行に、読み込むときだけ付く 2 つの列を足したもの。DB から読んだ行の形。 */
 function readBack(entry: Entry, extra: { rev?: number; next_notify_at?: number | null } = {}) {
   return { ...entryToRow(entry), rev: 3, next_notify_at: null, ...extra };
@@ -90,7 +99,9 @@ describe('予定の行の変換（entries）', () => {
       { reason: '種類が event と block 以外', patch: { kind: 'task' } },
       { reason: '日付の形式が違う', patch: { start_date: '2026/10/19' } },
       { reason: '存在しない日付', patch: { end_date: '2026-02-30' } },
-      { reason: '時刻が 15 分刻みでない', patch: { start_time: '15:10' } },
+      { reason: '時刻の形が HH:MM でない', patch: { start_time: '9:00' } },
+      { reason: '存在しない時刻', patch: { end_time: '24:00' } },
+      { reason: 'id が空', patch: { id: '' } },
       { reason: '真偽値の列が 0 と 1 以外', patch: { all_day: 2 } },
       { reason: '真偽値の列が文字列', patch: { cancelled: 'true' } },
       { reason: 'rrule が JSON として読めない', patch: { rrule: '{freq:' } },
@@ -123,6 +134,40 @@ describe('予定の行の変換（entries）', () => {
 
   it('知らない列が付いていても、読み込みでは捨てる（将来の列の追加で読めなくならない）', () => {
     expect(entryFromRow({ ...readBack(fullEntry), added_later: 'x' }).entry).toEqual(fullEntry);
+  });
+
+  describe('読み込みは構造だけを確かめる（入力のルールを後で厳しくしても、既存の行を壊れた行にしない）', () => {
+    it.each([
+      { rule: '時刻が 15 分刻み', patch: { start_time: '15:10', end_time: '16:07' } },
+      {
+        rule: '日付の年が 1900〜2199 年',
+        patch: { start_date: '1800-01-01', end_date: '2300-12-31' },
+      },
+      { rule: 'タイトルの長さ', patch: { title: 'あ'.repeat(100_000) } },
+      { rule: 'タイトルが空でない', patch: { title: '' } },
+    ])('$rule に合わない行も、読み込める', ({ patch }) => {
+      const stored = entryFromRow({ ...readBack(fullEntry), ...patch });
+
+      expect(stored.entry).toMatchObject({
+        title: patch.title ?? fullEntry.title,
+        startDate: patch.start_date ?? fullEntry.startDate,
+        startTime: patch.start_time ?? fullEntry.startTime,
+      });
+    });
+  });
+
+  it('CorruptRowError は、壊れた行の表と id を持つ（直す行を探すため）', () => {
+    const error = catchError(() => entryFromRow({ ...readBack(fullEntry), kind: 'task' }));
+
+    expect(error).toBeInstanceOf(CorruptRowError);
+    expect(error).toMatchObject({ table: 'entries', rowId: 'e1' });
+  });
+
+  it('id が読めない行の CorruptRowError は、id を持たない', () => {
+    const error = catchError(() => workspaceFromRow({ name: 'x' }));
+
+    expect(error).toMatchObject({ table: 'workspaces', rowId: undefined });
+    expect(error).toHaveProperty('message', expect.stringContaining('id: 不明'));
   });
 });
 
@@ -172,7 +217,7 @@ describe('ワークスペースの行の変換（workspaces）', () => {
   });
 
   it.each([
-    { reason: '色が #RRGGBB でない', patch: { color: 'red' } },
+    { reason: '色が文字列でない', patch: { color: 5 } },
     { reason: '組み込みの印が知らない値', patch: { builtin: 'custom' } },
     { reason: '表示の列が 0 と 1 以外', patch: { visible: 2 } },
     { reason: '並び順が小数', patch: { sort_order: 1.5 } },
@@ -183,8 +228,20 @@ describe('ワークスペースの行の変換（workspaces）', () => {
     );
   });
 
+  it.each([
+    { rule: '色が #RRGGBB', patch: { color: 'red' } },
+    { rule: '名前が空でない', patch: { name: '' } },
+  ])('読み込みは構造だけを確かめるので、$rule に合わない行も読み込める', ({ patch }) => {
+    const { workspace } = workspaceFromRow({ ...readBackWorkspace(full), ...patch });
+
+    expect(workspace).toMatchObject({
+      color: patch.color ?? full.color,
+      name: patch.name ?? full.name,
+    });
+  });
+
   it('例外の文面から、どの表のどの行かがわかる', () => {
-    expect(() => workspaceFromRow({ ...readBackWorkspace(full), color: 'red' })).toThrow(
+    expect(() => workspaceFromRow({ ...readBackWorkspace(full), visible: 2 })).toThrow(
       /workspaces の行が壊れています（id: w1）/,
     );
   });

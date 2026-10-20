@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  entrySchema,
+  entryKindSchema,
   rruleSchema,
   workspaceSchema,
   type Entry,
@@ -107,9 +107,21 @@ export interface StoredWorkspace {
   rev: number;
 }
 
-/** 行が、書き込んだ覚えのない形になっている。壊れた行を黙って直さず、止めて気づけるようにする。 */
+/**
+ * 行が、DB の行として成り立っていない（型・必須の列・日付や時刻の形・rrule の形が合わない）。
+ * 壊れた行を黙って直さず、止めて気づけるようにする。table と rowId は、直す行を探すための印（付録 A.3）。
+ */
 export class CorruptRowError extends Error {
   override readonly name = 'CorruptRowError';
+  readonly table: string;
+  /** 行の id。id の列すら読めないときは undefined。 */
+  readonly rowId: string | undefined;
+
+  constructor(table: string, rowId: string | undefined, detail: string, options?: ErrorOptions) {
+    super(`${table} の行が壊れています（id: ${rowId ?? '不明'}）\n${detail}`, options);
+    this.table = table;
+    this.rowId = rowId;
+  }
 }
 
 // 0 と 1 以外（2 など）は、アプリが書いた値ではないので、真偽値に丸めず壊れた行として扱う。
@@ -127,33 +139,42 @@ const rruleColumnSchema = z
   })
   .pipe(rruleSchema);
 
-// 各列の検証は、型側のスキーマ（schema.ts）の部品を使い回す。ここで別に書くと、型のルールを
-// 変えたときに、DB から読み込む側だけ古いまま残るため。
+// 型側のスキーマ（schema.ts）の部品を使い回さないのは、あちらが入力のルール（長さ・年の範囲・
+// 15 分刻み・色の形など）で、後で厳しくする可能性があるため。使い回すと、厳しくした途端に、すでに
+// DB にある行が「壊れた行」になり、readChanges が例外になって、全端末の同期が止まる。
+// ここは、DB の行として成り立つか（型・必須・日付と時刻の形・rrule の形）だけを確かめる。
+// 入力のルールは、書き込むとき（store.ts の applyWrite）に確かめる。
+// kind・builtin・rrule だけは型側と同じものを使う。閉じた集合で、DB の CHECK 制約やコードの分岐の元になる値のため。
+const idSchema = z.string().min(1);
+const dateSchema = z.iso.date();
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const timestampSchema = z.number().int();
+
 const entryRowSchema = z
   .object({
-    id: entrySchema.shape.id,
-    kind: entrySchema.shape.kind,
-    title: entrySchema.shape.title,
-    workspace_id: entrySchema.shape.workspaceId,
+    id: idSchema,
+    kind: entryKindSchema,
+    title: z.string(),
+    workspace_id: idSchema.nullable(),
     all_day: flagSchema,
-    start_date: entrySchema.shape.startDate,
-    start_time: entrySchema.shape.startTime,
-    end_date: entrySchema.shape.endDate,
-    end_time: entrySchema.shape.endTime,
-    location: entrySchema.shape.location,
-    url: entrySchema.shape.url,
-    memo: entrySchema.shape.memo,
+    start_date: dateSchema,
+    start_time: timeSchema.nullable(),
+    end_date: dateSchema,
+    end_time: timeSchema.nullable(),
+    location: z.string().nullable(),
+    url: z.string().nullable(),
+    memo: z.string().nullable(),
     rrule: rruleColumnSchema.nullable(),
-    until_date: entrySchema.shape.untilDate,
-    series_id: entrySchema.shape.seriesId,
-    original_date: entrySchema.shape.originalDate,
+    until_date: dateSchema.nullable(),
+    series_id: idSchema.nullable(),
+    original_date: dateSchema.nullable(),
     cancelled: flagSchema,
     notify_enabled: flagSchema,
-    notify_offset_min: entrySchema.shape.notifyOffsetMin,
-    next_notify_at: z.number().int().nullable(),
-    edited_at: entrySchema.shape.editedAt,
+    notify_offset_min: z.number().int(),
+    next_notify_at: timestampSchema.nullable(),
+    edited_at: timestampSchema,
     rev: z.number().int(),
-    deleted_at: entrySchema.shape.deletedAt,
+    deleted_at: timestampSchema.nullable(),
   })
   .transform((row): StoredEntry => ({
     entry: {
@@ -185,15 +206,15 @@ const entryRowSchema = z
 
 const workspaceRowSchema = z
   .object({
-    id: workspaceSchema.shape.id,
-    name: workspaceSchema.shape.name,
-    color: workspaceSchema.shape.color,
-    sort_order: workspaceSchema.shape.sortOrder,
+    id: idSchema,
+    name: z.string(),
+    color: z.string(),
+    sort_order: z.number().int(),
     visible: flagSchema,
     builtin: workspaceSchema.shape.builtin,
-    edited_at: workspaceSchema.shape.editedAt,
+    edited_at: timestampSchema,
     rev: z.number().int(),
-    deleted_at: workspaceSchema.shape.deletedAt,
+    deleted_at: timestampSchema.nullable(),
   })
   .transform((row): StoredWorkspace => ({
     workspace: {
@@ -214,7 +235,9 @@ function parseRow<T>(schema: z.ZodType<T>, table: string, raw: unknown): T {
   if (result.success) return result.data;
   const id = typeof raw === 'object' && raw !== null && 'id' in raw ? raw.id : undefined;
   throw new CorruptRowError(
-    `${table} の行が壊れています（id: ${typeof id === 'string' ? id : '不明'}）\n${z.prettifyError(result.error)}`,
+    table,
+    typeof id === 'string' ? id : undefined,
+    z.prettifyError(result.error),
     { cause: result.error },
   );
 }

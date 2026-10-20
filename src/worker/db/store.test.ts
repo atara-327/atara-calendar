@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { changeEntry, createEntry, deleteEntry } from '../../shared/recurrence';
 import type { Entry, EntryDraft } from '../../shared/schema';
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
@@ -185,15 +185,61 @@ describe('readChanges', () => {
     await expect(readChanges(db(), Number.NaN)).rejects.toThrow(RangeError);
   });
 
-  it('壊れた行が DB にあれば、黙って飛ばさず CorruptRowError にする', async () => {
-    await db()
-      .prepare(
-        `INSERT INTO entries (id, kind, title, start_date, end_date, notify_enabled, notify_offset_min, edited_at, rev)
-         VALUES ('broken', 'event', 'x', 'not-a-date', '2026-10-19', 1, 10, 1000, 1)`,
-      )
-      .run();
+  describe('読み込みは構造だけを確かめる（設計書 6.3）', () => {
+    const INSERT_ENTRY = `INSERT INTO entries (id, kind, title, start_date, start_time, end_date, notify_enabled, notify_offset_min, edited_at, rev)
+      VALUES (?1, 'event', 'x', ?2, ?3, ?2, 1, 10, 1000, 1)`;
 
-    await expect(readChanges(db(), 0)).rejects.toThrow(CorruptRowError);
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('入力のルール（15 分刻みの時刻など）に合わない行でも、構造が成り立っていれば読める', async () => {
+      await db().prepare(INSERT_ENTRY).bind('odd-time', '2026-10-19', '15:10').run();
+
+      const { entries } = await readChanges(db(), 0);
+
+      expect(entries.map(({ entry }) => [entry.id, entry.startTime])).toEqual([
+        ['odd-time', '15:10'],
+      ]);
+    });
+
+    it.each([
+      { table: 'entries', id: 'broken', sql: INSERT_ENTRY, params: ['broken', 'not-a-date', null] },
+      {
+        table: 'workspaces',
+        id: 'broken',
+        sql: `INSERT INTO workspaces (id, name, color, sort_order, visible, edited_at, rev)
+          VALUES (?1, 'x', '#000000', 0, 2, 1000, 1)`,
+        params: ['broken'],
+      },
+    ])(
+      '$table の構造が壊れた行が 1 つでもあれば、ほかの正しい行も返さず、全体を CorruptRowError にする',
+      async ({ table, id, sql, params }) => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        await db().prepare(INSERT_ENTRY).bind('good', '2026-10-19', null).run();
+        await db()
+          .prepare(sql)
+          .bind(...params)
+          .run();
+
+        const read = readChanges(db(), 0);
+
+        await expect(read).rejects.toThrow(CorruptRowError);
+        await expect(read).rejects.toMatchObject({ table, rowId: id });
+        expect(error).toHaveBeenCalledWith(
+          expect.stringContaining(`${table} の行が壊れています（id: ${id}）`),
+        );
+      },
+    );
+
+    it('壊れた行がなければ、ログを出さない', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
+
+      await readChanges(db(), 0);
+
+      expect(error).not.toHaveBeenCalled();
+    });
   });
 });
 

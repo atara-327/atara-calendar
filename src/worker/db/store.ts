@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Entry, Workspace } from '../../shared/schema';
 import {
+  CorruptRowError,
   ENTRY_COLUMNS,
   WORKSPACE_COLUMNS,
   entryFromRow,
@@ -42,6 +43,20 @@ function rowsAt(results: readonly D1Result[], index: number): unknown[] {
   return result.results;
 }
 
+/**
+ * 行を型に直す。構造が壊れた行が 1 行でもあれば、差分の読み込み全体を失敗させる（設計書 6.3）。
+ * 壊れた行だけを飛ばして返さないのは、受け取った端末が「全部受け取った」と思い込み、その行が
+ * 永久に届かないまま、気づけなくなるため。直すための手がかり（表と id）は、ログに残す。
+ */
+function parseRows<T>(rawRows: readonly unknown[], fromRow: (raw: unknown) => T): T[] {
+  try {
+    return rawRows.map((raw) => fromRow(raw));
+  } catch (error) {
+    if (error instanceof CorruptRowError) console.error(error.message);
+    throw error;
+  }
+}
+
 function selectChanged(db: Database, table: 'workspaces' | 'entries', sinceRev: number) {
   // sinceRev = 0 は初回の読み込み。削除の記録は要らないので、削除済みを除く。
   // rev の条件を付けないのは、組み込みのワークスペースが rev = 0 で入っているため。
@@ -66,8 +81,8 @@ export async function readChanges(db: Database, sinceRev: number): Promise<Chang
   return {
     rev: meta.rev,
     epoch: meta.epoch,
-    workspaces: rowsAt(results, 1).map(workspaceFromRow),
-    entries: rowsAt(results, 2).map(entryFromRow),
+    workspaces: parseRows(rowsAt(results, 1), workspaceFromRow),
+    entries: parseRows(rowsAt(results, 2), entryFromRow),
   };
 }
 
