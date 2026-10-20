@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_YEAR, MIN_YEAR } from './solarTerms';
 
 // 型はすべて Zod のスキーマから導く（z.infer）。名前は camelCase で、DB の snake_case との
 // 対応は Worker の DB の層（worker/db/rows.ts）で行う（設計書 4章）。
@@ -133,3 +134,93 @@ export type Workspace = z.infer<typeof workspaceSchema>;
 export const scopeSchema = z.enum(['this', 'following', 'all']);
 
 export type Scope = z.infer<typeof scopeSchema>;
+
+// ここから先は、API が受け取る入力の検証用（設計書 4.2「入力の上限と項目をまたぐ確認」）。
+// 上の entrySchema・workspaceSchema に、長さや年の範囲を足さないのは、これらが書き込み（store.ts）の
+// 確認にも、読み込み（rows.ts）の部品にも使われるため。足すと、入力のルールを後で厳しくしたときに、
+// すでに DB にある行が、更新できない行（書き込みで ZodError）になる。入力だけを、別のスキーマで厳しくする。
+// 文字列の長さ（.max）は UTF-16 の単位で数える。上限は、1 行が D1 の値の上限（約 2MB）に余裕で収まる大きさ。
+
+/** 入力の上限。画面のフォームも同じ値を使う（入力欄の maxLength など）。 */
+export const INPUT_LIMITS = {
+  title: 200,
+  location: 200,
+  memo: 10_000,
+  url: 2048,
+  workspaceName: 50,
+  /** 開始の何分前か。終日は 0:00 からの分なので、負の値もある（設計書 4.3）。最大 1 週間前。 */
+  notifyOffsetMin: { min: -1440, max: 10_080 },
+} as const;
+
+/** 端末が作る UUID と、組み込みの固定 id（'builtin-holiday' など）の、両方が通る形。 */
+export const idInputSchema = z.string().regex(/^[A-Za-z0-9-]{1,64}$/, {
+  message: 'id は英数字とハイフンの 1〜64 文字にしてください',
+});
+
+/** 日付の年が、1900〜2199（設計書 Q2）に入っているか。祝日の計算と、繰り返しの展開が対応する範囲。 */
+export function isDateInSupportedYears(date: string): boolean {
+  const year = Number(date.slice(0, 4));
+  return year >= MIN_YEAR && year <= MAX_YEAR;
+}
+
+export const inputDateSchema = dateStringSchema.refine(isDateInSupportedYears, {
+  message: `日付の年は ${String(MIN_YEAR)}〜${String(MAX_YEAR)} にしてください`,
+});
+
+/** new URL() で読めるか。 */
+function isParsableUrl(value: string): boolean {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * URL は http:// と https:// だけ（設計書 10.3）。javascript: などをリンクにしないため。
+ * z.url() を使わないのは、値を黙って整える（先頭と末尾の空白を取り除く）ため。入力と保存する値が食い違うと、
+ * 端末が持っている行と、サーバーが保存した行が、同期のたびにずれて見える。
+ */
+const urlInputSchema = z
+  .string()
+  .max(INPUT_LIMITS.url)
+  .regex(/^https?:\/\//i, { message: 'URL は http:// か https:// で始めてください' })
+  .refine(isParsableUrl, { message: 'URL の形が正しくありません' });
+
+/** 端末で編集した時刻（ms）。サーバーの今より未来すぎないことは、API が確かめる（設計書 6.4）。 */
+export const editedAtSchema = z.number().int().nonnegative();
+
+/** 新しく作るときの下書きの、入力用。strictObject にして、知らないキーを黙って捨てずに弾く。 */
+export const entryDraftInputSchema = z.strictObject({
+  ...entryDraftSchema.shape,
+  title: z.string().min(1).max(INPUT_LIMITS.title),
+  workspaceId: idInputSchema.nullable(),
+  startDate: inputDateSchema,
+  endDate: inputDateSchema,
+  location: z.string().max(INPUT_LIMITS.location).nullable(),
+  url: urlInputSchema.nullable(),
+  memo: z.string().max(INPUT_LIMITS.memo).nullable(),
+  notifyOffsetMin: z
+    .number()
+    .int()
+    .min(INPUT_LIMITS.notifyOffsetMin.min)
+    .max(INPUT_LIMITS.notifyOffsetMin.max),
+});
+
+/** 変更の中身の、入力用。entryChangesSchema と同じく、kind を弾く。 */
+export const entryChangesInputSchema = z.strictObject(
+  entryDraftInputSchema.omit({ kind: true }).partial().shape,
+);
+
+/**
+ * ワークスペースの 1 行の、入力用。deletedAt は null だけを通す。PUT で論理削除すると、組み込みと
+ * 最後の 1 つの保護（API の DELETE が確かめる）をすり抜けるため。削除は DELETE で行う。
+ */
+export const workspaceInputSchema = z.strictObject({
+  ...workspaceSchema.shape,
+  id: idInputSchema,
+  name: z.string().min(1).max(INPUT_LIMITS.workspaceName),
+  editedAt: editedAtSchema,
+  deletedAt: z.null(),
+});

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unusedDb } from '../../test/helpers/env';
+import { apiErrorBodySchema } from '../shared/api';
 import type { Bindings } from './env';
 import { app } from './index';
 
@@ -101,5 +102,81 @@ describe('/api/* の保護（AU-1・NF-2）', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+  });
+});
+
+describe('/api/ の下の、存在しないパスと、違うメソッド', () => {
+  const notFound = { error: 'not_found', message: '存在しない API です' };
+
+  it.each([
+    { name: '存在しないパス', method: 'GET', path: '/api/nothing' },
+    { name: '存在しないパス（深い）', method: 'GET', path: '/api/entries/e1/extra' },
+    { name: '末尾のスラッシュのない /api', method: 'GET', path: '/api' },
+    {
+      name: '存在するパスへの違うメソッド（GET /api/entries/:id）',
+      method: 'GET',
+      path: '/api/entries/e1',
+    },
+    {
+      name: '存在するパスへの違うメソッド（POST /api/entries/:id）',
+      method: 'POST',
+      path: '/api/entries/e1',
+    },
+    {
+      name: '存在するパスへの違うメソッド（POST /api/changes）',
+      method: 'POST',
+      path: '/api/changes',
+    },
+    { name: '存在するパスへの違うメソッド（PUT /api/health）', method: 'PUT', path: '/api/health' },
+  ])('$name は 404 で、本文は JSON（not_found）', async ({ method, path }) => {
+    const res = await app.request(
+      path,
+      { method, headers: { ...sameOrigin, 'Content-Type': 'application/json' } },
+      devEnv,
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Content-Type')).toContain('application/json');
+    const body: unknown = await res.json();
+    expect(body).toEqual(notFound);
+    expect(apiErrorBodySchema.parse(body)).toEqual(notFound);
+  });
+
+  it('セキュリティヘッダーが付く', async () => {
+    const res = await app.request('/api/nothing', { headers: sameOrigin }, devEnv);
+
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+  });
+
+  it('認証の前には出ない（JWT がなければ、存在しないパスも 403 のまま。存在を教えない）', async () => {
+    const res = await app.request('/api/nothing', { headers: sameOrigin }, prodEnv);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('リクエストの確認の前にも出ない（他のサイトからの、存在しないパスへの書き込みは 403）', async () => {
+    const res = await app.request(
+      '/api/nothing',
+      { method: 'PUT', headers: { 'Sec-Fetch-Site': 'cross-site' } },
+      devEnv,
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('存在するエンドポイントは、404 にならない', async () => {
+    const res = await app.request('/api/health', { headers: sameOrigin }, devEnv);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('/api/ の外のパスは、Hono の既定の 404（text/plain）のまま', async () => {
+    const res = await app.request('/nothing', { headers: sameOrigin }, devEnv);
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Content-Type')).toContain('text/plain');
+    expect(await res.text()).toBe('404 Not Found');
   });
 });

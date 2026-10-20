@@ -10,7 +10,13 @@ import {
   KindMismatchError,
   MAX_UPSERT_VALUE_BYTES,
   applyWrite,
+  countLiveUserWorkspaces,
   readChanges,
+  readEntry,
+  readLiveData,
+  readSeriesEntries,
+  readWorkspaceEntries,
+  readWorkspaces,
   type Database,
   type WriteRequest,
 } from './store';
@@ -1162,5 +1168,269 @@ describe('applyWrite', () => {
       expect(changes.entries.every(({ entry }) => entry.deletedAt === 5000)).toBe(true);
       expect((await readChanges(db(), 0)).entries).toEqual([]);
     });
+  });
+});
+
+// ここから先は、API（実装 #4c）が書き込みの前に使う、必要な行だけを読む関数。
+// 行の中身は readChanges と同じ変換（rows.ts）を通すので、ここでは「どの行を選ぶか」を確かめる。
+describe('readSeriesEntries', () => {
+  const ids = (rows: { entry: Entry }[]) => rows.map(({ entry }) => entry.id);
+
+  it('SY-1: 系列の行と、その例外の行を返す。別の系列の行は返さない', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's1', rrule: { freq: 'daily' } }),
+        makeEntry({ id: 'x1', seriesId: 's1', originalDate: '2026-10-20' }),
+        makeEntry({ id: 's2', rrule: { freq: 'daily' } }),
+        makeEntry({ id: 'x2', seriesId: 's2', originalDate: '2026-10-20' }),
+        makeEntry({ id: 'plain' }),
+      ],
+    });
+
+    expect(ids(await readSeriesEntries(db(), 's1'))).toEqual(['s1', 'x1']);
+  });
+
+  it('繰り返さない予定は、その行だけを返す', async () => {
+    await applyWrite(db(), { entries: [makeEntry({ id: 'plain' }), makeEntry({ id: 'other' })] });
+
+    expect(ids(await readSeriesEntries(db(), 'plain'))).toEqual(['plain']);
+  });
+
+  it('削除済みの行も返す（API が、対象がない理由を決めるため）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's1', rrule: { freq: 'daily' }, editedAt: 2000, deletedAt: 2000 }),
+        makeEntry({
+          id: 'x1',
+          seriesId: 's1',
+          originalDate: '2026-10-20',
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+      ],
+    });
+
+    expect(ids(await readSeriesEntries(db(), 's1'))).toEqual(['s1', 'x1']);
+  });
+
+  it('該当する行がなければ、空', async () => {
+    expect(await readSeriesEntries(db(), 'nothing')).toEqual([]);
+  });
+
+  it('構造が壊れた行があれば、CorruptRowError（読み込みと同じ。付録 A.3）', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await db()
+      .prepare(
+        `INSERT INTO entries (id, kind, title, all_day, start_date, end_date, notify_enabled,
+           notify_offset_min, edited_at, rev)
+         VALUES ('broken', 'event', 't', 0, 'not-a-date', '2026-10-19', 1, 10, 1000, 1)`,
+      )
+      .run();
+
+    await expect(readSeriesEntries(db(), 'broken')).rejects.toBeInstanceOf(CorruptRowError);
+  });
+});
+
+describe('readEntry', () => {
+  it('id の行を返す。削除済みの行も返す（API が、新しい行の id のぶつかりを確かめるため）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 'a' }),
+        makeEntry({ id: 'b', editedAt: 2000, deletedAt: 2000 }),
+        makeEntry({ id: 'c' }),
+      ],
+    });
+
+    expect((await readEntry(db(), 'a'))?.entry).toEqual(makeEntry({ id: 'a' }));
+    expect((await readEntry(db(), 'b'))?.entry.deletedAt).toBe(2000);
+  });
+
+  it('該当する行がなければ、undefined', async () => {
+    expect(await readEntry(db(), 'nothing')).toBeUndefined();
+  });
+
+  it('構造が壊れた行があれば、CorruptRowError（読み込みと同じ。付録 A.3）', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await db()
+      .prepare(
+        `INSERT INTO entries (id, kind, title, all_day, start_date, end_date, notify_enabled,
+           notify_offset_min, edited_at, rev)
+         VALUES ('broken', 'event', 't', 0, 'not-a-date', '2026-10-19', 1, 10, 1000, 1)`,
+      )
+      .run();
+
+    await expect(readEntry(db(), 'broken')).rejects.toBeInstanceOf(CorruptRowError);
+  });
+});
+
+describe('readWorkspaceEntries', () => {
+  const ids = (rows: { entry: Entry }[]) => rows.map(({ entry }) => entry.id);
+
+  beforeEach(async () => {
+    await db()
+      .prepare(
+        `INSERT INTO workspaces (id, name, color, sort_order, visible, builtin, edited_at, rev)
+         VALUES ('w2', '私用', '#33B679', 1, 1, NULL, 0, 0)`,
+      )
+      .run();
+  });
+
+  it('Q6: ワークスペースの中の、削除されていない予定を返す。別のワークスペースの予定と、タイムブロックは返さない', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 'a', workspaceId: 'w1' }),
+        makeEntry({ id: 'b', workspaceId: 'w1', editedAt: 2000, deletedAt: 2000 }),
+        makeEntry({ id: 'c', workspaceId: 'w2' }),
+        makeEntry({
+          id: 'block',
+          kind: 'block',
+          workspaceId: null,
+          allDay: false,
+          startTime: '09:00',
+          endTime: '10:00',
+        }),
+      ],
+    });
+
+    expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['a']);
+  });
+
+  it('Q6: そのワークスペースの系列の例外は、例外の行が別のワークスペースを指していても返す', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's1', workspaceId: 'w1', rrule: { freq: 'daily' } }),
+        makeEntry({ id: 'moved', workspaceId: 'w2', seriesId: 's1', originalDate: '2026-10-20' }),
+      ],
+    });
+
+    expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['moved', 's1']);
+  });
+
+  it('別のワークスペースの系列の例外でも、例外の行が、このワークスペースを指していれば、その系列の行と一緒に返す', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's2', workspaceId: 'w2', rrule: { freq: 'daily' } }),
+        makeEntry({ id: 'moved', workspaceId: 'w1', seriesId: 's2', originalDate: '2026-10-20' }),
+        makeEntry({
+          id: 'other-exception',
+          workspaceId: 'w2',
+          seriesId: 's2',
+          originalDate: '2026-10-21',
+        }),
+      ],
+    });
+
+    expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['moved', 's2']);
+  });
+
+  it('このワークスペースを指す例外の系列が、削除済みなら、系列は返さない（例外は返す）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({
+          id: 's2',
+          workspaceId: 'w2',
+          rrule: { freq: 'daily' },
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+        makeEntry({ id: 'moved', workspaceId: 'w1', seriesId: 's2', originalDate: '2026-10-20' }),
+      ],
+    });
+
+    expect(ids(await readWorkspaceEntries(db(), 'w1'))).toEqual(['moved']);
+  });
+
+  it('このワークスペースを指す例外が、削除済みなら、その系列の行は返さない', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({ id: 's2', workspaceId: 'w2', rrule: { freq: 'daily' } }),
+        makeEntry({
+          id: 'moved',
+          workspaceId: 'w1',
+          seriesId: 's2',
+          originalDate: '2026-10-20',
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+      ],
+    });
+
+    expect(await readWorkspaceEntries(db(), 'w1')).toEqual([]);
+  });
+
+  it('削除済みの系列の、削除されていない例外は返さない（系列が、このワークスペースを指していても）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({
+          id: 's1',
+          workspaceId: 'w1',
+          rrule: { freq: 'daily' },
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+        makeEntry({ id: 'x1', workspaceId: 'w2', seriesId: 's1', originalDate: '2026-10-20' }),
+      ],
+    });
+
+    expect(await readWorkspaceEntries(db(), 'w1')).toEqual([]);
+  });
+});
+
+describe('readWorkspaces', () => {
+  it('指定した id のワークスペースを、削除済みも含めて、id → 行の Map で返す', async () => {
+    await applyWrite(db(), {
+      workspaces: [makeWorkspace({ id: 'w2', editedAt: 2000, deletedAt: 2000 })],
+    });
+
+    const result = await readWorkspaces(db(), ['w1', 'w2', 'nothing']);
+
+    expect([...result.keys()].sort()).toEqual(['w1', 'w2']);
+    expect(result.get('w2')?.workspace.deletedAt).toBe(2000);
+  });
+
+  it('id が空なら、DB を読まずに、空の Map を返す', async () => {
+    const unusedDb: Database = {
+      prepare: () => {
+        throw new Error('DB を読んではいけません');
+      },
+      batch: () => {
+        throw new Error('DB を読んではいけません');
+      },
+    };
+
+    expect((await readWorkspaces(unusedDb, [])).size).toBe(0);
+  });
+});
+
+describe('countLiveUserWorkspaces', () => {
+  it('11.5: 指定した id・削除済み・組み込みを数えない', async () => {
+    await applyWrite(db(), {
+      workspaces: [
+        makeWorkspace({ id: 'w2' }),
+        makeWorkspace({ id: 'w3', editedAt: 2000, deletedAt: 2000 }),
+      ],
+    });
+
+    expect(await countLiveUserWorkspaces(db(), 'w1')).toBe(1);
+    expect(await countLiveUserWorkspaces(db(), 'w2')).toBe(1);
+    expect(await countLiveUserWorkspaces(db(), 'nothing')).toBe(2);
+  });
+
+  it('11.5: ほかに 1 つもなければ 0（組み込みの 2 つがあっても）', async () => {
+    expect(await countLiveUserWorkspaces(db(), 'w1')).toBe(0);
+  });
+});
+
+describe('readLiveData', () => {
+  it('削除されていない予定の全行と、削除されていないワークスペースの id を返す', async () => {
+    await applyWrite(db(), {
+      workspaces: [makeWorkspace({ id: 'w2', editedAt: 2000, deletedAt: 2000 })],
+      entries: [makeEntry({ id: 'a' }), makeEntry({ id: 'b', editedAt: 2000, deletedAt: 2000 })],
+    });
+
+    const { entries, workspaceIds } = await readLiveData(db());
+
+    expect(entries.map(({ id }) => id)).toEqual(['a']);
+    expect([...workspaceIds].sort()).toEqual(['builtin-holiday', 'builtin-observance', 'w1']);
   });
 });

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   dateStringSchema,
+  entryChangesInputSchema,
   entryChangesSchema,
+  entryDraftInputSchema,
   entryDraftSchema,
   entrySchema,
+  idInputSchema,
+  inputDateSchema,
   rruleSchema,
   scopeSchema,
   timeStringSchema,
+  workspaceInputSchema,
   workspaceSchema,
   type Entry,
   type Workspace,
@@ -232,5 +237,149 @@ describe('RP-4: 変更・削除の範囲', () => {
 
   it('それ以外は通らない', () => {
     expect(scopeSchema.safeParse('both').success).toBe(false);
+  });
+});
+
+describe('入力用: id', () => {
+  it.each(['a', 'builtin-holiday', '3f2b8c1e-7d4a-4b9e-9c1d-2a5e6f7a8b9c', 'a'.repeat(64)])(
+    '%s は通る（端末が作る UUID と、組み込みの固定 id の両方）',
+    (value) => {
+      expect(idInputSchema.safeParse(value).success).toBe(true);
+    },
+  );
+
+  it.each(['', 'a'.repeat(65), 'a b', 'a_b', 'a.b', '../x', 'あ'])('%s は通らない', (value) => {
+    expect(idInputSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe('入力用: 日付の年は 1900〜2199（設計書 Q2）', () => {
+  it.each(['1900-01-01', '2026-10-19', '2199-12-31'])('%s は通る', (value) => {
+    expect(inputDateSchema.safeParse(value).success).toBe(true);
+  });
+
+  it.each(['1899-12-31', '2200-01-01', '0001-01-01', '9999-12-31', '2026-02-30'])(
+    '%s は通らない',
+    (value) => {
+      expect(inputDateSchema.safeParse(value).success).toBe(false);
+    },
+  );
+
+  it('読み込み・書き込み用の dateStringSchema は、年を制限しない（すでに DB にある行を壊れた行にしないため）', () => {
+    expect(dateStringSchema.safeParse('2200-01-01').success).toBe(true);
+  });
+});
+
+describe('入力用: 新しく作るときの下書き', () => {
+  const draft = entryDraftSchema.parse(validEntry);
+
+  it('すべての項目がそろった下書きは通り、同じ内容に戻る', () => {
+    expect(entryDraftInputSchema.parse(draft)).toEqual(draft);
+  });
+
+  it.each([
+    { name: 'タイトル 200 文字', change: { title: 'あ'.repeat(200) }, ok: true },
+    { name: 'タイトル 201 文字', change: { title: 'あ'.repeat(201) }, ok: false },
+    { name: 'タイトルが空', change: { title: '' }, ok: false },
+    { name: '場所 200 文字', change: { location: 'あ'.repeat(200) }, ok: true },
+    { name: '場所 201 文字', change: { location: 'あ'.repeat(201) }, ok: false },
+    { name: 'メモ 10000 文字', change: { memo: 'あ'.repeat(10_000) }, ok: true },
+    { name: 'メモ 10001 文字', change: { memo: 'あ'.repeat(10_001) }, ok: false },
+    { name: 'URL 2048 文字', change: { url: `https://example.com/${'a'.repeat(2028)}` }, ok: true },
+    {
+      name: 'URL 2049 文字',
+      change: { url: `https://example.com/${'a'.repeat(2029)}` },
+      ok: false,
+    },
+    {
+      name: '通知 -1440 分（終日で、前日の 0:00 より前）',
+      change: { notifyOffsetMin: -1440 },
+      ok: true,
+    },
+    { name: '通知 -1441 分', change: { notifyOffsetMin: -1441 }, ok: false },
+    { name: '通知 10080 分前（1 週間前）', change: { notifyOffsetMin: 10_080 }, ok: true },
+    { name: '通知 10081 分前', change: { notifyOffsetMin: 10_081 }, ok: false },
+    { name: '開始日が 1899 年', change: { startDate: '1899-12-31' }, ok: false },
+    { name: '終了日が 2200 年', change: { endDate: '2200-01-01' }, ok: false },
+    { name: 'workspaceId が id の形でない', change: { workspaceId: 'w 1' }, ok: false },
+  ])('$name は、通る: $ok', ({ change, ok }) => {
+    expect(entryDraftInputSchema.safeParse({ ...draft, ...change }).success).toBe(ok);
+  });
+
+  it.each(['https://example.com/', 'http://localhost:8080/a?b=c#d', 'HTTPS://EXAMPLE.COM/'])(
+    'URL %s は通り、値は入力のまま（黙って整えない）',
+    (url) => {
+      expect(entryDraftInputSchema.parse({ ...draft, url }).url).toBe(url);
+    },
+  );
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,hi',
+    'ftp://example.com/',
+    'example.com',
+    'https://',
+    ' https://example.com/',
+    '\thttps://example.com/',
+  ])('URL %j は通らない（10.3）', (url) => {
+    expect(entryDraftInputSchema.safeParse({ ...draft, url }).success).toBe(false);
+  });
+
+  it('知らないキーがあると通らない（黙って捨てない）', () => {
+    expect(entryDraftInputSchema.safeParse({ ...draft, untilDate: '2026-12-31' }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('入力用: 変更の中身', () => {
+  it('空のオブジェクトと、変えた項目だけは通り、値は入力のまま', () => {
+    expect(entryChangesInputSchema.parse({})).toEqual({});
+    expect(entryChangesInputSchema.parse({ title: '内科', memo: null })).toEqual({
+      title: '内科',
+      memo: null,
+    });
+  });
+
+  it('kind と、知らないキーは通らない', () => {
+    expect(entryChangesInputSchema.safeParse({ kind: 'block' }).success).toBe(false);
+    expect(entryChangesInputSchema.safeParse({ editedAt: 1 }).success).toBe(false);
+  });
+
+  it('入力の上限は、変えた項目にも効く。タイトルは null（空）にできない', () => {
+    expect(entryChangesInputSchema.safeParse({ title: 'あ'.repeat(201) }).success).toBe(false);
+    expect(entryChangesInputSchema.safeParse({ title: null }).success).toBe(false);
+    expect(entryChangesInputSchema.safeParse({ url: 'javascript:alert(1)' }).success).toBe(false);
+    expect(entryChangesInputSchema.safeParse({ startDate: '2200-01-01' }).success).toBe(false);
+  });
+});
+
+describe('入力用: ワークスペース', () => {
+  const workspace = workspaceSchema.parse(validWorkspace);
+
+  it('名前は 1〜50 文字', () => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, name: 'あ'.repeat(50) }).success).toBe(
+      true,
+    );
+    expect(workspaceInputSchema.safeParse({ ...workspace, name: 'あ'.repeat(51) }).success).toBe(
+      false,
+    );
+    expect(workspaceInputSchema.safeParse({ ...workspace, name: '' }).success).toBe(false);
+  });
+
+  it('deletedAt は null だけを通す（PUT では削除できない）', () => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, deletedAt: null }).success).toBe(true);
+    expect(workspaceInputSchema.safeParse({ ...workspace, deletedAt: 1000 }).success).toBe(false);
+  });
+
+  it('editedAt は 0 以上の整数', () => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, editedAt: 0 }).success).toBe(true);
+    expect(workspaceInputSchema.safeParse({ ...workspace, editedAt: -1 }).success).toBe(false);
+    expect(workspaceInputSchema.safeParse({ ...workspace, editedAt: 1.5 }).success).toBe(false);
+  });
+
+  it('id は id の形、知らないキーは通らない', () => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, id: 'a b' }).success).toBe(false);
+    expect(workspaceInputSchema.safeParse({ ...workspace, extra: 1 }).success).toBe(false);
   });
 });

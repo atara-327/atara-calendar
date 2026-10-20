@@ -97,6 +97,105 @@ export async function readChanges(db: Database, sinceRev: number): Promise<Chang
   };
 }
 
+// ここから先の読み込みは、API（実装 #4c）が、書き込みの前や、期間の一覧のために、必要な行だけを読む関数。
+// 端末に返す差分の読み込み（readChanges）とは別にしているのは、読む行の範囲が違うため
+// （差分は rev で絞るが、こちらは系列・ワークスペースなどで絞る）。
+
+/** 系列の行（または繰り返さない予定の行）と、その例外の行。削除済みも含める（API が、対象がない理由を決めるため）。 */
+export async function readSeriesEntries(db: Database, seriesId: string): Promise<StoredEntry[]> {
+  const { results } = await db
+    .prepare('SELECT * FROM entries WHERE id = ?1 OR series_id = ?1 ORDER BY id')
+    .bind(seriesId)
+    .all();
+  return parseRows(results, entryFromRow);
+}
+
+/** id 1 つの予定の行。削除済みも含める（新しい行の id が、別の行とぶつからないかを、API が確かめるため）。なければ undefined。 */
+export async function readEntry(db: Database, id: string): Promise<StoredEntry | undefined> {
+  const row = await db.prepare('SELECT * FROM entries WHERE id = ?1').bind(id).first();
+  return row === null ? undefined : parseRows([row], entryFromRow)[0];
+}
+
+/**
+ * ワークスペースの中の、削除されていない予定（ワークスペースの削除で、消す行や書き換える行を決めるため。設計書 Q6）。
+ * 次の行を含める。
+ * - そのワークスペースの系列の例外。例外の行自身が別のワークスペースを指していても含める。
+ * - そのワークスペースを指す例外の、系列の行。系列が別のワークスペースのものでも含める（その例外を、系列の
+ *   ワークスペースに戻すのに、系列の行の workspaceId が要る。系列の行自身は、書き換えない）。
+ * 削除済みの系列は含めない。その例外は、例外の行自身がそのワークスペースを指すものだけ含める（系列がないので、
+ * deleteWorkspace が論理削除する）。系列のワークスペースが指すだけの例外は、画面に出ない行なので含めない。
+ */
+export async function readWorkspaceEntries(
+  db: Database,
+  workspaceId: string,
+): Promise<StoredEntry[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM entries WHERE deleted_at IS NULL AND (
+         workspace_id = ?1
+         OR series_id IN
+           (SELECT id FROM entries WHERE workspace_id = ?1 AND series_id IS NULL AND deleted_at IS NULL)
+         OR id IN
+           (SELECT series_id FROM entries WHERE workspace_id = ?1 AND series_id IS NOT NULL AND deleted_at IS NULL)
+       )
+       ORDER BY id`,
+    )
+    .bind(workspaceId)
+    .all();
+  return parseRows(results, entryFromRow);
+}
+
+/** 指定した id のワークスペース（削除済みも含む）。id → 行。 */
+export async function readWorkspaces(
+  db: Database,
+  ids: readonly string[],
+): Promise<Map<string, StoredWorkspace>> {
+  if (ids.length === 0) return new Map();
+  // json_each で ids を 1 つの値として渡すのは、bind できる値の数の上限に当たらないようにするため（readCurrentRows と同じ）。
+  const { results } = await db
+    .prepare('SELECT * FROM workspaces WHERE id IN (SELECT value FROM json_each(?1))')
+    .bind(JSON.stringify(ids))
+    .all();
+  return new Map(parseRows(results, workspaceFromRow).map((row) => [row.workspace.id, row]));
+}
+
+const countRowSchema = z.object({ count: z.number().int() });
+
+/** exceptId 以外の、削除されていない、組み込みでないワークスペースの数。最後の 1 つを削除させないために使う（設計書 11.5）。 */
+export async function countLiveUserWorkspaces(db: Database, exceptId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      'SELECT COUNT(*) AS count FROM workspaces WHERE deleted_at IS NULL AND builtin IS NULL AND id != ?1',
+    )
+    .bind(exceptId)
+    .first();
+  return countRowSchema.parse(row).count;
+}
+
+const idRowSchema = z.object({ id: z.string() });
+
+export interface LiveData {
+  entries: Entry[];
+  workspaceIds: Set<string>;
+}
+
+/**
+ * 削除されていない予定の全行と、削除されていないワークスペースの id。GET /api/occurrences 用。
+ * SQL で期間に絞らないのは、繰り返しの系列は開始日より後ならいつでも期間にかかり、例外の行も、
+ * 元の回の日付と移した先のどちらかが期間にかかればよいので、条件が複雑になって間違えやすいため。
+ * 期間は 31 日までに絞っている（設計書 5.1）ので、重いのは展開ではなく、この全件の読み込みだけになる。
+ */
+export async function readLiveData(db: Database): Promise<LiveData> {
+  const results = await db.batch([
+    db.prepare('SELECT * FROM entries WHERE deleted_at IS NULL ORDER BY id'),
+    db.prepare('SELECT id FROM workspaces WHERE deleted_at IS NULL'),
+  ]);
+  return {
+    entries: parseRows(rowsAt(results, 0), entryFromRow).map(({ entry }) => entry),
+    workspaceIds: new Set(rowsAt(results, 1).map((raw) => idRowSchema.parse(raw).id)),
+  };
+}
+
 export interface WriteRequest {
   entries?: readonly Entry[];
   workspaces?: readonly Workspace[];
