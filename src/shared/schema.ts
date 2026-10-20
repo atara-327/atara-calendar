@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 // 型はすべて Zod のスキーマから導く（z.infer）。名前は camelCase で、DB の snake_case との
-// 対応は API の層で行う（設計書 4章）。rev と nextNotifyAt はサーバーの都合の列なので、ここには入れない。
+// 対応は Worker の DB の層（worker/db/rows.ts）で行う（設計書 4章）。
+// rev と nextNotifyAt はサーバーの都合の列なので、ここには入れない。
 
 /** 'YYYY-MM-DD'（日本時間）。2/30 のような存在しない日付は通さない。 */
 export const dateStringSchema = z.iso.date();
