@@ -96,11 +96,17 @@ function upsertSql(table: 'workspaces' | 'entries', columns: readonly string[]):
 const UPSERT_WORKSPACE = upsertSql('workspaces', WORKSPACE_COLUMNS);
 const UPSERT_ENTRY = upsertSql('entries', ENTRY_COLUMNS);
 
+/** 表ごとの、id → 今の edited_at。id は表の中でだけ一意なので、2 つの表の結果を 1 つの Map にまとめない。 */
+interface CurrentEditedAt {
+  workspaces: Map<string, number>;
+  entries: Map<string, number>;
+}
+
 async function currentEditedAt(
   db: Database,
   workspaceIds: readonly string[],
   entryIds: readonly string[],
-): Promise<Map<string, number>> {
+): Promise<CurrentEditedAt> {
   // json_each で ids を 1 つの値として渡すのは、行数が多い依頼でも、D1 の bind できる値の数の上限
   // （1 文あたり 100 個）に当たらないようにするため。
   const select = (table: 'workspaces' | 'entries', ids: readonly string[]) =>
@@ -108,14 +114,20 @@ async function currentEditedAt(
       .prepare(`SELECT id, edited_at FROM ${table} WHERE id IN (SELECT value FROM json_each(?1))`)
       .bind(JSON.stringify(ids));
   const results = await db.batch([select('workspaces', workspaceIds), select('entries', entryIds)]);
-  const editedAtById = new Map<string, number>();
-  for (const index of [0, 1]) {
-    for (const raw of rowsAt(results, index)) {
-      const row = editedAtRowSchema.parse(raw);
-      editedAtById.set(row.id, row.edited_at);
-    }
-  }
-  return editedAtById;
+  const toMap = (index: number) =>
+    new Map(
+      rowsAt(results, index).map((raw) => {
+        const row = editedAtRowSchema.parse(raw);
+        return [row.id, row.edited_at] as const;
+      }),
+    );
+  return { workspaces: toMap(0), entries: toMap(1) };
+}
+
+/** 今の行の edited_at が、書き込む行の edited_at 以上か（同じ id の行が、まだなければ false）。 */
+function isStale(row: { id: string; editedAt: number }, current: ReadonlyMap<string, number>) {
+  const stored = current.get(row.id);
+  return stored !== undefined && stored >= row.editedAt;
 }
 
 function assertNoDuplicateIds(ids: readonly string[]): void {
@@ -142,16 +154,17 @@ export async function applyWrite(
   assertNoDuplicateIds(workspaces.map(({ id }) => id));
   assertNoDuplicateIds(entries.map(({ id }) => id));
 
-  const editedAtById = await currentEditedAt(
+  const current = await currentEditedAt(
     db,
     workspaces.map(({ id }) => id),
     entries.map(({ id }) => id),
   );
-  const isStale = (row: { id: string; editedAt: number }) => {
-    const current = editedAtById.get(row.id);
-    return current !== undefined && current >= row.editedAt;
-  };
-  if (workspaces.some(isStale) || entries.some(isStale)) return { applied: false };
+  if (
+    workspaces.some((row) => isStale(row, current.workspaces)) ||
+    entries.some((row) => isStale(row, current.entries))
+  ) {
+    return { applied: false };
+  }
 
   // 確認（上）と書き込み（下）の間に、別の書き込みが割り込む可能性は残る。1 回の処理にしていないのは、
   // 自分 1 人の利用で、2 台がほぼ同時に同じ行を書く確率がごく小さいため。割り込まれても、

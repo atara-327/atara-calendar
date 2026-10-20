@@ -337,6 +337,51 @@ describe('applyWrite', () => {
       expect(await dump()).toEqual(before);
     });
 
+    describe('同じ id の行が、ワークスペースと予定の両方の表にあるとき（id は表の中でだけ一意）', () => {
+      beforeEach(async () => {
+        await applyWrite(db(), {
+          workspaces: [makeWorkspace({ id: 'x', editedAt: 2000 })],
+          entries: [makeEntry({ id: 'x', editedAt: 1000 })],
+        });
+      });
+
+      it('ワークスペースだけが古い依頼は、予定の方が新しくても、全体が捨てられる（一部だけ保存されない）', async () => {
+        const before = await dump();
+
+        const result = await applyWrite(db(), {
+          workspaces: [makeWorkspace({ id: 'x', name: '古い名前', editedAt: 1500 })],
+          entries: [makeEntry({ id: 'x', title: '新しい編集', editedAt: 3000 })],
+        });
+
+        expect(result).toEqual({ applied: false });
+        expect(await dump()).toEqual(before);
+      });
+
+      it('予定だけが古い依頼も、ワークスペースの方が新しくても、全体が捨てられる', async () => {
+        const before = await dump();
+
+        const result = await applyWrite(db(), {
+          workspaces: [makeWorkspace({ id: 'x', name: '新しい名前', editedAt: 3000 })],
+          entries: [makeEntry({ id: 'x', title: '古い編集', editedAt: 500 })],
+        });
+
+        expect(result).toEqual({ applied: false });
+        expect(await dump()).toEqual(before);
+      });
+
+      it('どちらの表でも、自分の表の行より新しければ、もう一方の表の同じ id に関係なく書ける', async () => {
+        const result = await applyWrite(db(), {
+          workspaces: [makeWorkspace({ id: 'x', name: '新しい名前', editedAt: 2500 })],
+          entries: [makeEntry({ id: 'x', title: '新しい編集', editedAt: 1500 })],
+        });
+
+        expect(result).toEqual({ applied: true, rev: 3 });
+        const changes = await readChanges(db(), 2);
+        expect(changes.workspaces.map(({ workspace }) => workspace.name)).toEqual(['新しい名前']);
+        expect(changes.entries.map(({ entry }) => entry.title)).toEqual(['新しい編集']);
+      });
+    });
+
     it('削除した行にも、古い edited_at の書き込みは通らない（削除が取り消されない）', async () => {
       await applyWrite(db(), {
         entries: [makeEntry({ id: 'a', editedAt: 3000, deletedAt: 3000 })],
