@@ -94,6 +94,11 @@ async function stored(id: string) {
 
 const invalidRequest = { error: 'invalid_request', message: '入力が正しくありません' };
 
+const builtinWorkspace = {
+  error: 'builtin_workspace',
+  message: '組み込みのワークスペースは、表示と並び順のほかは変えられません',
+};
+
 /** 毎日の、終日の系列 's'（2026-10-19 から）を入れる。 */
 async function seedSeries(overrides: Partial<Entry> = {}) {
   await applyWrite(db(), {
@@ -348,6 +353,19 @@ describe('PUT /api/entries/:id（作成）', () => {
   });
 
   describe('ワークスペースの確認', () => {
+    it.each(['builtin-holiday', 'builtin-observance'])(
+      'WS-4: 組み込みの %s には予定を作れない（400。builtin_workspace）。DB は変わらない',
+      async (workspaceId) => {
+        const before = await dumpTables(db());
+
+        const res = await putEntry('e1', { draft: draft({ workspaceId }), editedAt: 2000 });
+
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual(builtinWorkspace);
+        expect(await dumpTables(db())).toEqual(before);
+      },
+    );
+
     it('存在しないワークスペースは、外部キー違反として 409（conflict）。DB は変わらない', async () => {
       const before = await dumpTables(db());
 
@@ -650,6 +668,65 @@ describe('PATCH /api/entries/:id（変更）', () => {
       const res = await patchEntry('s', { changes: { workspaceId: 'w2' }, editedAt: 6000 });
 
       expect(res.body).toEqual({ applied: false, reason: 'not_found' });
+      expect(await dumpTables(db())).toEqual(before);
+    });
+  });
+
+  describe('WS-4: 組み込みのワークスペースには移せない（400。builtin_workspace）', () => {
+    it.each([
+      { scope: 'this', workspaceId: 'builtin-holiday' },
+      { scope: 'following', workspaceId: 'builtin-observance' },
+      { scope: 'all', workspaceId: 'builtin-holiday' },
+    ])(
+      '繰り返す予定の「$scope」で $workspaceId へ。DB は変わらない',
+      async ({ scope, workspaceId }) => {
+        await seedSeries();
+        const before = await dumpTables(db());
+
+        const res = await patchEntry('s', {
+          scope,
+          occurrenceDate: '2026-10-21',
+          changes: { workspaceId },
+          newId: 'n1',
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual(builtinWorkspace);
+        expect(await dumpTables(db())).toEqual(before);
+      },
+    );
+
+    it('「すべて」で、例外の行も書き換わる場合も 400。DB は変わらない', async () => {
+      await seedSeries();
+      await patchEntry('s', {
+        scope: 'this',
+        occurrenceDate: '2026-10-21',
+        changes: { title: '個別' },
+        newId: 'x1',
+        editedAt: 1500,
+      });
+      const before = await dumpTables(db());
+
+      const res = await patchEntry('s', {
+        scope: 'all',
+        occurrenceDate: '2026-10-21',
+        changes: { workspaceId: 'builtin-observance' },
+        editedAt: 3000,
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(builtinWorkspace);
+      expect(await dumpTables(db())).toEqual(before);
+    });
+
+    it('繰り返さない予定も 400。DB は変わらない', async () => {
+      await applyWrite(db(), { entries: [makeEntry({ id: 'p' })] });
+      const before = await dumpTables(db());
+
+      const res = await patchEntry('p', { changes: { workspaceId: 'builtin-holiday' } });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(builtinWorkspace);
       expect(await dumpTables(db())).toEqual(before);
     });
   });
@@ -977,6 +1054,15 @@ describe('DELETE /api/entries/:id（削除）', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: 'edited_at_in_future' });
+  });
+
+  it('WS-4: 組み込みのワークスペースを指している行も、削除できる（行の確認は、削除する行にはしない）', async () => {
+    await applyWrite(db(), { entries: [makeEntry({ id: 'p', workspaceId: 'builtin-holiday' })] });
+
+    const res = await deleteEntry('p');
+
+    expect(res.body).toEqual({ applied: true });
+    expect(await stored('p')).toMatchObject({ deleted_at: 2000 });
   });
 
   it('WS-1: 削除済みのワークスペースの予定の削除も、受け付ける（行の確認は、削除する行にはしない）', async () => {

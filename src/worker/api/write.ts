@@ -2,6 +2,7 @@ import type { WriteResponse } from '../../shared/api';
 import type { Entry } from '../../shared/schema';
 import { applyWrite, readWorkspaces, type Database, type WriteRequest } from '../db/store';
 import { assertWritableEntries } from './entryRules';
+import { ApiError } from './errors';
 
 /**
  * 対象がもうなくて、依頼を実行できないときの応答（200 の applied: false。設計書 6.2）。
@@ -26,9 +27,11 @@ export async function commit(db: Database, request: WriteRequest): Promise<Write
 }
 
 /**
- * 予定の行を書く。書く前に、行の確認（entryRules.ts）と、ワークスペースが削除されていないことの確認をする。
- * 削除済みのワークスペースを指す行は、書かずに捨てる。存在しないワークスペースは、ここでは確かめず、
- * 外部キー違反（409）に任せる。削除する行は、ワークスペースを指していても確かめない。
+ * 予定の行を書く。書く前に、行の確認（entryRules.ts）と、指すワークスペースの確認をする。
+ * 組み込みのワークスペースを指す行は、400（WS-4。設計書 4.2）。削除済みのワークスペースを指す行は、書かずに捨てる。
+ * 存在しないワークスペースは、ここでは確かめず、外部キー違反（409）に任せる。
+ * 削除する行は、ワークスペースを指していても確かめない。
+ * 400 を捨てるより先に確かめるのは、依頼そのものの誤りは、保存されているデータの状態によらないため。
  */
 export async function commitEntries(
   db: Database,
@@ -44,6 +47,15 @@ export async function commitEntries(
     ),
   ];
   const workspaces = await readWorkspaces(db, workspaceIds);
+  for (const { workspace } of workspaces.values()) {
+    if (workspace.builtin !== null) {
+      throw new ApiError(
+        400,
+        'builtin_workspace',
+        `組み込みのワークスペースには、予定を入れられません（workspaceId: ${workspace.id}）`,
+      );
+    }
+  }
   for (const { workspace } of workspaces.values()) {
     if (workspace.deletedAt !== null) return dropped(workspace, editedAt);
   }
