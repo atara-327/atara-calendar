@@ -94,13 +94,16 @@
    | `CLOUDFLARE_ACCOUNT_ID` | 4.1 の Account ID |
    | `CLOUDFLARE_ACCOUNT_EMAIL` | Cloudflare にログインするメールアドレス（4.1 のトークンを作ったアカウント。Cloudflare の表記と同じ大文字小文字で） |
 
+   - 以前の手順で、トークンをリポジトリの Secret に登録済みで、値を控えていないときは、Cloudflare の **プロフィール → API Tokens** の一覧で、そのトークンを **Roll**（作り直す）して、新しい値を登録する。古い値は使えなくなる。
+     - **Why**: トークンの値は、作ったときにしか表示されません。GitHub の Secret も、いったん登録すると読み出せないためです。
+
 4. **リポジトリの Secret（Settings → Secrets and variables → Actions → Repository secrets）に登録済みの `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` は、削除する。**（以前の手順で、すでにリポジトリの Secret に登録した人向け。上の手順 3 で環境に登録し直してから消す。）
 
-- **Why 環境に置くのか**: リポジトリの Secret は、同じリポジトリのブランチからの PR の CI でも読めます。PR の側でワークフローを書き換えれば、レビュー前のコードがトークンを使えてしまいます。main だけが使える環境に置けば、main に入ったコードからしか読めません。4 の削除を忘れると、この守りが意味をなくします。
-- **`CLOUDFLARE_ACCOUNT_EMAIL` は、ログで伏せ字にするためだけに使う**（Worker の Secret `ALLOWED_EMAIL` とは別のもの。そちらは 7 で登録する）。
-  - **Why**: このリポジトリは public で、Actions のログは誰でも読めます。wrangler は認証エラーのとき、トークンの持ち主（Cloudflare のアカウント）のメールアドレスをログに出すので、先に伏せ字にしておきます。このアドレスは、Access で許可する Gmail（`ALLOWED_EMAIL`）と同じとは限らず、違うと伏せ字が効きません。伏せ字は文字列の一致で行うので、大文字小文字まで Cloudflare の表記と同じにします。
-  - 未登録のままだと、デプロイは最初のステップで止まります。
-- **`DEPLOY_ENABLED` は、今までどおり環境ではなく、リポジトリの変数にする**（6 で入れます。ここではまだ入れません）。
+理由は [設計書 付録A.4](design/design.md#認証情報とログの扱い) を参照してください。ここには、作業で気をつけることだけを書きます。
+
+- **手順 4 の削除を忘れない。** リポジトリの Secret を残すと、環境に置いた意味がなくなります。
+- **`CLOUDFLARE_ACCOUNT_EMAIL` は、ログで伏せ字にするためだけに使う。** Worker の Secret `ALLOWED_EMAIL`（Access で許可する Gmail。7 で登録する）とは別のものです。伏せ字は文字列の一致で行うので、大文字小文字まで Cloudflare の表記と同じにします。未登録のままだと、デプロイは最初のステップで止まります。
+- **`DEPLOY_ENABLED` は、環境ではなく、リポジトリの変数にする**（6 で入れます。ここではまだ入れません）。
   - **Why**: ジョブを動かすかどうかの判定（`if`）の時点では、環境の変数はまだ読めないからです。
 
 ## 5. Claude に伝える
@@ -115,7 +118,9 @@
 
 ## 6. 最初のデプロイを動かす
 
-5 の PR がマージされた後に行います。
+5 の PR がマージされた後、**4.2（環境 `production` を作り、Secret を登録し、リポジトリの Secret を削除）が済んでいることを確かめてから**行います。
+
+- **Why**: 4.2 の前に `DEPLOY_ENABLED` を `true` にすると、GitHub が、ジョブの参照した環境 `production` を、保護なしで自動で作ります。そうなると、4.2 の手順 1（New environment）が画面と合わなくなり、リポジトリの Secret も残るためです。
 
 1. Cloudflare の **DNS → Records** で、`calendar.ataraman.com` のレコードがないか確かめる。残したいものがあれば、先に別の名前に移す。
    - **Why**: すでに `calendar.ataraman.com` のレコード（CNAME など）があると、デプロイが確認なしに置き換えます（CI では確認を出せないため）。Worker の Custom Domain は、DNS のレコードと証明書を Cloudflare が自動で作るので、同じ名前の既存のレコードとぶつかるからです。
@@ -147,7 +152,8 @@
    - **403** のとき: AUD・チームのドメイン・メールアドレスのどれかが食い違っています。`wrangler.jsonc` の `ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` を、Access のアプリの値（2.1・3）と見比べ、Worker の `ALLOWED_EMAIL`（7）を、Access のポリシーのメールアドレス（3）と見比べてください。
    - **500** のとき: Worker の `ALLOWED_EMAIL` が未登録です（7）。
    - 原因は、ダッシュボードの **Workers & Pages → atara-calendar → Logs** で、Worker のログを見ると分かります。
-3. 別の Google アカウントで開いて（シークレットウィンドウなど）、Access で弾かれることも確かめる（要件 AU-1）。
+3. 別の Google アカウントで開いて（シークレットウィンドウなど）、弾かれることも確かめる（要件 AU-1）。Google の画面でブロックされるか、Access の画面で弾かれれば OK です。
+   - 2.2 でテストユーザーを自分だけにしているので、ふつうは Google の画面で「アクセスをブロック」（Error 403: access_denied）と出て止まります。
 
 > アドレス欄に `/api/health` を直接入れて開くと、403 になります。これは正常です。API は、同じサイトの画面からのリクエストだけを通すためです（[設計書 10.3](design/design.md#103-その他の対策)）。
 
