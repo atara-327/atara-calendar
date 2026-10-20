@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { entrySchema, workspaceSchema, type Entry, type Workspace } from '../../shared/schema';
+import {
+  entryKindSchema,
+  entrySchema,
+  workspaceSchema,
+  type Entry,
+  type Workspace,
+} from '../../shared/schema';
 import {
   CorruptRowError,
   ENTRY_COLUMNS,
@@ -32,7 +38,8 @@ export interface Changes {
 
 const metaRowSchema = z.object({ rev: z.number().int(), epoch: z.string().min(1) });
 const revRowSchema = z.object({ rev: z.number().int() });
-const editedAtRowSchema = z.object({ id: z.string(), edited_at: z.number().int() });
+const workspaceStateRowSchema = z.object({ id: z.string(), edited_at: z.number().int() });
+const entryStateRowSchema = workspaceStateRowSchema.extend({ kind: entryKindSchema });
 
 /** D1 の batch() は、文の数だけ結果を返す。noUncheckedIndexedAccess のために、足りないときは例外にする。 */
 function resultAt(results: readonly D1Result[], index: number): D1Result {
@@ -93,6 +100,24 @@ export async function readChanges(db: Database, sinceRev: number): Promise<Chang
 export interface WriteRequest {
   entries?: readonly Entry[];
   workspaces?: readonly Workspace[];
+}
+
+/**
+ * 同じ id の既存の行と、kind が違う行が届いた。kind は作成後に変えられない（設計書 4.5）ので、
+ * 呼び出し側（API や recurrence.ts）のバグ。
+ * 黙って捨てたり、kind だけを残して書いたりしないのは、混ぜると、kind は event のまま中身は block、という
+ * 壊れた行ができるため。同じ id の行が 2 つ届いたとき（assertNoDuplicateIds）と同じ方針で、止めて気づけるようにする。
+ */
+export class KindMismatchError extends Error {
+  override readonly name = 'KindMismatchError';
+  readonly entryId: string;
+
+  constructor(entryId: string, storedKind: string, requestedKind: string) {
+    super(
+      `予定の kind は作成後に変えられません（id: ${entryId}、今の kind: ${storedKind}、届いた kind: ${requestedKind}）`,
+    );
+    this.entryId = entryId;
+  }
 }
 
 /** applied: false は、サーバーの方が新しい（または同じ）行があって、依頼全体を捨てたこと。 */
@@ -168,8 +193,9 @@ function upsertSql(
 }
 
 const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS);
-// kind は、更新の SET に入れない。設計書 4.5「kind は作成後に変えられない」を、入力の検証（entryChangesSchema）
-// だけでなく、DB への書き込みの形でも守る。別の kind の行が同じ id で届いても、kind は作成時のまま残る。
+// kind は、更新の SET に入れない。kind が違う行は、書く前の確認（assertSameKinds）で例外にしているが、
+// 確認の後に別の書き込みが同じ id の行を作る割り込みは、確認をすり抜ける。割り込まれても、設計書 4.5
+// 「kind は作成後に変えられない」を、DB への書き込みの形で守る。
 // next_notify_at は、新しい行の INSERT では書かず（NULL）、更新では NULL に戻す。更新で残すと、変更・削除した
 // 予定の通知が、古い時刻に送られる。通知の時刻は、通知を作る実装 #11 が、更新のたびに計算し直す。
 const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
@@ -177,38 +203,65 @@ const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
   extraAssignments: ['next_notify_at = NULL'],
 });
 
-/** 表ごとの、id → 今の edited_at。id は表の中でだけ一意なので、2 つの表の結果を 1 つの Map にまとめない。 */
-interface CurrentEditedAt {
-  workspaces: Map<string, number>;
-  entries: Map<string, number>;
+type EntryKind = Entry['kind'];
+
+/** 表ごとの、id → 今の行の edited_at（予定は kind も）。id は表の中でだけ一意なので、2 つの表の結果を 1 つの Map にまとめない。 */
+interface CurrentRows {
+  workspaces: Map<string, { editedAt: number }>;
+  entries: Map<string, { editedAt: number; kind: EntryKind }>;
 }
 
-async function currentEditedAt(
+async function readCurrentRows(
   db: Database,
   workspaceIds: readonly string[],
   entryIds: readonly string[],
-): Promise<CurrentEditedAt> {
+): Promise<CurrentRows> {
   // json_each で ids を 1 つの値として渡すのは、行数が多い依頼でも、D1 の bind できる値の数の上限
   // （1 文あたり 100 個）に当たらないようにするため。
-  const select = (table: 'workspaces' | 'entries', ids: readonly string[]) =>
+  const select = (table: 'workspaces' | 'entries', columns: string, ids: readonly string[]) =>
     db
-      .prepare(`SELECT id, edited_at FROM ${table} WHERE id IN (SELECT value FROM json_each(?1))`)
+      .prepare(`SELECT ${columns} FROM ${table} WHERE id IN (SELECT value FROM json_each(?1))`)
       .bind(JSON.stringify(ids));
-  const results = await db.batch([select('workspaces', workspaceIds), select('entries', entryIds)]);
-  const toMap = (index: number) =>
-    new Map(
-      rowsAt(results, index).map((raw) => {
-        const row = editedAtRowSchema.parse(raw);
-        return [row.id, row.edited_at] as const;
+  const results = await db.batch([
+    select('workspaces', 'id, edited_at', workspaceIds),
+    select('entries', 'id, kind, edited_at', entryIds),
+  ]);
+  return {
+    workspaces: new Map(
+      rowsAt(results, 0).map((raw) => {
+        const row = workspaceStateRowSchema.parse(raw);
+        return [row.id, { editedAt: row.edited_at }] as const;
       }),
-    );
-  return { workspaces: toMap(0), entries: toMap(1) };
+    ),
+    entries: new Map(
+      rowsAt(results, 1).map((raw) => {
+        const row = entryStateRowSchema.parse(raw);
+        return [row.id, { editedAt: row.edited_at, kind: row.kind }] as const;
+      }),
+    ),
+  };
 }
 
 /** 今の行の edited_at が、書き込む行の edited_at 以上か（同じ id の行が、まだなければ false）。 */
-function isStale(row: { id: string; editedAt: number }, current: ReadonlyMap<string, number>) {
+function isStale(
+  row: { id: string; editedAt: number },
+  current: ReadonlyMap<string, { editedAt: number }>,
+) {
   const stored = current.get(row.id);
-  return stored !== undefined && stored >= row.editedAt;
+  return stored !== undefined && stored.editedAt >= row.editedAt;
+}
+
+/** 同じ id の既存の行と kind が違う行があれば、KindMismatchError。 */
+function assertSameKinds(
+  entries: readonly Entry[],
+  current: ReadonlyMap<string, { kind: EntryKind }>,
+): void {
+  for (const { id, kind } of entries) {
+    const stored = current.get(id);
+    if (stored !== undefined && stored.kind !== kind) {
+      throw new KindMismatchError(id, stored.kind, kind);
+    }
+  }
 }
 
 function assertNoDuplicateIds(ids: readonly string[]): void {
@@ -224,6 +277,7 @@ function assertNoDuplicateIds(ids: readonly string[]): void {
  * 「以上」にするのは、同じ依頼をもう一度送られたとき、2 回目を「もう反映済み」として捨てるため（設計書 6.2）。
  * 一部の行だけを書くと、系列が二重になるなど、データの形が壊れる。
  * 書く前に、すべての行を entrySchema・workspaceSchema で確かめ、合わない行が 1 つでもあれば（ZodError）、何も書かない。
+ * 同じ id の既存の行と kind が違う行が 1 つでもあれば（KindMismatchError）も、何も書かない。
  */
 export async function applyWrite(
   db: Database,
@@ -240,11 +294,13 @@ export async function applyWrite(
   assertNoDuplicateIds(workspaces.map(({ id }) => id));
   assertNoDuplicateIds(entries.map(({ id }) => id));
 
-  const current = await currentEditedAt(
+  const current = await readCurrentRows(
     db,
     workspaces.map(({ id }) => id),
     entries.map(({ id }) => id),
   );
+  // 古い行の判定より先に確かめる。kind の食い違いは、古い依頼でも呼び出し側のバグなので、「捨てた」として隠さない。
+  assertSameKinds(entries, current.entries);
   if (
     workspaces.some((row) => isStale(row, current.workspaces)) ||
     entries.some((row) => isStale(row, current.entries))

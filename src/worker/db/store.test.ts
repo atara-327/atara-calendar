@@ -7,6 +7,7 @@ import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { CorruptRowError } from './rows';
 import {
+  KindMismatchError,
   MAX_UPSERT_VALUE_BYTES,
   applyWrite,
   readChanges,
@@ -387,10 +388,54 @@ describe('applyWrite', () => {
         expect(row).toEqual({ kind: 'block' });
       });
 
-      it('同じ id で別の kind の行が新しい edited_at で届いても、kind は作成時のまま残り、ほかの列は更新される', async () => {
-        await applyWrite(db(), { entries: [makeEntry({ id: 'a', kind: 'event', title: '元' })] });
+      describe('同じ id で別の kind の行が届いたら、呼び出し側のバグなので、何も書かずに KindMismatchError にする', () => {
+        beforeEach(async () => {
+          await applyWrite(db(), { entries: [makeEntry({ id: 'a', kind: 'event', title: '元' })] });
+        });
 
-        const result = await applyWrite(db(), {
+        const blockOfA = (overrides: Partial<Entry> = {}) =>
+          makeEntry({ id: 'a', kind: 'block', workspaceId: null, title: '更新', ...overrides });
+
+        it('edited_at が新しくても、ほかの正しい行も含めて、何も書かれない', async () => {
+          const before = await dump();
+
+          const write = applyWrite(db(), {
+            entries: [makeEntry({ id: 'good', editedAt: 2000 }), blockOfA({ editedAt: 2000 })],
+            workspaces: [makeWorkspace({ id: 'good-ws', editedAt: 2000 })],
+          });
+
+          await expect(write).rejects.toThrow(KindMismatchError);
+          await expect(write).rejects.toMatchObject({ entryId: 'a' });
+          expect(await dump()).toEqual(before);
+        });
+
+        it('edited_at が古くても、「捨てた」と返さず、例外にする（バグを隠さない）', async () => {
+          const write = applyWrite(db(), { entries: [blockOfA({ editedAt: 500 })] });
+
+          await expect(write).rejects.toThrow(KindMismatchError);
+        });
+
+        it('メッセージに、id と、今の kind と、届いた kind を入れる', async () => {
+          const write = applyWrite(db(), { entries: [blockOfA({ editedAt: 2000 })] });
+
+          await expect(write).rejects.toThrow(/id: a、今の kind: event、届いた kind: block/);
+        });
+
+        it('kind が同じなら、更新できる', async () => {
+          const result = await applyWrite(db(), {
+            entries: [makeEntry({ id: 'a', kind: 'event', title: '更新', editedAt: 2000 })],
+          });
+
+          expect(result).toEqual({ applied: true, rev: 2 });
+        });
+      });
+
+      it('確認の後に、別の書き込みが同じ id の行を別の kind で作ったときは、kind は作成時のまま残り、ほかの列は更新される', async () => {
+        const interleaving = interleavedWith({
+          entries: [makeEntry({ id: 'a', kind: 'event', title: '別の端末の作成' })],
+        });
+
+        const result = await applyWrite(interleaving, {
           entries: [
             makeEntry({ id: 'a', kind: 'block', workspaceId: null, title: '更新', editedAt: 2000 }),
           ],
