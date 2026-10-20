@@ -92,13 +92,13 @@
    | --- | --- |
    | `CLOUDFLARE_API_TOKEN` | 4.1 のトークン |
    | `CLOUDFLARE_ACCOUNT_ID` | 4.1 の Account ID |
-   | `ALLOWED_EMAIL` | 自分の Gmail アドレス（Cloudflare のアカウントの表記と同じ大文字小文字で） |
+   | `CLOUDFLARE_ACCOUNT_EMAIL` | Cloudflare にログインするメールアドレス（4.1 のトークンを作ったアカウント。Cloudflare の表記と同じ大文字小文字で） |
 
 4. **リポジトリの Secret（Settings → Secrets and variables → Actions → Repository secrets）に登録済みの `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` は、削除する。**（以前の手順で、すでにリポジトリの Secret に登録した人向け。上の手順 3 で環境に登録し直してから消す。）
 
 - **Why 環境に置くのか**: リポジトリの Secret は、同じリポジトリのブランチからの PR の CI でも読めます。PR の側でワークフローを書き換えれば、レビュー前のコードがトークンを使えてしまいます。main だけが使える環境に置けば、main に入ったコードからしか読めません。4 の削除を忘れると、この守りが意味をなくします。
-- **`ALLOWED_EMAIL` は、ログで伏せ字にするためだけに使う**（Worker の Secret とは別。Worker の方は 7 で登録する）。
-  - **Why**: このリポジトリは public で、Actions のログは誰でも読めます。wrangler は認証エラーのとき、トークンの持ち主のメールアドレスをログに出すので、先に伏せ字にしておきます。伏せ字は文字列の一致で行うので、大文字小文字まで Cloudflare のアカウントの表記と同じにします。
+- **`CLOUDFLARE_ACCOUNT_EMAIL` は、ログで伏せ字にするためだけに使う**（Worker の Secret `ALLOWED_EMAIL` とは別のもの。そちらは 7 で登録する）。
+  - **Why**: このリポジトリは public で、Actions のログは誰でも読めます。wrangler は認証エラーのとき、トークンの持ち主（Cloudflare のアカウント）のメールアドレスをログに出すので、先に伏せ字にしておきます。このアドレスは、Access で許可する Gmail（`ALLOWED_EMAIL`）と同じとは限らず、違うと伏せ字が効きません。伏せ字は文字列の一致で行うので、大文字小文字まで Cloudflare の表記と同じにします。
   - 未登録のままだと、デプロイは最初のステップで止まります。
 - **`DEPLOY_ENABLED` は、今までどおり環境ではなく、リポジトリの変数にする**（6 で入れます。ここではまだ入れません）。
   - **Why**: ジョブを動かすかどうかの判定（`if`）の時点では、環境の変数はまだ読めないからです。

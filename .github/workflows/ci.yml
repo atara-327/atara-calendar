@@ -49,13 +49,15 @@ jobs:
       # wrangler は認証エラー（権限不足・期限切れ）のとき、自動で whoami を実行して、
       # トークンの持ち主のメールアドレスとアカウント名をログに出す。
       # このリポジトリは public でログを誰でも読めるので、どのステップより先に伏せ字にしておく。
+      # 伏せ字にするのは、トークンの持ち主（Cloudflare にログインするメールアドレス）。
+      # Worker の ALLOWED_EMAIL（Access で許可する Gmail）で代用すると、2つが違うときに伏せ字が効かないので、別の Secret にしている。
       # 空だと伏せ字にならないまま whoami が出力されるので、未登録のときは止める。
       - name: ログのメールアドレスを伏せ字にする
         env:
-          EMAIL: ${{ secrets.ALLOWED_EMAIL }}
+          EMAIL: ${{ secrets.CLOUDFLARE_ACCOUNT_EMAIL }}
         run: |
           if [ -z "$EMAIL" ]; then
-            echo "::error::環境 production の Secret ALLOWED_EMAIL が未登録です（docs/setup.md の 4.2）。"
+            echo "::error::環境 production の Secret CLOUDFLARE_ACCOUNT_EMAIL が未登録です（docs/setup.md の 4.2）。"
             exit 1
           fi
           echo "::add-mask::$EMAIL"
