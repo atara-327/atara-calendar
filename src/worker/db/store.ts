@@ -105,11 +105,14 @@ export type WriteResult = { applied: false } | { applied: true; rev: number };
 function upsertSql(
   table: 'workspaces' | 'entries',
   columns: readonly string[],
-  extraAssignments: readonly string[] = [],
+  {
+    keepOnUpdate = [],
+    extraAssignments = [],
+  }: { keepOnUpdate?: readonly string[]; extraAssignments?: readonly string[] } = {},
 ): string {
   const assignments = [
     ...columns
-      .filter((column) => column !== 'id')
+      .filter((column) => column !== 'id' && !keepOnUpdate.includes(column))
       .map((column) => `${column} = excluded.${column}`),
     'rev = excluded.rev',
     ...extraAssignments,
@@ -126,9 +129,14 @@ function upsertSql(
 }
 
 const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS);
+// kind は、更新の SET に入れない。設計書 4.5「kind は作成後に変えられない」を、入力の検証（entryChangesSchema）
+// だけでなく、DB への書き込みの形でも守る。別の kind の行が同じ id で届いても、kind は作成時のまま残る。
 // next_notify_at は、新しい行の INSERT では書かず（NULL）、更新では NULL に戻す。更新で残すと、変更・削除した
 // 予定の通知が、古い時刻に送られる。通知の時刻は、通知を作る実装 #11 が、更新のたびに計算し直す。
-const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, ['next_notify_at = NULL']);
+const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
+  keepOnUpdate: ['kind'],
+  extraAssignments: ['next_notify_at = NULL'],
+});
 
 /** 表ごとの、id → 今の edited_at。id は表の中でだけ一意なので、2 つの表の結果を 1 つの Map にまとめない。 */
 interface CurrentEditedAt {

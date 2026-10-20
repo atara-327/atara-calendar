@@ -357,6 +357,34 @@ describe('applyWrite', () => {
       });
     });
 
+    describe('kind は作成後に変えられない（設計書 4.5）', () => {
+      it('新しい行には kind を書く', async () => {
+        await applyWrite(db(), {
+          entries: [makeEntry({ id: 'b', kind: 'block', workspaceId: null })],
+        });
+
+        const row = await db().prepare("SELECT kind FROM entries WHERE id = 'b'").first();
+
+        expect(row).toEqual({ kind: 'block' });
+      });
+
+      it('同じ id で別の kind の行が新しい edited_at で届いても、kind は作成時のまま残り、ほかの列は更新される', async () => {
+        await applyWrite(db(), { entries: [makeEntry({ id: 'a', kind: 'event', title: '元' })] });
+
+        const result = await applyWrite(db(), {
+          entries: [
+            makeEntry({ id: 'a', kind: 'block', workspaceId: null, title: '更新', editedAt: 2000 }),
+          ],
+        });
+
+        expect(result).toEqual({ applied: true, rev: 2 });
+        const { entries } = await readChanges(db(), 1);
+        expect(entries.map(({ entry }) => [entry.kind, entry.title, entry.workspaceId])).toEqual([
+          ['event', '更新', null],
+        ]);
+      });
+    });
+
     it('同じ id の行が 1 つの依頼に 2 つあるのは、呼び出し側のバグなので、例外にする', async () => {
       const rows = [makeEntry({ id: 'a', editedAt: 1000 }), makeEntry({ id: 'a', editedAt: 2000 })];
 
