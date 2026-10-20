@@ -395,6 +395,31 @@ describe('設定が空のときは拒否する（NF-2）', () => {
     },
   );
 
+  it.each([
+    'https://example-team.cloudflareaccess.com',
+    'example-team.cloudflareaccess.com/',
+    'example-team.cloudflareaccess.com/cdn-cgi/access/certs',
+    'example-team.cloudflareaccess.com:443',
+    'example team.cloudflareaccess.com',
+  ])(
+    'ACCESS_TEAM_DOMAIN が %j のようにドメインの書式でなければ、正しい JWT でも 500',
+    async (teamDomain) => {
+      const res = await call(await makeJwt(), { ACCESS_TEAM_DOMAIN: teamDomain });
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: 'internal_error' });
+    },
+  );
+
+  it('ACCESS_TEAM_DOMAIN の書式の誤りは、理由をログに残す', async () => {
+    await call(await makeJwt(), {
+      ACCESS_TEAM_DOMAIN: 'https://example-team.cloudflareaccess.com',
+    });
+
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('ACCESS_TEAM_DOMAIN'));
+  });
+
   it('設定漏れは、ログで気づけるようにする', async () => {
     await call(await makeJwt(), { ACCESS_AUD: '' });
 
@@ -460,5 +485,21 @@ describe('公開鍵の取得（remoteKeyResolver）', () => {
     );
 
     expect(res.status).toBe(403);
+  });
+
+  it('JOSEError でない例外（鍵を取れないなど）は、ログに message も残す', async () => {
+    const domain = 'unreachable-log.cloudflareaccess.com';
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('network down')));
+    const app = new Hono<AppEnv>();
+    app.use('/api/*', accessAuth());
+    app.get('/api/whoami', (c) => c.json(c.var.actor));
+
+    await app.request(
+      '/api/whoami',
+      { headers: { 'Cf-Access-Jwt-Assertion': await makeJwt({ issuer: `https://${domain}` }) } },
+      { ...baseEnv, ACCESS_TEAM_DOMAIN: domain },
+    );
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('network down'));
   });
 });

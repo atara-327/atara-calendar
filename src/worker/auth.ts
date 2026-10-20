@@ -43,9 +43,26 @@ function forbidden(c: Context<AppEnv>, reason: string) {
   return c.json({ error: 'forbidden' }, 403);
 }
 
+/**
+ * ACCESS_TEAM_DOMAIN に許す書式。ホスト名だけ（<チーム名>.cloudflareaccess.com）。
+ * https:// や / が付いた値を受け取って取り除く形にしないのは、設定の誤りを黙って直すより、
+ * 500 とログで気づける方が確実なため。通してしまうと、公開鍵の URL と iss が壊れて、
+ * どの JWT も 403 になり、原因が分かりにくい。
+ */
+const TEAM_DOMAIN_PATTERN = /^[a-z0-9.-]+$/i;
+
 /** 未設定と空白だけの値を、どちらも空文字にそろえる。 */
 function clean(value: string | undefined): string {
   return value?.trim() ?? '';
+}
+
+/**
+ * 検証に失敗した理由。JOSEError は code で原因が決まる。それ以外（公開鍵の取得の失敗など）は
+ * code がないので、message も残す。
+ */
+function describeError(error: unknown): string {
+  if (error instanceof errors.JOSEError) return error.code;
+  return error instanceof Error ? `unknown: ${error.message}` : 'unknown';
 }
 
 function identify(
@@ -94,6 +111,12 @@ export function accessAuth(options: { keyResolver?: KeyResolver } = {}) {
       console.error('[auth] ACCESS_TEAM_DOMAIN・ACCESS_AUD・ALLOWED_EMAIL のどれかが空です');
       return c.json({ error: 'internal_error' }, 500);
     }
+    if (!TEAM_DOMAIN_PATTERN.test(teamDomain)) {
+      console.error(
+        '[auth] ACCESS_TEAM_DOMAIN は <チーム名>.cloudflareaccess.com の形で書いてください（https:// や / は付けません）',
+      );
+      return c.json({ error: 'internal_error' }, 500);
+    }
 
     const token = c.req.header('Cf-Access-Jwt-Assertion');
     if (token === undefined || token === '') {
@@ -110,8 +133,7 @@ export function accessAuth(options: { keyResolver?: KeyResolver } = {}) {
         requiredClaims: ['exp'],
       }));
     } catch (error) {
-      const code = error instanceof errors.JOSEError ? error.code : 'unknown';
-      return forbidden(c, `JWT の検証に失敗しました (${code})`);
+      return forbidden(c, `JWT の検証に失敗しました (${describeError(error)})`);
     }
 
     const actor = identify(payload, allowedEmail, clean(env.ALLOWED_SERVICE_TOKEN_ID));

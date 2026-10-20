@@ -518,8 +518,9 @@ Access を通ったリクエストには、Access が署名した JWT（`Cf-Acce
 
 - **Why 理由を入れないのか**: どこで弾かれたかが、攻撃者への手がかりになるからです。理由は Worker のログにだけ残します。
 - **Why サービストークンは `common_name` で判定するのか**: サービストークンの JWT には `email` が付かず、`common_name` に Client ID が入るからです。許可する ID が設定されていないときは、サービストークンを一切通しません。
-- 設定（`ACCESS_TEAM_DOMAIN`・`ACCESS_AUD`・`ALLOWED_EMAIL`）のどれかが空のときは、403 ではなく 500 を返して拒否します。
-  - **Why**: 設定漏れのまま、確認が素通りしないようにするためです。リクエストが悪いのではなく、こちらの設定の問題なので、403 とは分けます。
+- 設定（`ACCESS_TEAM_DOMAIN`・`ACCESS_AUD`・`ALLOWED_EMAIL`）のどれかが空のとき、または `ACCESS_TEAM_DOMAIN` の書式が違うとき（[10.4](#104-秘密情報nf-3)）は、403 ではなく 500 を返して拒否します。理由はログに残します。
+  - **Why**: 設定漏れのまま、確認が素通りしないようにするためです。リクエストが悪いのではなく、こちらの設定の問題なので、403 とは分けます。書式が違う値は、公開鍵の URL と `iss` が壊れて、どの JWT も 403 になり、原因が分かりにくくなるので、設定の誤りとして気づけるようにします。
+- JWT の検証に失敗した理由は、ログに残します。jose のエラー（`JOSEError`）はエラーコードを、それ以外（公開鍵の取得の失敗など）はエラーのメッセージも残します。
 - **Why Access があるのに Worker でも確認するのか**: Cloudflare 公式が、「アプリを完全に守るには JWT を検証することが重要」としているからです。Access の設定ミスや、Access を通らない URL（下記）があっても、データは守れます。
 - `workers.dev` の URL とプレビュー URL は、設定で無効にします。
   - **Why**: これらは `calendar.ataraman.com` とは別の入口なので、Access の保護がかかりません。
@@ -553,7 +554,7 @@ Access を通ったリクエストには、Access が署名した JWT（`Cf-Acce
 | `DISCORD_WEBHOOK_URL` | 通知先の Webhook URL | Secrets |
 | `ALLOWED_EMAIL` | ログインを許可するメールアドレス | Secrets |
 | `ALLOWED_SERVICE_TOKEN_ID` | 許可するサービストークンの Client ID | Secrets（MCP を作るまでは空） |
-| `ACCESS_TEAM_DOMAIN` | Access のチーム名のドメイン | 通常の設定（`wrangler.jsonc` の `vars`。秘密ではない。Access のアプリを作るまでは空） |
+| `ACCESS_TEAM_DOMAIN` | Access のチーム名のドメイン。`<チーム名>.cloudflareaccess.com` の形で書く（`https://` は付けない。付けると Worker は 500 を返す） | 通常の設定（`wrangler.jsonc` の `vars`。秘密ではない。Access のアプリを作るまでは空） |
 | `ACCESS_AUD` | Access アプリの宛先 ID | 通常の設定（同上） |
 
 - 手元の開発環境（`npm run dev`・`wrangler dev`）には Access がないので、`.dev.vars`（Git に入れないファイル）で `AUTH_MODE=dev` を指定し、かつリクエストのホスト名が `localhost` か `127.0.0.1` のときだけ、JWT の確認を省略します。それ以外のホストでは、`AUTH_MODE=dev` でも JWT を確認します。
