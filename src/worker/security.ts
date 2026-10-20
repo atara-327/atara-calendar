@@ -18,25 +18,23 @@ function isJson(contentType: string | undefined): boolean {
 }
 
 /**
- * 他のサイトから、ログイン状態を悪用して書き込まれるのを防ぐ（設計書 10.3）。
+ * 他のサイトから、ログイン状態を悪用してリクエストされるのを防ぐ（設計書 10.3）。
  *
- * Sec-Fetch-Site がないときに拒否しないのは、ブラウザ以外（将来の MCP など）は付けないため。
- * 今のブラウザは必ず付けるので、ブラウザ経由の攻撃はここで止まる。ブラウザ以外からは、
- * そもそもログインの Cookie を悪用されない。
+ * Sec-Fetch-Site は、GET・HEAD を含むすべてのメソッドで、same-origin だけを通す。
+ * ヘッダーがないものも拒否する。ブラウザ以外（将来の MCP など）を通すかどうかは、MCP を作るときに
+ * 決める（docs/BACKLOG.md）。それまでは拒否する側に倒す。緩めるのはセキュリティの設計の変更になるため。
+ *
+ * GET・HEAD 以外は、本文の有無に関係なく Content-Type: application/json を必須にする。
+ * 本文があるときだけ確かめる形にしないのは、環境で結果が変わるため。ブラウザは本文のない PUT にも
+ * Content-Length: 0 を付け、workerd ではそのとき body が null にならない。書き込みの API はすべて
+ * JSON の本文を持つ（設計書 5.1）ので、正しいリクエストは必ず満たす。
  */
-export const guardWrites = createMiddleware(async (c, next) => {
-  if (READ_METHODS.has(c.req.method)) {
-    await next();
-    return;
-  }
-
-  const site = c.req.header('Sec-Fetch-Site');
-  if (site !== undefined && site !== 'same-origin') {
+export const guardRequests = createMiddleware(async (c, next) => {
+  if (c.req.header('Sec-Fetch-Site') !== 'same-origin') {
     return c.json({ error: 'forbidden' }, 403);
   }
 
-  // 本文の有無は Content-Length ではなく body で見る。chunked のように、長さを書かない送り方があるため。
-  if (c.req.raw.body !== null && !isJson(c.req.header('Content-Type'))) {
+  if (!READ_METHODS.has(c.req.method) && !isJson(c.req.header('Content-Type'))) {
     return c.json({ error: 'unsupported_media_type' }, 415);
   }
 

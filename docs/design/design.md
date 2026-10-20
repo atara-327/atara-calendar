@@ -81,7 +81,7 @@ atara-calendar/
 │  ├─ worker/        Cloudflare Worker
 │  │  ├─ index.ts        入口（fetch と scheduled）
 │  │  ├─ auth.ts         Access の JWT の検証
-│  │  ├─ security.ts     API のセキュリティヘッダー、他のサイトからの書き込みの拒否
+│  │  ├─ security.ts     API のセキュリティヘッダー、他のサイトからのリクエストの拒否
 │  │  ├─ env.ts          Worker が受け取る設定（Secrets を含む）の型
 │  │  ├─ api/            API の各エンドポイント
 │  │  └─ cron.ts         通知の送信
@@ -533,13 +533,16 @@ Access を通ったリクエストには、Access が署名した JWT（`Cf-Acce
 | 入力チェック | API で Zod を使い、型・長さ・形式を確認する | MCP など画面以外から来る入力も、DB に入る前に止めるため |
 | SQL | プレースホルダ（`?`）を使い、文字列をつなげて SQL を作らない | SQL インジェクションを防ぐため |
 | URL 欄 | `http://` と `https://` で始まるものだけをリンクにする | `javascript:` で始まる URL を押したときに、スクリプトが実行されるのを防ぐため |
-| 他サイトからの書き込み | API は、`GET`・`HEAD` 以外のリクエストで、`Sec-Fetch-Site` ヘッダーがあって `same-origin` でなければ 403 にする。本文があるリクエストは、`Content-Type: application/json` でなければ 415 にする。認証のあとに確認する | 他のサイトから、ログイン状態を悪用して書き込まれるのを防ぐため |
+| 他サイトからのリクエスト | API は `Sec-Fetch-Site: same-origin` と JSON 形式のリクエストだけを受け付ける。具体的には、すべてのメソッド（`GET`・`HEAD` を含む）で、`Sec-Fetch-Site` ヘッダーが `same-origin` でなければ（ヘッダーがないときも）403 にする。`GET`・`HEAD` 以外は、本文の有無に関係なく `Content-Type: application/json` でなければ 415 にする。認証のあとに確認する | 他のサイトから、ログイン状態を悪用して書き込まれたり、読み取られたりするのを防ぐため |
 | API の応答のヘッダー | `X-Content-Type-Options: nosniff`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer` を付ける（403 などのエラーにも付ける） | 応答を別の種類として解釈されたり、予定のデータが共有のキャッシュや履歴に残ったりするのを防ぐため |
 | CSP ヘッダー | 自分のドメインのスクリプト・スタイル・フォント・通信だけを許し、`object`・`base`・`form` の送り先と、外から枠で囲まれることを禁じる。`X-Content-Type-Options` と `Referrer-Policy` も一緒に付ける | 万一 XSS があっても、被害を広げないため |
 
-- **`Sec-Fetch-Site` がないとき（ブラウザ以外。将来の MCP など）は通す**
-  - **Why**: 今のブラウザは必ずこのヘッダーを付けるので、ブラウザ経由の攻撃はこの確認で止められます。ブラウザ以外からは、そもそもログインの Cookie を悪用されません。ここで拒否すると、MCP が通れなくなります。
-  - `Content-Type` の確認は、このヘッダーがないときも行います。
+- **`Sec-Fetch-Site` がないとき（ブラウザ以外。将来の MCP など）も 403 にする**
+  - **Why**: 緩めるのはセキュリティの設計の変更で、ユーザーの確認が要るためです。厳しい形なら確認が要らず、判定も単純になります。画面は、今のブラウザが必ず `same-origin` を付けるので通ります。
+  - MCP（サービストークン）から API を呼ぶときは、このヘッダーが付かないので、MCP を作るときに扱いを決めます（[バックログ](../BACKLOG.md#claude-連携mcp-サーバー)）。
+  - アドレス欄に URL を直接入力した `GET`（`Sec-Fetch-Site: none`）も 403 になります。API は画面から呼ぶものなので、困りません。
+- **`Content-Type` は、本文の有無に関係なく必須にする**
+  - **Why**: 書き込みの API はすべて、`edited_at` を含む JSON の本文を持つ（[5.1](#51-エンドポイント)）ので、正しいリクエストは必ず満たします。本文があるときだけ確かめる形にしないのは、環境で結果が変わるためです。ブラウザは本文のない `PUT` にも `Content-Length: 0` を付け、workerd ではそのとき `body` が `null` になりません。
 - 画面（静的ファイル）のヘッダーは、`public/_headers` で付けます。
   - **Why**: 画面は Workers の静的ファイルがそのまま返すので、Worker のコードを通りません（`run_worker_first` は `/api/*` だけ）。API のヘッダーを付けるコードでは、画面には付けられないためです。
 
