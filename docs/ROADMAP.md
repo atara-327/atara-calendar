@@ -24,7 +24,7 @@ Claude はユーザーの Cloudflare アカウントや Discord を操作でき�
 | --- | --- |
 | D1 のデータベースを作る | 実装 #5（デプロイ）の前 |
 | Access のアプリを作り、Google ログインと許可するアドレスを設定する | 実装 #5 の前 |
-| Access のアプリを作ったあとに、`ACCESS_TEAM_DOMAIN`・`ACCESS_AUD` を `wrangler.jsonc` の `vars` に入れ、`ALLOWED_EMAIL` を Cloudflare の Secrets に登録する（[設計書 10.4](design/design.md#104-秘密情報nf-3)）。空のままだと、Worker は API をすべて拒否する | 実装 #5 の前 |
+| Access のアプリを作ったあとに、`ACCESS_TEAM_DOMAIN`・`ACCESS_AUD` を `wrangler.jsonc` の `vars` に入れ、`ALLOWED_EMAIL` を Cloudflare の Secrets に登録する（書式は[設計書 10.4](design/design.md#104-秘密情報nf-3)、空のままのときの動きは[設計書 10.2](design/design.md#102-worker-側の確認二重の守り)） | 実装 #5 の前 |
 | Cloudflare の API トークンを作り、GitHub の Secrets に登録する（設計書 Q7） | 実装 #5 の前 |
 | Discord の Webhook を作り、Cloudflare の Secrets に登録する | 実装 #11（通知）の前 |
 
