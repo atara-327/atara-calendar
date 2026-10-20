@@ -60,13 +60,16 @@
    - セッションの長さ（Session Duration）を、設計書 10.1 のとおり **1 month** にする。
    - **Accept all available identity providers を OFF** にして、**Google だけ**を選ぶ。可能なら「Instant Auth」を ON にする（選択画面を飛ばして Google に進む）。
      - **Why**: ON のままだと、Google 以外のログイン方法（ワンタイム PIN など）も使えてしまい、設計書 10.1 の「ログイン方法は Google」から外れるからです。
-3. ポリシーを1つ作る。
+3. ポリシーを1つ作り、**アプリに付ける**。
    - Action: **Allow**
    - Include: **Emails** に、自分の Gmail アドレスを1つだけ入れる（要件 AU-1）
    - ポリシーのセッションの長さは、**アプリと同じ（Same as application session timeout）のまま**にする。
      - **Why**: ポリシー側で設定すると、アプリの1か月（要件 AU-2）より優先されてしまうからです。
-4. 保存した後、アプリの概要（Overview）にある **Application Audience (AUD) Tag** を控える。→ Claude に伝える値
+   - 画面によっては、ポリシーを別に作って、アプリの **Policies** で割り当てる形になっている。そのときは、割り当てたあと、アプリの Policies に、作ったポリシーが並んでいることを確かめる。
+     - **Why**: ポリシーは、作っただけではアプリのルールになりません。付いていないと、Google でログインした後、Access の「That account does not have access.」の画面で止まります。
+4. 保存した後、**ドメインが `calendar.ataraman.com` のアプリ**の概要（Overview）にある **Application Audience (AUD) Tag** を控える。→ Claude に伝える値
    - **Why**: Worker は、Access が付けたログイン情報（JWT）がこのアプリ宛てかどうかを、この値で確かめます（[設計書 10.2](design/design.md#102-worker-側の確認二重の守り)）。
+   - **Why アプリのドメインまで確かめるのか**: Access のアプリが複数あると、AUD Tag の一覧で別のアプリの値を控えやすいからです。取り違えると、Worker はすべての API を 403 で拒否します（8 の表）。
 
 ## 4. GitHub から自動でデプロイできるようにする
 
@@ -93,6 +96,9 @@
    | `CLOUDFLARE_API_TOKEN` | 4.1 のトークン |
    | `CLOUDFLARE_ACCOUNT_ID` | 4.1 の Account ID |
    | `CLOUDFLARE_ACCOUNT_EMAIL` | Cloudflare にログインするメールアドレス（4.1 のトークンを作ったアカウント。Cloudflare の表記と同じ大文字小文字で） |
+
+   - **登録するのは、この3つだけ。** `ALLOWED_EMAIL`（Access で許可する Gmail）は、GitHub には入れない。Worker の Secret として、7 で Cloudflare に入れる。
+     - **Why**: デプロイの workflow は `ALLOWED_EMAIL` を読まないので、GitHub に入れても使われず、メールアドレスの置き場所が増えるだけだからです。
 
    - 以前の手順で、トークンをリポジトリの Secret に登録済みで、値を控えていないときは、Cloudflare の **プロフィール → API Tokens** の一覧で、そのトークンを **Roll**（作り直す）して、新しい値を登録する。古い値は使えなくなる。
      - **Why**: トークンの値は、作ったときにしか表示されません。GitHub の Secret も、いったん登録すると読み出せないためです。
@@ -124,7 +130,8 @@
 
 1. Cloudflare の **DNS → Records** で、`calendar.ataraman.com` のレコードがないか確かめる。残したいものがあれば、先に別の名前に移す。
    - **Why**: すでに `calendar.ataraman.com` のレコード（CNAME など）があると、デプロイが確認なしに置き換えます（CI では確認を出せないため）。Worker の Custom Domain は、DNS のレコードと証明書を Cloudflare が自動で作るので、同じ名前の既存のレコードとぶつかるからです。
-2. リポジトリの **Settings → Secrets and variables → Actions** の **Variables** タブ（**Repository variables**）で、`DEPLOY_ENABLED` に `true` を登録する。
+2. リポジトリの **Settings → Secrets and variables → Actions** の **Variables** タブを開き、**下の Repository variables の欄**の **New repository variable** で、`DEPLOY_ENABLED` に `true` を登録する。
+   - **上の Environment variables の欄（環境 `production` の変数）には入れない。** この画面は、上に Environment variables、下に Repository variables の欄が並んでいる。Environment variables に入れると、deploy が skipped（動かない）になる。理由は、[4.2](#42-github-の環境environmentに登録する) の `DEPLOY_ENABLED` の項目のとおり。
    - **Why PR のマージの後なのか**: これを `true` にした時点から、main に取り込むたびに本番へ自動でデプロイされるからです。本番用の値（5）が `wrangler.jsonc` に入る前に動くと、デプロイが失敗します。
 3. リポジトリの **Actions → CI → Run workflow** で、main を選んで実行する（Claude に頼んでもよい。Claude の環境から動かせない場合は、自分で動かす）。
 4. 「deploy」が成功したら、Cloudflare に Worker `atara-calendar` ができ、`https://calendar.ataraman.com` で画面が開けるようになる（Google でのログインを求められる）。
@@ -141,7 +148,7 @@
 ## 8. 動作を確認する
 
 1. PC のブラウザで `https://calendar.ataraman.com` を開く（Google でのログインを求められる）。
-2. 画面が開いたら、開発者ツール（F12）の **Console** で、次を実行する。
+2. ログインして `calendar.ataraman.com` の画面が開いたら、そのページで、開発者ツール（F12）の **Console** で、次を実行する。
 
    ```js
    await (await fetch('/api/health')).json();
@@ -149,9 +156,18 @@
 
    `{ ok: true }` が返れば成功です。
 
-   - **403** のとき: AUD・チームのドメイン・メールアドレスのどれかが食い違っています。`wrangler.jsonc` の `ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` を、Access のアプリの値（2.1・3）と見比べ、Worker の `ALLOWED_EMAIL`（7）を、Access のポリシーのメールアドレス（3）と見比べてください。
+   - **Why 画面を開いた状態で実行するのか**: `fetch('/api/health')` は、いま開いているページのドメインに送られるからです。Access のログイン画面（`<チーム名>.cloudflareaccess.com`）を開いたまま実行すると、行き先が Access になり、404 になります。
+   - ログは、ダッシュボードの **Workers & Pages → atara-calendar → Logs**（**Observability** という名前の画面もある）で見る。
+   - **403** のとき: ログの `[auth] 403:` の行で、原因が分かります。
+
+     | ログの行 | 原因 | 確かめるところ |
+     | --- | --- | --- |
+     | `JWT の検証に失敗しました (ERR_JWT_CLAIM_VALIDATION_FAILED)` | AUD（またはチームのドメイン）が、Access のアプリと食い違っている | `wrangler.jsonc` の `ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` を、ドメインが `calendar.ataraman.com` のアプリの値（2.1・3）と見比べる |
+     | `許可されていない相手です` | ログインしたアカウントのメールアドレスが、Worker の `ALLOWED_EMAIL` と違う | `ALLOWED_EMAIL`（7）を、ログインしたアカウントのメールアドレスと見比べる |
+     | `JWT のヘッダーがありません` | Access を通っていない | 3 のアプリのドメインが `calendar.ataraman.com`（パスは空）か |
+     | `[auth] 403` の行がない | 他のサイトからのリクエストとして弾かれた（[設計書 10.3](design/design.md#103-その他の対策)） | Console を、`calendar.ataraman.com` の画面を開いて使っているか（下の注記も参照） |
+
    - **500** のとき: Worker の `ALLOWED_EMAIL` が未登録です（7）。
-   - 原因は、ダッシュボードの **Workers & Pages → atara-calendar → Logs** で、Worker のログを見ると分かります。
 3. 別の Google アカウントで開いて（シークレットウィンドウなど）、弾かれることも確かめる（要件 AU-1）。Google の画面でブロックされるか、Access の画面で弾かれれば OK です。
    - 2.2 でテストユーザーを自分だけにしているので、ふつうは Google の画面で「アクセスをブロック」（Error 403: access_denied）と出て止まります。
 
