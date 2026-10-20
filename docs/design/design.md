@@ -867,6 +867,16 @@ npx wrangler d1 execute atara-calendar --remote --command "UPDATE meta SET epoch
 
 - **Why 2の手順が必要なのか**: 復元すると、通し番号（rev）も過去に戻ります。端末は「rev 500 まで受け取った」と覚えているので、復元後の rev 450〜500 の変更を受け取れなくなります。`GET /api/changes` は毎回 epoch を返し、端末は覚えている値と違えば全データを読み込み直します。
 
+### A.2 無料枠の見積もり（NF-1）
+
+| 項目 | 無料枠 | 見込み |
+| --- | --- | --- |
+| Worker のリクエスト | 1日10万回（[公式](https://developers.cloudflare.com/workers/platform/limits)） | 定期実行 1,440回 ＋ 同期・編集 数百回 ＝ 1日2,000回程度 |
+| 静的ファイルの配信 | 無料・無制限（[公式](https://developers.cloudflare.com/workers/platform/pricing/)） | 画面の HTML・JS・CSS はここに入る |
+| CPU 時間 | 1回10ms（DB の待ち時間は含まない） | 通知は「時刻が来た行を探す」だけなので収まる見込み（9.1） |
+| D1 の読み取り | 1日500万行 | 起動時の全件読み込み（数千行 × 1日10回程度）が中心で、数万行程度 |
+| D1 の書き込み | 1日10万行 | 編集と通知の更新で、1日数百行程度 |
+
 ### A.3 壊れた行が見つかったとき
 
 `GET /api/changes` が、行の構造が壊れていて失敗するときの直し方です（[6.3](#63-受け取るサーバー--端末)）。直すまで、全端末の同期が止まります。
@@ -881,16 +891,6 @@ npx wrangler d1 execute atara-calendar --remote --command "UPDATE entries SET st
 # 消すとき
 npx wrangler d1 execute atara-calendar --remote --command "DELETE FROM entries WHERE id = '<ログの id>'"
 ```
-
-### A.2 無料枠の見積もり（NF-1）
-
-| 項目 | 無料枠 | 見込み |
-| --- | --- | --- |
-| Worker のリクエスト | 1日10万回（[公式](https://developers.cloudflare.com/workers/platform/limits)） | 定期実行 1,440回 ＋ 同期・編集 数百回 ＝ 1日2,000回程度 |
-| 静的ファイルの配信 | 無料・無制限（[公式](https://developers.cloudflare.com/workers/platform/pricing/)） | 画面の HTML・JS・CSS はここに入る |
-| CPU 時間 | 1回10ms（DB の待ち時間は含まない） | 通知は「時刻が来た行を探す」だけなので収まる見込み（9.1） |
-| D1 の読み取り | 1日500万行 | 起動時の全件読み込み（数千行 × 1日10回程度）が中心で、数万行程度 |
-| D1 の書き込み | 1日10万行 | 編集と通知の更新で、1日数百行程度 |
 
 ---
 
