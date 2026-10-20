@@ -316,6 +316,97 @@ describe('applyWrite', () => {
     });
   });
 
+  describe('1 回の書き込みは、表ごとに 1 文（D1 の 1 回の呼び出しあたりのクエリ数の上限のため）', () => {
+    /** 渡された batch の文の数を、呼ばれた順に記録する db。 */
+    function recordingDatabase() {
+      const batchSizes: number[] = [];
+      const database: Database = {
+        prepare: (query) => db().prepare(query),
+        batch: <T>(statements: D1PreparedStatement[]) => {
+          batchSizes.push(statements.length);
+          return db().batch<T>(statements);
+        },
+      };
+      return { database, batchSizes };
+    }
+
+    it('予定とワークスペースを数百行書いても、書き込みの batch は rev・workspaces・entries の 3 文', async () => {
+      const { database, batchSizes } = recordingDatabase();
+
+      await applyWrite(database, {
+        workspaces: [makeWorkspace({ id: 'w2' }), makeWorkspace({ id: 'w3' })],
+        entries: Array.from({ length: 300 }, (_, index) => makeEntry({ id: `e${String(index)}` })),
+      });
+
+      // 1 つ目は edited_at の確認（表ごとに 1 文）、2 つ目が書き込み
+      expect(batchSizes).toEqual([2, 3]);
+    });
+
+    it('書く行がない表の文は、batch に入れない', async () => {
+      const { database, batchSizes } = recordingDatabase();
+
+      await applyWrite(database, { entries: [makeEntry({ id: 'a' }), makeEntry({ id: 'b' })] });
+
+      expect(batchSizes).toEqual([2, 2]);
+    });
+
+    it('3000 行の依頼（ワークスペースの削除で、中の予定をすべて論理削除するような依頼）を書ける', async () => {
+      const entries = Array.from({ length: 3000 }, (_, index) =>
+        makeEntry({ id: `e${String(index)}`, title: `予定 ${String(index)}` }),
+      );
+      await applyWrite(db(), { entries });
+      const deleted = entries.map((entry) => ({ ...entry, editedAt: 2000, deletedAt: 2000 }));
+
+      const result = await applyWrite(db(), { entries: deleted });
+
+      expect(result).toEqual({ applied: true, rev: 2 });
+      const changes = await readChanges(db(), 1);
+      expect(changes.entries).toHaveLength(3000);
+      expect(changes.entries.every(({ entry, rev }) => entry.deletedAt === 2000 && rev === 2)).toBe(
+        true,
+      );
+      expect((await readChanges(db(), 0)).entries).toEqual([]);
+    }, 30_000);
+
+    it('全部の列に値がある行や、引用符・改行・絵文字・バックスラッシュを含む文字列も、そのまま書いて読める', async () => {
+      const entry = makeEntry({
+        id: 'full',
+        title: `"引用" 'シングル' \\ バックスラッシュ\n改行\t😀 {"json":[1,2]}`,
+        allDay: false,
+        startDate: '2026-10-19',
+        startTime: '15:00',
+        endDate: '2026-10-19',
+        endTime: '16:00',
+        location: '○○歯科',
+        url: 'https://example.com/?q=a&b=c',
+        memo: '1 行目\n2 行目',
+        rrule: { freq: 'weekly', days: [1, 3, 5] },
+        untilDate: '2027-03-31',
+        seriesId: 's0',
+        originalDate: '2026-10-19',
+        cancelled: true,
+        notifyEnabled: false,
+        notifyOffsetMin: -360,
+        editedAt: 1_760_000_000_000,
+        deletedAt: 1_760_000_100_000,
+      });
+
+      await applyWrite(db(), { entries: [makeEntry({ id: 'other' })] });
+
+      await applyWrite(db(), { entries: [entry] });
+
+      const row = await db().prepare('SELECT * FROM entries WHERE id = ?1').bind('full').first();
+      expect(row).toMatchObject({
+        all_day: 0,
+        cancelled: 1,
+        notify_enabled: 0,
+        rrule: '{"freq":"weekly","days":[1,3,5]}',
+        edited_at: 1_760_000_000_000,
+      });
+      expect((await readChanges(db(), 1)).entries.map(({ entry }) => entry)).toEqual([entry]);
+    });
+  });
+
   describe('書く前の検証（entrySchema・workspaceSchema）', () => {
     it.each<{ reason: string; invalid: WriteRequest }>([
       {

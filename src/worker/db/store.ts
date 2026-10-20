@@ -94,22 +94,32 @@ export interface WriteRequest {
 /** applied: false は、サーバーの方が新しい（または同じ）行があって、依頼全体を捨てたこと。 */
 export type WriteResult = { applied: false } | { applied: true; rev: number };
 
+/**
+ * 1 つの表への書き込みを、1 文の upsert にする。行は、列名をキーにしたオブジェクトの JSON 配列を、
+ * 1 つの値（?1）として渡す。
+ * 1 行ごとに 1 文にしないのは、ワークスペースの削除（中の予定をすべて論理削除）や、例外の多い系列の
+ * 削除で、1 回の依頼が数百行になり、D1 の 1 回の呼び出しあたりのクエリ数の上限（無料プラン）に
+ * 当たるおそれがあるため。行ごとに値を bind しないのも、1 文に bind できる値が 100 個までで、
+ * 行数に上限が付いてしまうため。
+ */
 function upsertSql(table: 'workspaces' | 'entries', columns: readonly string[]): string {
   const assignments = columns
     .filter((column) => column !== 'id')
     .map((column) => `${column} = excluded.${column}`);
   // rev は、同じ batch の先頭で増やした meta.rev を、後の文から参照して入れる。
   // next_notify_at は書かない。通知の時刻は、通知を作る実装 #11 が計算する。
+  // WHERE true は、SELECT の後の ON CONFLICT を、SQLite が JOIN の ON と取り違えないために要る。
   return [
     `INSERT INTO ${table} (${columns.join(', ')}, rev)`,
-    `VALUES (${columns.map(() => '?').join(', ')}, (SELECT rev FROM meta WHERE id = 1))`,
+    `SELECT ${columns.map((column) => `json_extract(value, '$.${column}')`).join(', ')}, (SELECT rev FROM meta WHERE id = 1)`,
+    'FROM json_each(?1) WHERE true',
     `ON CONFLICT(id) DO UPDATE SET ${assignments.join(', ')}, rev = excluded.rev`,
     `WHERE excluded.edited_at > ${table}.edited_at`,
   ].join(' ');
 }
 
-const UPSERT_WORKSPACE = upsertSql('workspaces', WORKSPACE_COLUMNS);
-const UPSERT_ENTRY = upsertSql('entries', ENTRY_COLUMNS);
+const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS);
+const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS);
 
 /** 表ごとの、id → 今の edited_at。id は表の中でだけ一意なので、2 つの表の結果を 1 つの Map にまとめない。 */
 interface CurrentEditedAt {
@@ -192,14 +202,12 @@ export async function applyWrite(
   const results = await db.batch([
     db.prepare('UPDATE meta SET rev = rev + 1 WHERE id = 1 RETURNING rev'),
     // workspaces を先に書く。entries の workspace_id は外部キーで、同じ依頼で作るワークスペースを指すことがあるため。
-    ...workspaces.map((workspace) => {
-      const row = workspaceToRow(workspace);
-      return db.prepare(UPSERT_WORKSPACE).bind(...WORKSPACE_COLUMNS.map((column) => row[column]));
-    }),
-    ...entries.map((entry) => {
-      const row = entryToRow(entry);
-      return db.prepare(UPSERT_ENTRY).bind(...ENTRY_COLUMNS.map((column) => row[column]));
-    }),
+    ...(workspaces.length === 0
+      ? []
+      : [db.prepare(UPSERT_WORKSPACES).bind(JSON.stringify(workspaces.map(workspaceToRow)))]),
+    ...(entries.length === 0
+      ? []
+      : [db.prepare(UPSERT_ENTRIES).bind(JSON.stringify(entries.map(entryToRow)))]),
   ]);
   return { applied: true, rev: revRowSchema.parse(rowsAt(results, 0)[0]).rev };
 }
