@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
 import { callApi, dumpTables, fetchChanges, seedWorkspace } from '../../../test/helpers/api';
 import { makeEntry } from '../../../test/helpers/entries';
+import { changesResponseSchema } from '../../shared/api';
 import { applyWrite } from '../db/store';
 
 let testDatabase: TestDatabase;
@@ -45,6 +46,14 @@ describe('GET /api/changes', () => {
       ],
       entries: [],
     });
+  });
+
+  it('応答は、スキーマ（changesResponseSchema）を満たす', async () => {
+    await applyWrite(db(), { entries: [makeEntry({ id: 'e1' })] });
+
+    const res = await callApi(db(), 'GET', '/api/changes?since=0');
+
+    expect(changesResponseSchema.parse(res.body).entries).toEqual([makeEntry({ id: 'e1' })]);
   });
 
   it('SY-1: since より後に変わった行だけを返し、削除した行も含める', async () => {

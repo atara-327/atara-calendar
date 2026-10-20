@@ -9,6 +9,7 @@ import {
 } from '../../../test/helpers/api';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
+import { writeResponseSchema } from '../../shared/api';
 import type { Entry } from '../../shared/schema';
 import { applyWrite } from '../db/store';
 
@@ -133,6 +134,7 @@ describe('PUT /api/entries/:id（作成）', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ applied: true });
+    expect(writeResponseSchema.parse(res.body)).toEqual({ applied: true });
     const changes = await fetchChanges(db(), 0);
     expect(changes.entries).toEqual([
       makeEntry({
@@ -212,6 +214,7 @@ describe('PUT /api/entries/:id（作成）', () => {
 
     expect(second.status).toBe(200);
     expect(second.body).toEqual({ applied: false, reason: 'stale' });
+    expect(writeResponseSchema.parse(second.body)).toEqual({ applied: false, reason: 'stale' });
     expect(await dumpTables(db())).toEqual(before);
   });
 

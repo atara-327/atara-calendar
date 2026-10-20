@@ -1,7 +1,16 @@
+import { z } from 'zod';
 import { addDays, dateToDays, dateToYmd, dayOfWeek, daysToDate, type DateStr } from './date';
 import { isDayOff, isWeekday } from './holidays';
 import { MAX_YEAR, MIN_YEAR } from './solarTerms';
-import type { Entry, EntryChanges, EntryDraft, Rrule, Scope } from './schema';
+import {
+  dateStringSchema,
+  entrySchema,
+  type Entry,
+  type EntryChanges,
+  type EntryDraft,
+  type Rrule,
+  type Scope,
+} from './schema';
 
 /** 回の判定に必要な、系列の列。 */
 export interface SeriesRule {
@@ -91,33 +100,39 @@ export function lastCoveredDate({ allDay, startDate, endDate, endTime }: Coverag
   return previousDay < startDate ? startDate : previousDay;
 }
 
-/** 展開した 1 回。表示と通知に必要な内容を、元の行から写している。 */
-export interface Occurrence extends Pick<
-  Entry,
-  | 'kind'
-  | 'title'
-  | 'workspaceId'
-  | 'allDay'
-  | 'startDate'
-  | 'startTime'
-  | 'endDate'
-  | 'endTime'
-  | 'location'
-  | 'url'
-  | 'memo'
-  | 'notifyEnabled'
-  | 'notifyOffsetMin'
-> {
-  /** 内容の元の行の id。例外の回なら例外の行、そうでなければ系列（または繰り返さない予定）の行。 */
-  entryId: string;
-  /** 系列の id。繰り返さない予定なら自分の id。 */
-  seriesId: string;
-  /** 回の日付。例外なら originalDate、そうでなければ生成した日。変更・削除の対象を指すのに使う。 */
-  occurrenceDate: DateStr;
-  isException: boolean;
-  /** 繰り返しの系列の回なら true、繰り返さない予定なら false。範囲を選ぶ画面を出すかどうかの判断に使う。 */
-  recurring: boolean;
-}
+/**
+ * 展開した 1 回。表示と通知に必要な内容を、元の行から写している。
+ * API の応答（GET /api/occurrences）にも使うので、型は Zod のスキーマから導く。
+ */
+export const occurrenceSchema = entrySchema
+  .pick({
+    kind: true,
+    title: true,
+    workspaceId: true,
+    allDay: true,
+    startDate: true,
+    startTime: true,
+    endDate: true,
+    endTime: true,
+    location: true,
+    url: true,
+    memo: true,
+    notifyEnabled: true,
+    notifyOffsetMin: true,
+  })
+  .extend({
+    /** 内容の元の行の id。例外の回なら例外の行、そうでなければ系列（または繰り返さない予定）の行。 */
+    entryId: z.string(),
+    /** 系列の id。繰り返さない予定なら自分の id。 */
+    seriesId: z.string(),
+    /** 回の日付。例外なら originalDate、そうでなければ生成した日。変更・削除の対象を指すのに使う。 */
+    occurrenceDate: dateStringSchema,
+    isException: z.boolean(),
+    /** 繰り返しの系列の回なら true、繰り返さない予定なら false。範囲を選ぶ画面を出すかどうかの判断に使う。 */
+    recurring: z.boolean(),
+  });
+
+export type Occurrence = z.infer<typeof occurrenceSchema>;
 
 function toOccurrence(
   row: Entry,

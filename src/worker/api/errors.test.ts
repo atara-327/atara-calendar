@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
 import { callApi } from '../../../test/helpers/api';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
+import { apiErrorBodySchema } from '../../shared/api';
 import { isForeignKeyViolation } from './errors';
 
 let testDatabase: TestDatabase;
@@ -107,6 +108,7 @@ describe('想定していない例外', () => {
 
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'internal_error', message: 'サーバーでエラーが起きました' });
+    expect(apiErrorBodySchema.parse(res.body).error).toBe('internal_error');
     expect(JSON.stringify(res.body)).not.toContain('secret-internal-detail');
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining('secret-internal-detail'),

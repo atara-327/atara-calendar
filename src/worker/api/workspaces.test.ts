@@ -1,9 +1,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
-import { callApi, dumpTables, fetchChanges, seedWorkspace } from '../../../test/helpers/api';
+import {
+  callApi,
+  callParsed,
+  dumpTables,
+  fetchChanges,
+  seedWorkspace,
+} from '../../../test/helpers/api';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
-import type { OccurrencesResponse } from '../../shared/api';
+import { occurrencesResponseSchema } from '../../shared/api';
 import { applyWrite } from '../db/store';
 
 let testDatabase: TestDatabase;
@@ -391,12 +397,12 @@ describe('DELETE /api/workspaces/:id', () => {
     }
 
     async function occurrenceDates() {
-      const res = await callApi(db(), 'GET', '/api/occurrences?from=2026-10-19&to=2026-10-25');
-      // 応答の形そのものは、occurrences.test.ts が確かめる。ここは、中身を読むための型付け。
-      return (res.body as OccurrencesResponse).occurrences.map(({ entryId, startDate }) => [
-        entryId,
-        startDate,
-      ]);
+      const { occurrences } = await callParsed(
+        db(),
+        '/api/occurrences?from=2026-10-19&to=2026-10-25',
+        occurrencesResponseSchema,
+      );
+      return occurrences.map(({ entryId, startDate }) => [entryId, startDate]);
     }
 
     it('Q6: 移していた回は消え、移す前の日（10-20）に、系列の回は戻らない。w1 の他の回は出る', async () => {

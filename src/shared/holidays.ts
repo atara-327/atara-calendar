@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   addDays,
   dateToDays,
@@ -7,6 +8,7 @@ import {
   ymdToDate,
   type DateStr,
 } from './date';
+import { dateStringSchema } from './schema';
 import { assertSupportedYear, solarTermDate, type SolarLongitude } from './solarTerms';
 
 /** 祝日の上書き。name が null なら、その日を祝日から外す（設計書 Q8）。 */
@@ -15,10 +17,10 @@ export interface HolidayOverride {
   readonly name: string | null;
 }
 
-export interface NamedDate {
-  readonly date: DateStr;
-  readonly name: string;
-}
+/** 日付と名前（祝日・記念日）。API の応答（GET /api/occurrences）にも使うので、型は Zod のスキーマから導く。 */
+export const namedDateSchema = z.object({ date: dateStringSchema, name: z.string() });
+
+export type NamedDate = z.infer<typeof namedDateSchema>;
 
 export type Observance = NamedDate;
 

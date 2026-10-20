@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unusedDb } from '../../test/helpers/env';
+import { apiErrorBodySchema } from '../shared/api';
 import type { Bindings } from './env';
 import { app } from './index';
 
@@ -136,7 +137,9 @@ describe('/api/ の下の、存在しないパスと、違うメソッド', () =
 
     expect(res.status).toBe(404);
     expect(res.headers.get('Content-Type')).toContain('application/json');
-    expect(await res.json()).toEqual(notFound);
+    const body: unknown = await res.json();
+    expect(body).toEqual(notFound);
+    expect(apiErrorBodySchema.parse(body)).toEqual(notFound);
   });
 
   it('セキュリティヘッダーが付く', async () => {

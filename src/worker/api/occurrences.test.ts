@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OccurrencesResponse } from '../../shared/api';
+import { occurrencesResponseSchema, type OccurrencesResponse } from '../../shared/api';
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
-import { callApi, dumpTables, seedWorkspace } from '../../../test/helpers/api';
+import { callApi, callParsed, dumpTables, seedWorkspace } from '../../../test/helpers/api';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { applyWrite } from '../db/store';
@@ -31,11 +31,8 @@ function db(): D1Database {
   return testDatabase.db;
 }
 
-async function occurrences(from: string, to: string): Promise<OccurrencesResponse> {
-  const res = await callApi(db(), 'GET', `/api/occurrences?from=${from}&to=${to}`);
-  expect(res.status).toBe(200);
-  // 応答の形は、各テストの toEqual が確かめる。ここは、中身を読むための型付け。
-  return res.body as OccurrencesResponse;
+function occurrences(from: string, to: string): Promise<OccurrencesResponse> {
+  return callParsed(db(), `/api/occurrences?from=${from}&to=${to}`, occurrencesResponseSchema);
 }
 
 const invalidRequest = { error: 'invalid_request', message: '入力が正しくありません' };
