@@ -101,6 +101,23 @@ export const entryChangesSchema = z.strictObject(
 
 export type EntryChanges = z.infer<typeof entryChangesSchema>;
 
+/**
+ * ワークスペースの1行（設計書 4.2 の workspaces）。builtin は、組み込みの「祝日」「記念日」の印（WS-4）。
+ * color は '#RRGGBB' の形だけを確かめる。選べる 8 色に絞るかどうかは、ワークスペースの編集（実装 #10）で決める。
+ */
+export const workspaceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: "色は '#RRGGBB' で指定してください" }),
+  sortOrder: z.number().int(),
+  visible: z.boolean(),
+  builtin: z.enum(['holiday', 'observance']).nullable(),
+  editedAt: z.number().int(),
+  deletedAt: z.number().int().nullable(),
+});
+
+export type Workspace = z.infer<typeof workspaceSchema>;
+
 /** 繰り返し予定の変更・削除の範囲（RP-4）。 */
 export const scopeSchema = z.enum(['this', 'following', 'all']);
 
