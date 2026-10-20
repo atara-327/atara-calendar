@@ -1,0 +1,12 @@
+# 手元の開発（wrangler dev）用の設定の例。.dev.vars にコピーして使う（.dev.vars は Git に入れない）。
+# このファイルには、実際のメールアドレスなどを書かない。
+
+# 'dev' のときだけ、Access の JWT の確認を省略する。手元には Access がないため。
+# 本番の設定には書かない（書かなければ、確認は省略されない）。
+AUTH_MODE=dev
+
+# ログインを許可するメールアドレス（AUTH_MODE=dev のときは使わない）
+ALLOWED_EMAIL=
+
+# 許可するサービストークンの Client ID（MCP を作るまでは空）
+ALLOWED_SERVICE_TOKEN_ID=

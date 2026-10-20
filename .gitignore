@@ -5,5 +5,6 @@ dist/
 # 秘密情報（Webhook URL・メールアドレスなど）
 .dev.vars
 .dev.vars.*
+!.dev.vars.example
 .env
 .env.*

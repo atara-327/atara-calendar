@@ -9,4 +9,10 @@
   },
   "workers_dev": false,
   "preview_urls": false,
+  // Access の設定（秘密ではない）。Access のアプリを作ったあとに、実際の値を入れる。
+  // 空のままだと、Worker は API を拒否する（設定漏れで認証が素通りしないように）。
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+  },
 }
