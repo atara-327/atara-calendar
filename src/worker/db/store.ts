@@ -102,24 +102,33 @@ export type WriteResult = { applied: false } | { applied: true; rev: number };
  * 当たるおそれがあるため。行ごとに値を bind しないのも、1 文に bind できる値が 100 個までで、
  * 行数に上限が付いてしまうため。
  */
-function upsertSql(table: 'workspaces' | 'entries', columns: readonly string[]): string {
-  const assignments = columns
-    .filter((column) => column !== 'id')
-    .map((column) => `${column} = excluded.${column}`);
+function upsertSql(
+  table: 'workspaces' | 'entries',
+  columns: readonly string[],
+  extraAssignments: readonly string[] = [],
+): string {
+  const assignments = [
+    ...columns
+      .filter((column) => column !== 'id')
+      .map((column) => `${column} = excluded.${column}`),
+    'rev = excluded.rev',
+    ...extraAssignments,
+  ];
   // rev は、同じ batch の先頭で増やした meta.rev を、後の文から参照して入れる。
-  // next_notify_at は書かない。通知の時刻は、通知を作る実装 #11 が計算する。
   // WHERE true は、SELECT の後の ON CONFLICT を、SQLite が JOIN の ON と取り違えないために要る。
   return [
     `INSERT INTO ${table} (${columns.join(', ')}, rev)`,
     `SELECT ${columns.map((column) => `json_extract(value, '$.${column}')`).join(', ')}, (SELECT rev FROM meta WHERE id = 1)`,
     'FROM json_each(?1) WHERE true',
-    `ON CONFLICT(id) DO UPDATE SET ${assignments.join(', ')}, rev = excluded.rev`,
+    `ON CONFLICT(id) DO UPDATE SET ${assignments.join(', ')}`,
     `WHERE excluded.edited_at > ${table}.edited_at`,
   ].join(' ');
 }
 
 const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS);
-const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS);
+// next_notify_at は、新しい行の INSERT では書かず（NULL）、更新では NULL に戻す。更新で残すと、変更・削除した
+// 予定の通知が、古い時刻に送られる。通知の時刻は、通知を作る実装 #11 が、更新のたびに計算し直す。
+const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, ['next_notify_at = NULL']);
 
 /** 表ごとの、id → 今の edited_at。id は表の中でだけ一意なので、2 つの表の結果を 1 つの Map にまとめない。 */
 interface CurrentEditedAt {

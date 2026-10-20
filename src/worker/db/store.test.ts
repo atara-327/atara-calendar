@@ -301,12 +301,60 @@ describe('applyWrite', () => {
       expect(await dump()).toEqual(before);
     });
 
-    it('next_notify_at は書かず、NULL のままにする（通知の実装 #11 が計算する）', async () => {
-      await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
+    describe('next_notify_at（通知の時刻は、通知を作る実装 #11 が計算する）', () => {
+      const NOTIFY_AT = 1_760_000_000_000;
 
-      const row = await db().prepare('SELECT next_notify_at FROM entries').first();
+      function nextNotifyAt() {
+        return db().prepare("SELECT next_notify_at FROM entries WHERE id = 'a'").first();
+      }
 
-      expect(row).toEqual({ next_notify_at: null });
+      it('新しい行では、書かず、NULL のままにする', async () => {
+        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
+
+        expect(await nextNotifyAt()).toEqual({ next_notify_at: null });
+      });
+
+      it('行を更新したら、古い通知の時刻を残さず、NULL に戻す（変更した予定の通知が古い時刻に飛ばないように）', async () => {
+        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
+        await db()
+          .prepare("UPDATE entries SET next_notify_at = ?1 WHERE id = 'a'")
+          .bind(NOTIFY_AT)
+          .run();
+
+        await applyWrite(db(), {
+          entries: [makeEntry({ id: 'a', title: '変更', editedAt: 2000 })],
+        });
+
+        expect(await nextNotifyAt()).toEqual({ next_notify_at: null });
+      });
+
+      it('行を削除したときも、NULL に戻す（削除した予定の通知が飛ばないように）', async () => {
+        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
+        await db()
+          .prepare("UPDATE entries SET next_notify_at = ?1 WHERE id = 'a'")
+          .bind(NOTIFY_AT)
+          .run();
+
+        await applyWrite(db(), {
+          entries: [makeEntry({ id: 'a', editedAt: 2000, deletedAt: 2000 })],
+        });
+
+        expect(await nextNotifyAt()).toEqual({ next_notify_at: null });
+      });
+
+      it('古くて捨てられた依頼では、行を更新しないので、通知の時刻も残る', async () => {
+        await applyWrite(db(), { entries: [makeEntry({ id: 'a', editedAt: 2000 })] });
+        await db()
+          .prepare("UPDATE entries SET next_notify_at = ?1 WHERE id = 'a'")
+          .bind(NOTIFY_AT)
+          .run();
+
+        await applyWrite(db(), {
+          entries: [makeEntry({ id: 'a', title: '古い', editedAt: 1000 })],
+        });
+
+        expect(await nextNotifyAt()).toEqual({ next_notify_at: NOTIFY_AT });
+      });
     });
 
     it('同じ id の行が 1 つの依頼に 2 つあるのは、呼び出し側のバグなので、例外にする', async () => {
