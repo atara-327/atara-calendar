@@ -9,6 +9,9 @@
   },
   "workers_dev": false,
   "preview_urls": false,
+  // calendar.ataraman.com の全体をこの Worker で配信する（Custom Domain。DNS と証明書は Cloudflare が作る）。
+  // Access のアプリも同じドメインで作る（docs/setup.md の 3）。
+  "routes": [{ "pattern": "calendar.ataraman.com", "custom_domain": true }],
   // Access の設定（秘密ではない）。Access のアプリを作ったあとに、実際の値を入れる。
   // ACCESS_TEAM_DOMAIN は <チーム名>.cloudflareaccess.com の形で書く（https:// や / は付けない）。
   // 空のままか、書式が違うと、Worker は API を拒否する（設定漏れで認証が素通りしないように）。
