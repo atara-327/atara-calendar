@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { unusedDb } from '../../test/helpers/env';
 import type { Bindings } from './env';
 import { app } from './index';
 
-const devEnv: Bindings = { ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', AUTH_MODE: 'dev' };
+const devEnv: Bindings = { DB: unusedDb, ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', AUTH_MODE: 'dev' };
 
 // 本番と同じ設定（AUTH_MODE なし）。JWT のヘッダーを付けないので、鍵を取りに行く前に拒否される。
 const prodEnv: Bindings = {
+  DB: unusedDb,
   ACCESS_TEAM_DOMAIN: 'example-team.cloudflareaccess.com',
   ACCESS_AUD: 'test-audience',
   ALLOWED_EMAIL: 'me@example.com',

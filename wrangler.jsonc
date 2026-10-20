@@ -16,4 +16,13 @@
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atara-calendar",
+      // 仮の値。本番の D1 を作ったあと、実装 #5（デプロイ）で本物の id に差し替える。
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
 }

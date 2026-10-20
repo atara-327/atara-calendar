@@ -7,7 +7,9 @@ import {
   rruleSchema,
   scopeSchema,
   timeStringSchema,
+  workspaceSchema,
   type Entry,
+  type Workspace,
 } from './schema';
 
 const validEntry: Entry = {
@@ -120,6 +122,47 @@ describe('予定とタイムブロックの行', () => {
   it('サーバーの都合の列（rev など）は、読み込むと捨てられる', () => {
     const parsed = entrySchema.parse({ ...validEntry, rev: 5, nextNotifyAt: 1 });
     expect(parsed).toEqual(validEntry);
+  });
+});
+
+const validWorkspace: Workspace = {
+  id: 'w1',
+  name: '仕事',
+  color: '#4285F4',
+  sortOrder: 0,
+  visible: true,
+  builtin: null,
+  editedAt: 1_760_000_000_000,
+  deletedAt: null,
+};
+
+describe('WS-1・WS-4: ワークスペースの行', () => {
+  it('すべての列がそろった行は通り、同じ内容に戻る', () => {
+    expect(workspaceSchema.parse(validWorkspace)).toEqual(validWorkspace);
+  });
+
+  it.each(['holiday', 'observance'] as const)('組み込みの印 %s は通る', (builtin) => {
+    expect(workspaceSchema.safeParse({ ...validWorkspace, builtin }).success).toBe(true);
+  });
+
+  it('組み込みの印が holiday と observance 以外だと通らない', () => {
+    expect(workspaceSchema.safeParse({ ...validWorkspace, builtin: 'custom' }).success).toBe(false);
+  });
+
+  it.each(['#F28B82', '#9aa0a6'])('色 %s は通る', (color) => {
+    expect(workspaceSchema.safeParse({ ...validWorkspace, color }).success).toBe(true);
+  });
+
+  it.each(['F28B82', '#F28B8', '#F28B822', '#GGGGGG', 'red', ''])('色 %s は通らない', (color) => {
+    expect(workspaceSchema.safeParse({ ...validWorkspace, color }).success).toBe(false);
+  });
+
+  it('削除した行（deletedAt が数値）は通る', () => {
+    expect(workspaceSchema.safeParse({ ...validWorkspace, deletedAt: 1 }).success).toBe(true);
+  });
+
+  it('表示の ON/OFF が真偽値でないと通らない', () => {
+    expect(workspaceSchema.safeParse({ ...validWorkspace, visible: 1 }).success).toBe(false);
   });
 });
 

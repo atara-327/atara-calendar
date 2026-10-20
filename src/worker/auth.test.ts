@@ -9,6 +9,7 @@ import {
 } from 'jose';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accessAuth, remoteKeyResolver } from './auth';
+import { unusedDb } from '../../test/helpers/env';
 import type { AppEnv, Bindings } from './env';
 
 const TEAM_DOMAIN = 'example-team.cloudflareaccess.com';
@@ -18,6 +19,7 @@ const SERVICE_TOKEN_ID = 'test-client-id.access';
 const KID = 'test-key';
 
 const baseEnv: Bindings = {
+  DB: unusedDb,
   ACCESS_TEAM_DOMAIN: TEAM_DOMAIN,
   ACCESS_AUD: AUD,
   ALLOWED_EMAIL: EMAIL,
