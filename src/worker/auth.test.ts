@@ -239,6 +239,64 @@ describe('Access の JWT の検証（AU-1・NF-2）', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('ERR_JWT_EXPIRED'));
   });
 
+  it.each([
+    ['aud', { audience: 'other-audience' }],
+    ['iss', { issuer: 'https://other-team.cloudflareaccess.com' }],
+  ] satisfies [string, JwtOptions][])(
+    '%s が食い違った JWT は、食い違った項目の名前をログに残す',
+    async (claim, options) => {
+      await call(await makeJwt(options));
+
+      expect(console.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `ERR_JWT_CLAIM_VALIDATION_FAILED (claim: ${claim}, reason: check_failed)`,
+        ),
+      );
+    },
+  );
+
+  it('必須の項目（exp）がない JWT は、項目の名前と、ないことをログに残す', async () => {
+    await call(await makeJwt({ expiresAt: null }));
+
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('ERR_JWT_CLAIM_VALIDATION_FAILED (claim: exp, reason: missing)'),
+    );
+  });
+
+  it('期限が切れた JWT は、項目の名前をログに残す', async () => {
+    await call(await makeJwt({ expiresAt: nowSeconds() - 60 }));
+
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('ERR_JWT_EXPIRED (claim: exp, reason: check_failed)'),
+    );
+  });
+
+  it('項目の名前は残しても、JWT の値と設定の値はログに出さない', async () => {
+    const jwtAudience = 'secret-jwt-audience';
+    const jwtIssuer = 'https://secret-team.cloudflareaccess.com';
+
+    await call(await makeJwt({ audience: jwtAudience }));
+    await call(await makeJwt({ issuer: jwtIssuer }));
+
+    const logged = vi
+      .mocked(console.warn)
+      .mock.calls.map((args) => args.join(' '))
+      .join('\n');
+    expect(logged).toContain('claim: aud');
+    expect(logged).toContain('claim: iss');
+    for (const value of [jwtAudience, jwtIssuer, AUD, TEAM_DOMAIN]) {
+      expect(logged).not.toContain(value);
+    }
+  });
+
+  it('項目の確認ではない失敗（署名の食い違い）は、項目の名前を付けずにコードだけを残す', async () => {
+    await call(await makeJwt({ privateKey: untrusted.privateKey }));
+
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('JWT の検証に失敗しました (ERR_JWS_SIGNATURE_VERIFICATION_FAILED)'),
+    );
+  });
+
   it('公開鍵は、ACCESS_TEAM_DOMAIN のドメインについて取得する', async () => {
     const keyResolver = vi.fn(() => createLocalJWKSet({ keys: [publicJwk] }));
 

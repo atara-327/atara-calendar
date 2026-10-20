@@ -59,8 +59,16 @@ function clean(value: string | undefined): string {
 /**
  * 検証に失敗した理由。JOSEError は code で原因が決まる。それ以外（公開鍵の取得の失敗など）は
  * code がないので、message も残す。
+ *
+ * 項目の確認で落ちたとき（JWTClaimValidationFailed と、別のクラスの JWTExpired）は、code だけだと
+ * aud と iss のどちらが食い違ったか分からないので、項目の名前（claim）と理由（reason）も残す。
+ * 値（JWT の aud・iss の中身や、設定の値）と、それを持つ payload・message は出さない。名前だけで
+ * 切り分けには足りる一方、値まで出すと JWT の中身がログに残るため。
  */
 function describeError(error: unknown): string {
+  if (error instanceof errors.JWTClaimValidationFailed || error instanceof errors.JWTExpired) {
+    return `${error.code} (claim: ${error.claim}, reason: ${error.reason})`;
+  }
   if (error instanceof errors.JOSEError) return error.code;
   return error instanceof Error ? `unknown: ${error.message}` : 'unknown';
 }
