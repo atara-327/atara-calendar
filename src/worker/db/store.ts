@@ -120,7 +120,14 @@ export class KindMismatchError extends Error {
   }
 }
 
-/** applied: false は、サーバーの方が新しい（または同じ）行があって、依頼全体を捨てたこと。 */
+/**
+ * applied: false は、サーバーの方が新しい（または同じ）行があって、依頼全体を捨てたこと。
+ * applied: true の rev は、この依頼を書いた rev（行がない依頼では、今の rev）。
+ * 端末は、この rev を「最後に受け取った rev」として使ってはいけない。受け取りは GET /api/changes
+ * （readChanges）で行い、その rev だけを覚える。
+ * Why: この rev まで進めると、他の端末が先に書いた行（これより前の rev）や、割り込みで弾かれて、
+ * 別の端末の新しい編集が残っている行を、受け取らないまま取りこぼすため。
+ */
 export type WriteResult = { applied: false } | { applied: true; rev: number };
 
 /**
