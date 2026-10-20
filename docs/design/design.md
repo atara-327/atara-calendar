@@ -556,8 +556,9 @@ Access を通ったリクエストには、Access が署名した JWT（`Cf-Acce
 | `ACCESS_TEAM_DOMAIN` | Access のチーム名のドメイン | 通常の設定（`wrangler.jsonc` の `vars`。秘密ではない。Access のアプリを作るまでは空） |
 | `ACCESS_AUD` | Access アプリの宛先 ID | 通常の設定（同上） |
 
-- 手元の開発環境（`npm run dev`・`wrangler dev`）には Access がないので、`.dev.vars`（Git に入れないファイル）で `AUTH_MODE=dev` を指定したときだけ、JWT の確認を省略します。
+- 手元の開発環境（`npm run dev`・`wrangler dev`）には Access がないので、`.dev.vars`（Git に入れないファイル）で `AUTH_MODE=dev` を指定し、かつリクエストのホスト名が `localhost` か `127.0.0.1` のときだけ、JWT の確認を省略します。それ以外のホストでは、`AUTH_MODE=dev` でも JWT を確認します。
   - **Why**: 本番の設定にはこの値を書かないので、本番で確認が省略されることはありません。「指定しなければ厳しい側」にしておけば、設定を忘れても危険になりません。
+  - **Why ホスト名でも絞るのか**: 誤って本番に `AUTH_MODE` が入っても、本番のドメインでは効かないようにするためです。LAN の IP アドレスなど、`localhost` 以外で開いた開発サーバーでは、JWT の確認を省略できません。
   - 書き方の例は `.dev.vars.example`（実際の値は書かない）。`.dev.vars` にコピーして使います。
 - Secrets と `.dev.vars` の値の型は、`wrangler types` では作られないので、`src/worker/env.ts` に手で書きます。`npm run cf-typegen` は、`.dev.vars` を読まないようにしてあります。
   - **Why**: 手元の `.dev.vars` の内容が `worker-configuration.d.ts` に入ると、`.dev.vars` のない CI の `wrangler types --check` が失敗するためです。

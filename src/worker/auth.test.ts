@@ -75,10 +75,10 @@ function buildApp(keyResolver = () => createLocalJWKSet({ keys: [publicJwk] })) 
   return app;
 }
 
-/** jwt が null ならヘッダーを付けない。 */
-function call(jwt: string | null, env: Partial<Bindings> = {}) {
+/** jwt が null ならヘッダーを付けない。url を省かなければ、宛先は http://localhost になる。 */
+function call(jwt: string | null, env: Partial<Bindings> = {}, url = '/api/whoami') {
   const headers: Record<string, string> = jwt === null ? {} : { 'Cf-Access-Jwt-Assertion': jwt };
-  return buildApp().request('/api/whoami', { headers }, { ...baseEnv, ...env });
+  return buildApp().request(url, { headers }, { ...baseEnv, ...env });
 }
 
 describe('Access の JWT の検証（AU-1・NF-2）', () => {
@@ -300,6 +300,55 @@ describe('AUTH_MODE（手元の開発用。NF-2）', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ kind: 'user', email: 'dev@localhost' });
+  });
+
+  it.each([
+    'http://localhost/api/whoami',
+    'http://localhost:5173/api/whoami',
+    'http://127.0.0.1:8787/api/whoami',
+  ])('dev のときは、宛先が %s なら JWT がなくても通す', async (url) => {
+    const res = await call(null, { AUTH_MODE: 'dev' }, url);
+
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    'https://calendar.ataraman.com/api/whoami',
+    'http://192.168.0.10:5173/api/whoami',
+    'https://localhost.example.com/api/whoami',
+    'https://127.0.0.1.example.com/api/whoami',
+    'https://example.com/api/whoami?host=localhost',
+  ])('dev でも、宛先が %s なら dev として扱わず、JWT を検証する', async (url) => {
+    const res = await call(null, { AUTH_MODE: 'dev' }, url);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('dev でも、localhost 以外の宛先では、正しい JWT の本人として通す（dev の本人にはならない）', async () => {
+    const res = await call(
+      await makeJwt(),
+      { AUTH_MODE: 'dev' },
+      'https://calendar.ataraman.com/api/whoami',
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ kind: 'user', email: EMAIL });
+  });
+
+  it('dev でも、localhost 以外の宛先では、Access の設定が空なら 500（設定の確認を省略しない）', async () => {
+    const res = await call(
+      null,
+      { AUTH_MODE: 'dev', ACCESS_AUD: '' },
+      'https://calendar.ataraman.com/api/whoami',
+    );
+
+    expect(res.status).toBe(500);
+  });
+
+  it('dev が効かなかったときは、ログで気づけるようにする', async () => {
+    await call(null, { AUTH_MODE: 'dev' }, 'https://calendar.ataraman.com/api/whoami');
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('AUTH_MODE=dev'));
   });
 
   it('dev のときは、Access の設定が空でも通す（手元には Access がない）', async () => {

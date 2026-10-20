@@ -8,7 +8,10 @@ export type Bindings = Env & {
   ALLOWED_EMAIL?: string;
   /** 許可するサービストークンの Client ID（Secrets）。MCP を作るまでは空。 */
   ALLOWED_SERVICE_TOKEN_ID?: string;
-  /** 'dev' のときだけ JWT の確認を省略する（.dev.vars）。本番には設定しない。 */
+  /**
+   * 'dev' で、リクエストの宛先が localhost・127.0.0.1 のときだけ JWT の確認を省略する（.dev.vars）。
+   * 本番には設定しない。
+   */
   AUTH_MODE?: string;
 };
 

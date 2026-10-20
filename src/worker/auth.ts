@@ -25,6 +25,16 @@ export const remoteKeyResolver: KeyResolver = (teamDomain) => {
 const DEV_ACTOR: Actor = { kind: 'user', email: 'dev@localhost' };
 
 /**
+ * AUTH_MODE=dev を効かせるリクエストの宛先。AUTH_MODE の値だけで決めないのは、誤って本番に
+ * 値が入ったとき、本番のドメインでも認証が外れてしまうため。
+ */
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
+
+function isLocalRequest(url: string): boolean {
+  return LOCAL_HOSTNAMES.has(new URL(url).hostname);
+}
+
+/**
  * 403 の本文には理由を入れない。どこで弾かれたかは、攻撃者への手がかりになるため。
  * 理由は、ログ（wrangler tail）にだけ残す。
  */
@@ -66,9 +76,14 @@ export function accessAuth(options: { keyResolver?: KeyResolver } = {}) {
     const env = c.env;
 
     if (env.AUTH_MODE === 'dev') {
-      c.set('actor', DEV_ACTOR);
-      await next();
-      return;
+      if (isLocalRequest(c.req.url)) {
+        c.set('actor', DEV_ACTOR);
+        await next();
+        return;
+      }
+      console.warn(
+        '[auth] AUTH_MODE=dev は localhost・127.0.0.1 以外では効かないので、JWT を検証します',
+      );
     }
 
     const teamDomain = clean(env.ACCESS_TEAM_DOMAIN);
