@@ -13,7 +13,8 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true
   },
   "include": ["src/client", "src/shared"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]

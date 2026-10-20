@@ -13,7 +13,14 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true
   },
-  "include": ["worker-configuration.d.ts", "src/**/*.test.ts", "src/**/*.test.tsx", "test/**/*.ts"]
+  "include": [
+    "worker-configuration.d.ts",
+    "src/shared/astronomia.d.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "test/**/*.ts"
+  ]
 }
