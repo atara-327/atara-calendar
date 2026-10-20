@@ -99,12 +99,47 @@ export interface WriteRequest {
 export type WriteResult = { applied: false } | { applied: true; rev: number };
 
 /**
+ * upsert の JSON の値 1 つの大きさの上限（バイト）。D1 は、値 1 つを約 2MB までしか受け付けず、超えると
+ * SQLITE_TOOBIG で batch 全体が失敗する。余裕をもって、その半分にする。
+ * Miniflare の上限は 5〜20MB の間なので、テストでは、2MB を超えても失敗しない。本番でだけ失敗する。
+ */
+export const MAX_UPSERT_VALUE_BYTES = 1_000_000;
+
+const textEncoder = new TextEncoder();
+
+/**
+ * 行を、JSON 配列の文字列に分ける。1 つの文字列は、MAX_UPSERT_VALUE_BYTES を超えないようにする。
+ * 大きさは、string.length（文字数）ではなく、UTF-8 のバイト数で数える。D1 の上限がバイトで、日本語は
+ * 1 文字 3 バイトなので、文字数で数えると、上限の 3 倍近くまで大きくなってしまう。
+ * 1 行だけで上限を超える行は、行を分けられないので、その行だけで 1 つのかたまりにする。そういう行は、
+ * ここでは防げない。入力の文字列の長さの上限（実装 #4c。設計書 4.2）で防ぐ。
+ */
+function toJsonChunks(rows: readonly unknown[]): string[] {
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  let bytes = 2; // 配列の [ と ]
+  for (const row of rows) {
+    const json = JSON.stringify(row);
+    const size = textEncoder.encode(json).length + 1; // 区切りの ,
+    if (current.length > 0 && bytes + size > MAX_UPSERT_VALUE_BYTES) {
+      chunks.push(current);
+      current = [];
+      bytes = 2;
+    }
+    current.push(json);
+    bytes += size;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks.map((jsons) => `[${jsons.join(',')}]`);
+}
+
+/**
  * 1 つの表への書き込みを、1 文の upsert にする。行は、列名をキーにしたオブジェクトの JSON 配列を、
- * 1 つの値（?1）として渡す。
+ * 1 つの値（?1）として渡す。値は、大きさで分けたかたまりごとに 1 つ（toJsonChunks）。
  * 1 行ごとに 1 文にしないのは、ワークスペースの削除（中の予定をすべて論理削除）や、例外の多い系列の
  * 削除で、1 回の依頼が数百行になり、D1 の 1 回の呼び出しあたりのクエリ数の上限（無料プラン）に
  * 当たるおそれがあるため。行ごとに値を bind しないのも、1 文に bind できる値が 100 個までで、
- * 行数に上限が付いてしまうため。
+ * 1 文に入る行が数行に限られ、結局、文の数が行数に比例して増えてしまうため。
  */
 function upsertSql(
   table: 'workspaces' | 'entries',
@@ -221,20 +256,30 @@ export async function applyWrite(
   // 自分 1 人の利用で、2 台がほぼ同時に同じ行を書く確率がごく小さいため。割り込まれても、
   // upsert の WHERE が、新しい行を古い行で上書きすることだけは防ぐ。
   // workspaces を先に書く。entries の workspace_id は外部キーで、同じ依頼で作るワークスペースを指すことがあるため。
-  const writes: { table: string; sql: string; rows: readonly unknown[] }[] = [
+  const tables = [
     { table: 'workspaces', sql: UPSERT_WORKSPACES, rows: workspaces.map(workspaceToRow) },
     { table: 'entries', sql: UPSERT_ENTRIES, rows: entries.map(entryToRow) },
   ].filter(({ rows }) => rows.length > 0);
+  // 値を分けても、かたまりの文は同じ batch に入れる。batch は 1 つのトランザクションなので、全部書くか、
+  // 何も書かないかは変わらない。
+  const upserts = tables.flatMap(({ table, sql, rows }) =>
+    toJsonChunks(rows).map((json) => ({ table, statement: db.prepare(sql).bind(json) })),
+  );
   const results = await db.batch([
     db.prepare('UPDATE meta SET rev = rev + 1 WHERE id = 1 RETURNING rev'),
-    ...writes.map(({ sql, rows }) => db.prepare(sql).bind(JSON.stringify(rows))),
+    ...upserts.map(({ statement }) => statement),
   ]);
-  // 1 つ目の結果は rev の UPDATE なので、writes[i] の結果は i + 1 番目。
+  // 1 つ目の結果は rev の UPDATE なので、upserts[i] の結果は i + 1 番目。
   // 書けた行数が少ないのは、確認の後に別の書き込みが同じ行を新しく書き、upsert の WHERE が弾いたとき。
   // 割り込みは許容しているので（上）、例外にも applied: false にもせず、起きたことだけをログに残す。
   // id や内容は出さない（予定のタイトルなどが、ログに残らないように）。
-  writes.forEach(({ table, rows }, index) => {
-    const written = resultAt(results, index + 1).meta.changes;
+  const writtenByTable = new Map<string, number>();
+  upserts.forEach(({ table }, index) => {
+    const changes = resultAt(results, index + 1).meta.changes;
+    writtenByTable.set(table, (writtenByTable.get(table) ?? 0) + changes);
+  });
+  tables.forEach(({ table, rows }) => {
+    const written = writtenByTable.get(table) ?? 0;
     if (written < rows.length) {
       console.warn(
         `applyWrite: ${table} の ${String(rows.length)} 行のうち、書けたのは ${String(written)} 行でした（別の書き込みに割り込まれた可能性があります）`,

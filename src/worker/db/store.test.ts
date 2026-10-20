@@ -6,7 +6,13 @@ import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1'
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { CorruptRowError } from './rows';
-import { applyWrite, readChanges, type Database, type WriteRequest } from './store';
+import {
+  MAX_UPSERT_VALUE_BYTES,
+  applyWrite,
+  readChanges,
+  type Database,
+  type WriteRequest,
+} from './store';
 
 let testDatabase: TestDatabase;
 
@@ -45,6 +51,19 @@ async function dump() {
 
 function byId(rows: readonly Entry[]): Record<string, Entry> {
   return Object.fromEntries(rows.map((row) => [row.id, row]));
+}
+
+/** 1 回目の batch（edited_at の確認）の後、2 回目（書き込み）の前に、別の端末の書き込みを割り込ませる db。 */
+function interleavedWith(interleavingWrite: WriteRequest): Database {
+  let batches = 0;
+  return {
+    prepare: (query) => db().prepare(query),
+    batch: async <T>(statements: D1PreparedStatement[]) => {
+      batches += 1;
+      if (batches === 2) await applyWrite(db(), interleavingWrite);
+      return db().batch<T>(statements);
+    },
+  };
 }
 
 describe('readChanges', () => {
@@ -392,18 +411,33 @@ describe('applyWrite', () => {
     });
   });
 
-  describe('1 回の書き込みは、表ごとに 1 文（D1 の 1 回の呼び出しあたりのクエリ数の上限のため）', () => {
-    /** 渡された batch の文の数を、呼ばれた順に記録する db。 */
+  describe('1 回の書き込みの文の数（D1 の 1 回の呼び出しあたりのクエリ数の上限のため）', () => {
+    /** 渡された batch の文の数と、upsert に bind された値の大きさ（UTF-8 のバイト数）を、呼ばれた順に記録する db。 */
     function recordingDatabase() {
       const batchSizes: number[] = [];
+      const upsertValueBytes: number[] = [];
+      const encoder = new TextEncoder();
       const database: Database = {
-        prepare: (query) => db().prepare(query),
+        prepare: (query) => {
+          const statement = db().prepare(query);
+          if (!query.includes('ON CONFLICT')) return statement;
+          // Miniflare の文は bind を差し替えられないので、upsert の文だけ、bind を記録する入れ物で包む。
+          // 包んだ文は batch に渡さない。bind の結果（本物の文）だけを、batch に渡す。
+          const recording = {
+            bind: (...values: unknown[]) => {
+              for (const value of values)
+                upsertValueBytes.push(encoder.encode(String(value)).length);
+              return statement.bind(...values);
+            },
+          };
+          return recording as unknown as D1PreparedStatement;
+        },
         batch: <T>(statements: D1PreparedStatement[]) => {
           batchSizes.push(statements.length);
           return db().batch<T>(statements);
         },
       };
-      return { database, batchSizes };
+      return { database, batchSizes, upsertValueBytes };
     }
 
     it('予定とワークスペースを数百行書いても、書き込みの batch は rev・workspaces・entries の 3 文', async () => {
@@ -424,6 +458,110 @@ describe('applyWrite', () => {
       await applyWrite(database, { entries: [makeEntry({ id: 'a' }), makeEntry({ id: 'b' })] });
 
       expect(batchSizes).toEqual([2, 2]);
+    });
+
+    describe('upsert の値 1 つは、D1 の上限（約 2MB）に収まるように、約 1MB ごとのかたまりに分ける', () => {
+      /** UTF-8 で約 300KB の予定。日本語は 1 文字 3 バイトなので、文字数は 10 万。 */
+      const bigEntry = (id: string, overrides: Partial<Entry> = {}) =>
+        makeEntry({ id, memo: '漢'.repeat(100_000), ...overrides });
+      const bigEntries = (count: number) =>
+        Array.from({ length: count }, (_, index) => bigEntry(`big${String(index)}`));
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('大きな依頼でも、bind する値は 1 つ残らず上限以下で、かたまりごとの文が、同じ 1 回の batch に入る', async () => {
+        const { database, batchSizes, upsertValueBytes } = recordingDatabase();
+
+        await applyWrite(database, { entries: bigEntries(8) });
+
+        expect(upsertValueBytes).toHaveLength(3);
+        expect(upsertValueBytes.every((bytes) => bytes <= MAX_UPSERT_VALUE_BYTES)).toBe(true);
+        // 1 つ目は edited_at の確認、2 つ目が書き込み（rev の UPDATE ＋ かたまりごとの upsert）
+        expect(batchSizes).toEqual([2, 1 + 3]);
+      });
+
+      it('大きさは、文字数ではなく UTF-8 のバイト数で数える（文字数の合計は上限未満でも、バイト数が超えるなら分ける）', async () => {
+        const { database, upsertValueBytes } = recordingDatabase();
+
+        await applyWrite(database, { entries: bigEntries(5) });
+
+        expect(5 * 100_000).toBeLessThan(MAX_UPSERT_VALUE_BYTES);
+        expect(upsertValueBytes).toHaveLength(2);
+        expect(upsertValueBytes.every((bytes) => bytes <= MAX_UPSERT_VALUE_BYTES)).toBe(true);
+      });
+
+      it('複数のかたまりに分かれても、全部の行が同じ rev になり、読み直すと同じ行になる', async () => {
+        const entries = bigEntries(8);
+
+        const result = await applyWrite(db(), { entries });
+
+        expect(result).toEqual({ applied: true, rev: 1 });
+        const changes = await readChanges(db(), 0);
+        expect(changes.rev).toBe(1);
+        expect(changes.entries.map(({ rev }) => rev)).toEqual(Array.from({ length: 8 }, () => 1));
+        expect(byId(changes.entries.map(({ entry }) => entry))).toEqual(byId(entries));
+      });
+
+      it('途中のかたまりで失敗したら、前のかたまりも含めて、1 行も書かれず、rev も進まない（全部か無しか）', async () => {
+        const { database, upsertValueBytes } = recordingDatabase();
+        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
+        const before = await dump();
+
+        // 最後のかたまりの行が、存在しないワークスペースを指している（外部キーの違反）
+        const write = applyWrite(database, {
+          entries: [...bigEntries(7), bigEntry('ng', { workspaceId: 'no-such-workspace' })],
+        });
+
+        await expect(write).rejects.toThrow(/FOREIGN KEY/);
+        expect(upsertValueBytes).toHaveLength(3);
+        expect(await dump()).toEqual(before);
+      });
+
+      it('書けた行数は、かたまりをまたいで表ごとに合計して比べる。弾かれた行があれば、合計の行数をログに出す', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        // 1 つ目のかたまり（big0）と、3 つ目のかたまり（big7）の行が、別の端末の新しい編集に割り込まれる
+        const interleaving = interleavedWith({
+          entries: [
+            makeEntry({ id: 'big0', editedAt: 3000 }),
+            makeEntry({ id: 'big7', editedAt: 3000 }),
+          ],
+        });
+
+        await applyWrite(interleaving, {
+          entries: bigEntries(8).map((e) => ({ ...e, editedAt: 2000 })),
+        });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('entries の 8 行のうち、書けたのは 6 行');
+      });
+
+      it('かたまりが複数でも、全部の行が書けたときは、ログを出さない', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        await applyWrite(db(), { entries: bigEntries(8) });
+
+        expect(warn).not.toHaveBeenCalled();
+      });
+
+      it('1 行だけで上限を超える行は、分けられないので、その行だけで 1 つのかたまりになる（防ぐのは、入力の文字列の長さの上限。#4c）', async () => {
+        const { database, upsertValueBytes } = recordingDatabase();
+        const huge = bigEntry('huge', { memo: '漢'.repeat(400_000) });
+
+        const result = await applyWrite(database, {
+          entries: [makeEntry({ id: 'a' }), huge, makeEntry({ id: 'b' })],
+        });
+
+        expect(result).toEqual({ applied: true, rev: 1 });
+        expect(upsertValueBytes.filter((bytes) => bytes > MAX_UPSERT_VALUE_BYTES)).toHaveLength(1);
+        expect(upsertValueBytes).toHaveLength(3);
+        expect((await readChanges(db(), 0)).entries.map(({ entry }) => entry.id)).toEqual([
+          'a',
+          'b',
+          'huge',
+        ]);
+      });
     });
 
     it('3000 行の依頼（ワークスペースの削除で、中の予定をすべて論理削除するような依頼）を書ける', async () => {
@@ -683,19 +821,6 @@ describe('applyWrite', () => {
       expect(result).toEqual({ applied: false });
       expect(await dump()).toEqual(before);
     });
-
-    /** 1 回目の batch（edited_at の確認）の後、2 回目（書き込み）の前に、別の端末の書き込みを割り込ませる db。 */
-    function interleavedWith(interleavingWrite: WriteRequest): Database {
-      let batches = 0;
-      return {
-        prepare: (query) => db().prepare(query),
-        batch: async <T>(statements: D1PreparedStatement[]) => {
-          batches += 1;
-          if (batches === 2) await applyWrite(db(), interleavingWrite);
-          return db().batch<T>(statements);
-        },
-      };
-    }
 
     describe('確認と書き込みの間に、別の書き込みが割り込んだとき', () => {
       it('新しい行を古い行で上書きしない', async () => {
