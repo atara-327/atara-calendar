@@ -45,6 +45,8 @@ Claude はユーザーの Cloudflare アカウントや Discord を操作でき�
 
 - **持ち越しの確認**: 祝日の計算の CPU 時間（起動直後で約3〜5ms。Node での実測）を、Worker（workerd）で実測する。#4（API）で年をまたぐ範囲を返すとき、#11（通知）で次の通知時刻を計算するときに確かめる。
   - **Why**: 無料プランの Worker は CPU 時間が1回10ms までで（[設計書 付録A.2](design/design.md#a2-無料枠の見積もりnf-1)）、Node での実測だけでは、Worker で収まるかがわからないため。
+- **持ち越しの確認**: 繰り返しの展開の CPU 時間（Node の実測で、系列100件の1年分が約34ms）。#4 で `GET /api/occurrences` の期間に上限を設けるか、展開を速くするかを決める。
+  - **Why**: 無料プランの Worker は CPU 時間が1回10ms までなので、Node の実測の時点で、収まらない恐れがあるため。
 - 各 PR は機能ごとのブランチで implementer が作り、reviewer のレビューを経てから、**ユーザーが main にマージ**します（[CLAUDE.md](../CLAUDE.md)）。
 
 ## 4. 試用・受け入れ確認
