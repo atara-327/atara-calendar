@@ -32,6 +32,7 @@ const MESSAGES: Record<ApiErrorKind, string> = {
   last_workspace: '最後のワークスペースは削除できません',
   edited_at_in_future: '編集した時刻が未来すぎます',
   conflict: '依頼の内容が、保存されているデータと食い違っています',
+  not_found: '存在しない API です',
   internal_error: 'サーバーでエラーが起きました',
 };
 
@@ -90,4 +91,16 @@ export function handleError(error: Error, c: Context<AppEnv>): Response | Promis
   }
   const body: ApiErrorBody = { error: kind, message: MESSAGES[kind] };
   return c.json(body, status);
+}
+
+/**
+ * /api/ の下の、存在しないパスと、存在するパスへの違うメソッド。Hono の既定の text/plain の "404 Not Found" ではなく、
+ * 他のエラーと同じ JSON にする。端末や MCP が、エラーを同じ形で読めるため。
+ * 認証より前には出ない（認証の後ろに置いたミドルウェアが、先に応答しないときだけ、ここに来る）ので、
+ * ログインしていない相手に、API の存在を教えない（設計書 10.2）。
+ */
+export function handleNotFound(c: Context<AppEnv>): Response {
+  console.warn(`[api] 404 not_found: ${c.req.method} ${c.req.path}`);
+  const body: ApiErrorBody = { error: 'not_found', message: MESSAGES.not_found };
+  return c.json(body, 404);
 }

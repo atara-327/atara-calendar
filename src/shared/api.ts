@@ -84,6 +84,7 @@ export type ApiErrorKind =
   | 'last_workspace'
   | 'edited_at_in_future'
   | 'conflict'
+  | 'not_found'
   | 'internal_error';
 
 export interface ApiErrorBody {
