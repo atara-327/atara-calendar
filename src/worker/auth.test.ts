@@ -276,6 +276,14 @@ describe('サービストークン（AU-1・NF-2。将来の MCP 用）', () => 
     expect(res.status).toBe(403);
   });
 
+  it('許可する ID が空白だけなら、common_name が空白だけの JWT でも 403', async () => {
+    const res = await call(await makeJwt({ claims: { common_name: '  ' } }), {
+      ALLOWED_SERVICE_TOKEN_ID: '  ',
+    });
+
+    expect(res.status).toBe(403);
+  });
+
   it('common_name が別の ID なら 403', async () => {
     const res = await call(await makeJwt({ claims: { common_name: 'other-client-id.access' } }), {
       ALLOWED_SERVICE_TOKEN_ID: SERVICE_TOKEN_ID,
@@ -381,7 +389,9 @@ describe('AUTH_MODE（手元の開発用。NF-2）', () => {
 describe('設定が空のときは拒否する（NF-2）', () => {
   it.each([
     ['ACCESS_TEAM_DOMAIN が空', { ACCESS_TEAM_DOMAIN: '' }],
+    ['ACCESS_TEAM_DOMAIN が空白だけ', { ACCESS_TEAM_DOMAIN: '  ' }],
     ['ACCESS_AUD が空', { ACCESS_AUD: '' }],
+    ['ACCESS_AUD が空白だけ', { ACCESS_AUD: '  ' }],
     ['ALLOWED_EMAIL が空', { ALLOWED_EMAIL: '' }],
     ['ALLOWED_EMAIL が未設定', { ALLOWED_EMAIL: undefined }],
     ['ALLOWED_EMAIL が空白だけ', { ALLOWED_EMAIL: '  ' }],
