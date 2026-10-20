@@ -62,6 +62,11 @@ function classify(error: Error): Classified {
   // InvalidChangeError は、変更の中身が受け付けられない（設計書 4.5）。端末が直せないので 400。
   if (error instanceof InvalidChangeError) return { status: 400, kind: 'invalid_change' };
   // kind の食い違いと外部キー違反は、依頼が、保存されているデータと合わない。再送しても直らないので 409。
+  // 外部キー違反を文言で判定するのは、予備。存在しないワークスペースは、書く前に API が確かめて 409 にしている
+  // （write.ts）ので、通常はここに来ない。確かめた後、書き込みの前に、ワークスペースが消える割り込み（手での
+  // 修正や復元。設計書 付録 A.1・A.3）があると、外部キー違反になる。判定を消して、API の確認だけにしなかったのは、
+  // 割り込まれたときに 500 になり、端末が再送し続けるため。逆に、文言の判定だけにしなかったのは、本番の D1 の
+  // 文言が Miniflare と同じかを確かめられず、違うと、ふだんの依頼まで 500 になるため。
   if (error instanceof KindMismatchError || isForeignKeyViolation(error)) {
     return { status: 409, kind: 'conflict' };
   }

@@ -28,10 +28,11 @@ export async function commit(db: Database, request: WriteRequest): Promise<Write
 
 /**
  * 予定の行を書く。書く前に、行の確認（entryRules.ts）と、指すワークスペースの確認をする。
- * 組み込みのワークスペースを指す行は、400（WS-4。設計書 4.2）。削除済みのワークスペースを指す行は、書かずに捨てる。
- * 存在しないワークスペースは、ここでは確かめず、外部キー違反（409）に任せる。
- * 削除する行は、ワークスペースを指していても確かめない。
- * 400 を捨てるより先に確かめるのは、依頼そのものの誤りは、保存されているデータの状態によらないため。
+ * 存在しないワークスペースは 409、組み込みのワークスペースを指す行は 400（WS-4。設計書 4.2）。
+ * 削除済みのワークスペースを指す行は、書かずに捨てる。削除する行は、ワークスペースを指していても確かめない。
+ * 409 と 400 を、捨てるより先に確かめるのは、依頼そのものの誤りは、保存されているデータの状態によらないため。
+ * 存在しないワークスペースを、外部キー違反（errors.ts）に任せず、ここで確かめるのは、本番の D1 の
+ * エラーの文言が Miniflare と同じかを確かめられず、違うと 500 になって、端末が再送し続けるため。
  */
 export async function commitEntries(
   db: Database,
@@ -47,12 +48,16 @@ export async function commitEntries(
     ),
   ];
   const workspaces = await readWorkspaces(db, workspaceIds);
-  for (const { workspace } of workspaces.values()) {
-    if (workspace.builtin !== null) {
+  for (const id of workspaceIds) {
+    const stored = workspaces.get(id);
+    if (stored === undefined) {
+      throw new ApiError(409, 'conflict', `存在しないワークスペースです（workspaceId: ${id}）`);
+    }
+    if (stored.workspace.builtin !== null) {
       throw new ApiError(
         400,
         'builtin_workspace',
-        `組み込みのワークスペースには、予定を入れられません（workspaceId: ${workspace.id}）`,
+        `組み込みのワークスペースには、予定を入れられません（workspaceId: ${id}）`,
       );
     }
   }

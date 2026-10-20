@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
 import { callApi } from '../../../test/helpers/api';
+import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { isForeignKeyViolation } from './errors';
 
 let testDatabase: TestDatabase;
@@ -68,6 +69,30 @@ describe('isForeignKeyViolation', () => {
       expect(isForeignKeyViolation(value)).toBe(false);
     },
   );
+});
+
+describe('書き込みの途中の外部キー違反', () => {
+  /**
+   * API は、書く前にワークスペースの存在を確かめている（write.ts）。確かめた後に、ワークスペースが消える
+   * 割り込みで、書き込みが外部キー違反になった場合を作る。型を合わせる as は、この 1 か所だけ。
+   */
+  const foreignKeyViolationDb = {
+    prepare: (query: string) => db().prepare(query),
+    batch: () =>
+      Promise.reject(new Error('D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT')),
+  } as unknown as D1Database;
+
+  it('500 にせず 409（conflict）にする。再送しても直らず、500 だと端末が再送し続けるため', async () => {
+    const res = await callApi(foreignKeyViolationDb, 'PUT', '/api/workspaces/w2', {
+      body: { workspace: makeWorkspace({ id: 'w2', editedAt: 2000 }) },
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      error: 'conflict',
+      message: '依頼の内容が、保存されているデータと食い違っています',
+    });
+  });
 });
 
 describe('想定していない例外', () => {

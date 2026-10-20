@@ -94,6 +94,19 @@ async function stored(id: string) {
 
 const invalidRequest = { error: 'invalid_request', message: '入力が正しくありません' };
 
+const conflict = {
+  error: 'conflict',
+  message: '依頼の内容が、保存されているデータと食い違っています',
+};
+
+/** 書き込み（batch）に進んだら、500 になる D1。読むだけの確認で決まる応答を、確かめるために使う。型を合わせる as は、この 1 か所だけ。 */
+function writeFailingDb(): D1Database {
+  return {
+    prepare: (query: string) => db().prepare(query),
+    batch: () => Promise.reject(new Error('書き込みに進んではいけません')),
+  } as unknown as D1Database;
+}
+
 const builtinWorkspace = {
   error: 'builtin_workspace',
   message: '組み込みのワークスペースは、表示と並び順のほかは変えられません',
@@ -366,7 +379,7 @@ describe('PUT /api/entries/:id（作成）', () => {
       },
     );
 
-    it('存在しないワークスペースは、外部キー違反として 409（conflict）。DB は変わらない', async () => {
+    it('存在しないワークスペースは 409（conflict）。DB は変わらない', async () => {
       const before = await dumpTables(db());
 
       const res = await putEntry('e1', {
@@ -375,11 +388,17 @@ describe('PUT /api/entries/:id（作成）', () => {
       });
 
       expect(res.status).toBe(409);
-      expect(res.body).toEqual({
-        error: 'conflict',
-        message: '依頼の内容が、保存されているデータと食い違っています',
-      });
+      expect(res.body).toEqual(conflict);
       expect(await dumpTables(db())).toEqual(before);
+    });
+
+    it('存在しないワークスペースは、書き込みに進む前に確かめる（外部キー違反の文言に頼らない）', async () => {
+      const res = await callApi(writeFailingDb(), 'PUT', '/api/entries/e1', {
+        body: { draft: draft({ workspaceId: 'nothing' }), editedAt: 2000 },
+      });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual(conflict);
     });
 
     it('SY-3: 削除済みのワークスペースの予定は、not_found で捨てる（ワークスペースの削除より新しい依頼）', async () => {
@@ -866,14 +885,24 @@ describe('PATCH /api/entries/:id（変更）', () => {
       expect(await dumpTables(db())).toEqual(before);
     });
 
-    it('存在しないワークスペースへの変更は、外部キー違反として 409（conflict）', async () => {
+    it('存在しないワークスペースへの変更は 409（conflict）。書き込みに進む前に確かめる', async () => {
       await seedSeries();
       const before = await dumpTables(db());
 
       const res = await patchEntry('s', { changes: { workspaceId: 'nothing' } });
+      const beforeWrite = await callApi(writeFailingDb(), 'PATCH', '/api/entries/s', {
+        body: {
+          occurrenceDate: '2026-10-19',
+          scope: 'all',
+          changes: { workspaceId: 'nothing' },
+          newId: 'new1',
+          editedAt: 2000,
+        },
+      });
 
       expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ error: 'conflict' });
+      expect(res.body).toEqual(conflict);
+      expect(beforeWrite.status).toBe(409);
       expect(await dumpTables(db())).toEqual(before);
     });
 
