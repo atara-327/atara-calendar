@@ -972,6 +972,49 @@ describe('applyWrite', () => {
         rev: 1,
       });
     });
+
+    describe('組み込みの印（builtin）は、更新では付け外しできない（組み込みの名前・色の変更と削除を禁じるのは、#4c の API）', () => {
+      async function storedBuiltin(id: string) {
+        return db()
+          .prepare('SELECT builtin, name, visible FROM workspaces WHERE id = ?1')
+          .bind(id)
+          .first();
+      }
+
+      it('普通のワークスペースに builtin を付けた行が新しい edited_at で届いても、付かない。ほかの列は更新される', async () => {
+        await applyWrite(db(), { workspaces: [makeWorkspace({ id: 'w2', name: '元' })] });
+
+        const result = await applyWrite(db(), {
+          workspaces: [
+            makeWorkspace({ id: 'w2', name: '更新', builtin: 'holiday', editedAt: 2000 }),
+          ],
+        });
+
+        expect(result).toEqual({ applied: true, rev: 2 });
+        expect(await storedBuiltin('w2')).toMatchObject({ builtin: null, name: '更新' });
+      });
+
+      it('組み込みのワークスペースの builtin を外した行が届いても、外れない。ほかの列（表示の ON/OFF）は更新される', async () => {
+        const result = await applyWrite(db(), {
+          workspaces: [
+            makeWorkspace({
+              id: 'builtin-holiday',
+              name: '祝日',
+              builtin: null,
+              visible: false,
+              editedAt: 1,
+            }),
+          ],
+        });
+
+        expect(result).toEqual({ applied: true, rev: 1 });
+        expect(await storedBuiltin('builtin-holiday')).toEqual({
+          builtin: 'holiday',
+          name: '祝日',
+          visible: 0,
+        });
+      });
+    });
   });
 
   describe('recurrence.ts が返す「書き込む行の配列」を、そのまま書ける', () => {

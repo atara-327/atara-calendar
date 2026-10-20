@@ -192,7 +192,10 @@ function upsertSql(
   ].join(' ');
 }
 
-const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS);
+// builtin は、更新の SET に入れない。組み込みのワークスペース（WS-4）の印を、後から付けたり外したりできないようにする。
+// 付けられると、普通のワークスペースが組み込みとして扱われ、外せると、組み込みの行が、禁じるはずの
+// 編集や削除（設計書 4.2。禁じるのは #4c の API）を通る普通の行になる。
+const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS, { keepOnUpdate: ['builtin'] });
 // kind は、更新の SET に入れない。kind が違う行は、書く前の確認（assertSameKinds）で例外にしているが、
 // 確認の後に別の書き込みが同じ id の行を作る割り込みは、確認をすり抜ける。割り込まれても、設計書 4.5
 // 「kind は作成後に変えられない」を、DB への書き込みの形で守る。
