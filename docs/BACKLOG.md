@@ -12,6 +12,7 @@
   - 許可する操作: 確認・サマリ・追加・編集・削除のすべて
   - 参考: Googleカレンダーの MCP（ツールの分け方・引数の設計）
   - 認証: Cloudflare Access のサービストークン（`CF-Access-Client-Id` / `CF-Access-Client-Secret` ヘッダー）で API を呼ぶ（3次ヒアリング K2）
+  - MCP（サービストークン）から API を呼ぶときは `Sec-Fetch-Site` が付かないので、そのときの扱いを決める（今の API は same-origin だけを通す。[設計書 10.3](design/design.md#103-その他の対策)）
 - 移行: MCP ができたら、今の Googleカレンダーの予定を Claude に移してもらう（Googleカレンダーの MCP で読み、こちらの MCP で書き込む）（3次ヒアリング E14）
 - MVP の時点で気をつけること:
   - 後から MCP サーバーを付けやすいように、データの読み書きは API として整理しておく
