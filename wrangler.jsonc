@@ -12,19 +12,18 @@
   // calendar.ataraman.com の全体をこの Worker で配信する（Custom Domain。DNS と証明書は Cloudflare が作る）。
   // Access のアプリも同じドメインで作る（docs/setup.md の 3）。
   "routes": [{ "pattern": "calendar.ataraman.com", "custom_domain": true }],
-  // Access の設定（秘密ではない）。Access のアプリを作ったあとに、実際の値を入れる。
+  // Access の設定（秘密ではない）。値の出どころは docs/setup.md の 2.1・3。
   // ACCESS_TEAM_DOMAIN は <チーム名>.cloudflareaccess.com の形で書く（https:// や / は付けない）。
   // 空のままか、書式が違うと、Worker は API を拒否する（設定漏れで認証が素通りしないように）。
   "vars": {
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
+    "ACCESS_TEAM_DOMAIN": "ataraman.cloudflareaccess.com",
+    "ACCESS_AUD": "1f77c0b152e5dad9e9c52f82aef9cb8855a830b1f729412eeb9518c2f9cad3ff",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "atara-calendar",
-      // 仮の値。本番の D1 を作ったあと、実装 #5（デプロイ）で本物の id に差し替える。
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "54797379-d206-46c4-9197-0934ce8947a8",
       "migrations_dir": "migrations",
     },
   ],

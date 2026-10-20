@@ -18,15 +18,12 @@
 
 ## 2. 下準備（ユーザーの作業）
 
-Claude はユーザーの Cloudflare アカウントや Discord を操作できません。そのため、ここはユーザーの作業になります。手順書は実装の PR と一緒に用意します。
+Claude はユーザーの Cloudflare アカウントや Discord を操作できません。そのため、ここはユーザーの作業になります。手順は [docs/setup.md](setup.md) にまとめています。
 
 | 作業 | 必要になる時期 |
 | --- | --- |
-| D1 のデータベースを作る | 実装 #5（デプロイ）の前 |
-| Access のアプリを作り、Google ログインと許可するアドレスを設定する | 実装 #5 の前 |
-| Access のアプリを作ったあとに、`ACCESS_TEAM_DOMAIN`・`ACCESS_AUD` を `wrangler.jsonc` の `vars` に入れ、`ALLOWED_EMAIL` を Cloudflare の Secrets に登録する（書式は[設計書 10.4](design/design.md#104-秘密情報nf-3)、空のままのときの動きは[設計書 10.2](design/design.md#102-worker-側の確認二重の守り)） | 実装 #5 の前 |
-| Cloudflare の API トークンを作り、GitHub の Secrets に登録する（設計書 Q7） | 実装 #5 の前 |
-| Discord の Webhook を作り、Cloudflare の Secrets に登録する | 実装 #11（通知）の前 |
+| 本番の下準備（D1・Google ログイン・Access・API トークン・最初のデプロイ・許可するメールアドレス） | 実装 #5（デプロイ）の前と後 |
+| Discord の Webhook を作り、Cloudflare の Secrets に登録する（手順は #11 で docs/setup.md に足す） | 実装 #11（通知）の前 |
 
 ## 3. 実装の順番
 
