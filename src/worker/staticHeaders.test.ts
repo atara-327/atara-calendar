@@ -46,14 +46,14 @@ describe('画面（静的ファイル）のセキュリティヘッダー（NF-2
     expect(all?.get('referrer-policy')).toBe('no-referrer');
   });
 
-  it('CSP は、自分のドメインのスクリプト・スタイル・フォント・通信だけを許し、埋め込みと外からの枠組みを禁じる', () => {
+  it('CSP は、自分のドメインのスクリプト・スタイル・画像・フォント・通信だけを許し、埋め込みと外からの枠組みを禁じる', () => {
     const csp = parseCsp(all?.get('content-security-policy') ?? '');
 
     expect(Object.fromEntries(csp)).toEqual({
       'default-src': "'self'",
       'script-src': "'self'",
       'style-src': "'self'",
-      'img-src': "'self' data:",
+      'img-src': "'self'",
       'font-src': "'self'",
       'connect-src': "'self'",
       'object-src': "'none'",
@@ -61,6 +61,13 @@ describe('画面（静的ファイル）のセキュリティヘッダー（NF-2
       'form-action': "'self'",
       'frame-ancestors': "'none'",
     });
+  });
+
+  it('画像は、自分のドメインのファイルだけを許す（data: の URL は許さない）', () => {
+    const csp = parseCsp(all?.get('content-security-policy') ?? '');
+
+    expect(csp.get('img-src')).toBe("'self'");
+    expect(all?.get('content-security-policy')).not.toContain('data:');
   });
 });
 
