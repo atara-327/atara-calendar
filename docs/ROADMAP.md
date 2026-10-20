@@ -22,7 +22,7 @@ Claude はユーザーの Cloudflare アカウントや Discord を操作でき�
 
 | 作業 | 必要になる時期 |
 | --- | --- |
-| 本番の下準備（D1・Google ログイン・Access・API トークン・最初のデプロイ・許可するメールアドレス） | 実装 #5（デプロイ）の前と後 |
+| 本番の下準備（[docs/setup.md](setup.md) の 1〜8） | 実装 #5（デプロイ）の前と後 |
 | Discord の Webhook を作り、Cloudflare の Secrets に登録する（手順は #11 で docs/setup.md に足す） | 実装 #11（通知）の前 |
 
 ## 3. 実装の順番
