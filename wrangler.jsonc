@@ -17,7 +17,7 @@
   // 空のままか、書式が違うと、Worker は API を拒否する（設定漏れで認証が素通りしないように）。
   "vars": {
     "ACCESS_TEAM_DOMAIN": "ataraman.cloudflareaccess.com",
-    "ACCESS_AUD": "1f77c0b152e5dad9e9c52f82aef9cb8855a830b1f729412eeb9518c2f9cad3ff",
+    "ACCESS_AUD": "91017dc6ea231374e8d3472e4268464d6481c5feb10f57155001dd9a24214454",
   },
   // Workers Logs。過去のログをダッシュボードで探せるようにする（設計書 付録A.3 の「ダッシュボードで探す」のため）。
   "observability": { "enabled": true },
