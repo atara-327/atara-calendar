@@ -19,6 +19,8 @@
     "ACCESS_TEAM_DOMAIN": "ataraman.cloudflareaccess.com",
     "ACCESS_AUD": "1f77c0b152e5dad9e9c52f82aef9cb8855a830b1f729412eeb9518c2f9cad3ff",
   },
+  // Workers Logs。過去のログをダッシュボードで探せるようにする（設計書 付録A.3 の「ダッシュボードで探す」のため）。
+  "observability": { "enabled": true },
   "d1_databases": [
     {
       "binding": "DB",
