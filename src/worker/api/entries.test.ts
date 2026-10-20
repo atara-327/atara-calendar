@@ -467,6 +467,76 @@ describe('PUT /api/entries/:id（作成）', () => {
   });
 });
 
+describe('サーバーが計算した行の日付は、年の範囲（1900〜2199）に収める（4.2）', () => {
+  it('2199-12-31 から始まる「毎週 月」の作成は、開始日が 2200 年にずれるので 400。DB は変わらない', async () => {
+    const before = await dumpTables(db());
+
+    const res = await putEntry('e1', {
+      draft: draft({
+        allDay: true,
+        startTime: null,
+        endTime: null,
+        startDate: '2199-12-31',
+        endDate: '2199-12-31',
+        rrule: { freq: 'weekly', days: [1] },
+      }),
+      editedAt: 2000,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(invalidRequest);
+    expect(await dumpTables(db())).toEqual(before);
+  });
+
+  it('2100 年から始まる毎年の系列で、2150 年の回を開き、「すべて」で開始日を 1900-06-01 にすると、系列の開始日が 1850 年になるので 400。DB は変わらない', async () => {
+    await seedSeries({ id: 'y', rrule: { freq: 'yearly' }, startDate: '2100-06-01' });
+    const before = await dumpTables(db());
+
+    const res = await patchEntry('y', {
+      scope: 'all',
+      occurrenceDate: '2150-06-01',
+      changes: { startDate: '1900-06-01', endDate: '1900-06-01' },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(invalidRequest);
+    expect(await dumpTables(db())).toEqual(before);
+  });
+
+  it('複数日の回の開始日を「この予定のみ」で 2199-12-31 にすると、終了日が 2200 年になるので 400。DB は変わらない', async () => {
+    await seedSeries({ endDate: '2026-10-21' });
+    const before = await dumpTables(db());
+
+    const res = await patchEntry('s', {
+      scope: 'this',
+      occurrenceDate: '2026-10-19',
+      changes: { startDate: '2199-12-31' },
+      newId: 'x1',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(invalidRequest);
+    expect(await dumpTables(db())).toEqual(before);
+  });
+
+  it('範囲の内側に収まる計算は通る（2199-12-29 から始まる「毎週 月」は、開始日が 2199-12-29 のまま）', async () => {
+    // 2199-12-29 は月曜。ずれないので、範囲を出ない。
+    const res = await putEntry('e1', {
+      draft: draft({
+        allDay: true,
+        startTime: null,
+        endTime: null,
+        startDate: '2199-12-29',
+        endDate: '2199-12-29',
+        rrule: { freq: 'weekly', days: [1] },
+      }),
+      editedAt: 2000,
+    });
+
+    expect(res.body).toEqual({ applied: true });
+  });
+});
+
 describe('PATCH /api/entries/:id（変更）', () => {
   it('EV-1: 繰り返さない予定は、範囲に関係なく、その行を書き換える', async () => {
     await applyWrite(db(), { entries: [makeEntry({ id: 'p', title: '旧' })] });

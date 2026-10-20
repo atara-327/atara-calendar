@@ -1,4 +1,4 @@
-import type { Entry } from '../../shared/schema';
+import { isDateInSupportedYears, type Entry } from '../../shared/schema';
 import { badRequest } from './errors';
 
 // 項目をまたぐ確認（設計書 4.2）。スキーマに入れないのは、z.object に refine を付けると、下書きや変更の
@@ -8,11 +8,25 @@ import { badRequest } from './errors';
 
 type RuleFields = Pick<
   Entry,
-  'kind' | 'workspaceId' | 'allDay' | 'startDate' | 'startTime' | 'endDate' | 'endTime'
+  | 'kind'
+  | 'workspaceId'
+  | 'allDay'
+  | 'startDate'
+  | 'startTime'
+  | 'endDate'
+  | 'endTime'
+  | 'untilDate'
 >;
 
 /** 守られていない決まりがあれば、その説明（ログ用）。なければ null。 */
 export function entryProblem(entry: RuleFields): string | null {
+  // 入力の年の確認（schema.ts の inputDateSchema）は、依頼の値にしか効かない。サーバーが計算した行は、
+  // 日付をずらす途中で範囲を出ることがある（例: 2199-12-31 から始まる「毎週 月」は、開始日が 2200 年に
+  // ずれる）。出たまま保存すると、展開が回を 1 つも出さない系列になる（設計書 4.2）。
+  for (const date of [entry.startDate, entry.endDate, entry.untilDate]) {
+    if (date !== null && !isDateInSupportedYears(date)) return `日付の年が範囲外です（${date}）`;
+  }
+
   if (entry.kind === 'block') {
     if (entry.allDay) return 'タイムブロックは終日にできません';
     if (entry.workspaceId !== null) return 'タイムブロックはワークスペースを持てません';

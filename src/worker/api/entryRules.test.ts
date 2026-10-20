@@ -19,6 +19,14 @@ describe('entryProblem: 項目をまたぐ確認（設計書 4.2）', () => {
       overrides: { ...timed, endDate: '2026-10-20', endTime: '00:00' },
     },
     { name: 'タイムブロック', overrides: { ...timed, kind: 'block', workspaceId: null } },
+    {
+      name: '年の範囲の下端（1900-01-01）',
+      overrides: { startDate: '1900-01-01', endDate: '1900-01-01', untilDate: '1900-12-31' },
+    },
+    {
+      name: '年の範囲の上端（2199-12-31）',
+      overrides: { startDate: '2199-12-31', endDate: '2199-12-31', untilDate: '2199-12-31' },
+    },
   ] as const)('$name は守られている', ({ overrides }) => {
     expect(entryProblem(makeEntry({ id: 'e', ...overrides }))).toBeNull();
   });
@@ -38,6 +46,16 @@ describe('entryProblem: 項目をまたぐ確認（設計書 4.2）', () => {
     { name: 'タイムブロックが終日', overrides: { kind: 'block', workspaceId: null } },
     { name: 'タイムブロックがワークスペースを持つ', overrides: { ...timed, kind: 'block' } },
     { name: '予定がワークスペースを持たない', overrides: { ...timed, workspaceId: null } },
+    {
+      name: '開始日の年が 1900 より前',
+      overrides: { startDate: '1899-12-31', endDate: '1900-01-01' },
+    },
+    {
+      name: '終了日の年が 2199 より後',
+      overrides: { startDate: '2199-12-31', endDate: '2200-01-01' },
+    },
+    { name: '終わりの日（untilDate）の年が 2199 より後', overrides: { untilDate: '2200-01-01' } },
+    { name: '終わりの日（untilDate）の年が 1900 より前', overrides: { untilDate: '1899-12-31' } },
   ] as const)('$name は守られていない', ({ overrides }) => {
     expect(entryProblem(makeEntry({ id: 'e', ...overrides }))).toEqual(expect.any(String));
   });
@@ -60,6 +78,14 @@ describe('assertWritableEntries: 書く行の確認', () => {
 
   it('削除する行（deletedAt がある行）は確かめない。決まりが厳しくなる前の行も、削除できるように', () => {
     const rows = [makeEntry({ id: 'a', startTime: '15:00', editedAt: 2000, deletedAt: 2000 })];
+
+    expect(() => {
+      assertWritableEntries(rows);
+    }).not.toThrow();
+  });
+
+  it('削除する行は、日付の年が範囲外でも確かめない', () => {
+    const rows = [makeEntry({ id: 'a', startDate: '1850-06-01', editedAt: 2000, deletedAt: 2000 })];
 
     expect(() => {
       assertWritableEntries(rows);

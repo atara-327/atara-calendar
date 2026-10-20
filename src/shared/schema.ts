@@ -157,14 +157,15 @@ export const idInputSchema = z.string().regex(/^[A-Za-z0-9-]{1,64}$/, {
   message: 'id は英数字とハイフンの 1〜64 文字にしてください',
 });
 
-/** 日付の年は 1900〜2199（設計書 Q2）。祝日の計算と、繰り返しの展開が対応する範囲。 */
-export const inputDateSchema = dateStringSchema.refine(
-  (date) => {
-    const year = Number(date.slice(0, 4));
-    return year >= MIN_YEAR && year <= MAX_YEAR;
-  },
-  { message: `日付の年は ${String(MIN_YEAR)}〜${String(MAX_YEAR)} にしてください` },
-);
+/** 日付の年が、1900〜2199（設計書 Q2）に入っているか。祝日の計算と、繰り返しの展開が対応する範囲。 */
+export function isDateInSupportedYears(date: string): boolean {
+  const year = Number(date.slice(0, 4));
+  return year >= MIN_YEAR && year <= MAX_YEAR;
+}
+
+export const inputDateSchema = dateStringSchema.refine(isDateInSupportedYears, {
+  message: `日付の年は ${String(MIN_YEAR)}〜${String(MAX_YEAR)} にしてください`,
+});
 
 /** new URL() で読めるか。 */
 function isParsableUrl(value: string): boolean {
