@@ -164,14 +164,15 @@
 
      | ログの行 | 原因 | 確かめるところ |
      | --- | --- | --- |
-     | `JWT の検証に失敗しました (ERR_JWT_CLAIM_VALIDATION_FAILED)` | `ACCESS_AUD` が、Access のアプリと食い違っている | `wrangler.jsonc` の `ACCESS_AUD` を、3 の AUD Tag（ドメインが `calendar.ataraman.com` のアプリの値）と見比べる |
-     | `JWT の検証に失敗しました (...)` の括弧の中が、`ERR_JWKS_NO_MATCHING_KEY`・`ERR_JOSE_GENERIC`・`unknown: ...` のどれか | `ACCESS_TEAM_DOMAIN` が、チームのドメインと食い違っている | `wrangler.jsonc` の `ACCESS_TEAM_DOMAIN` を、2.1 のチームのドメインと見比べる |
+     | `JWT の検証に失敗しました (ERR_JWT_CLAIM_VALIDATION_FAILED (claim: aud, ...))` | `ACCESS_AUD` が、Access のアプリと食い違っている | `wrangler.jsonc` の `ACCESS_AUD` を、3 の AUD Tag（ドメインが `calendar.ataraman.com` のアプリの値）と見比べる |
+     | `JWT の検証に失敗しました (ERR_JWT_CLAIM_VALIDATION_FAILED (claim: iss, ...))`。または、`JWT の検証に失敗しました (...)` の括弧の中が、`ERR_JWKS_` で始まるもの・`ERR_JOSE_GENERIC`・`unknown: ...` のどれか | `ACCESS_TEAM_DOMAIN` が、チームのドメインと食い違っている（大文字小文字の違いだけでも、`claim: iss` になる） | `wrangler.jsonc` の `ACCESS_TEAM_DOMAIN` を、2.1 のチームのドメインと見比べる |
+     | `JWT の検証に失敗しました (ERR_JWT_EXPIRED (claim: exp, ...))` | ログインの有効期限が切れている | `calendar.ataraman.com` の画面を開き直して、ログインし直す |
      | `許可されていない相手です` | ログインしたアカウントのメールアドレスが、Worker の `ALLOWED_EMAIL` と違う | `ALLOWED_EMAIL`（7）を、ログインしたアカウントのメールアドレスと見比べる |
      | `JWT のヘッダーがありません` | Access を通っていない | 3 のアプリのドメインが `calendar.ataraman.com`（パスは空）か |
      | `[auth] 403` の行がない | 他のサイトからのリクエストとして弾かれた（[設計書 10.3](design/design.md#103-その他の対策)） | アドレス欄に `/api/health` を直接入れて開いていないか（ほとんどはこれ。下の注記を参照）。Console は、`calendar.ataraman.com` の画面を開いて使っているか |
 
      - `ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` の値が違っていたら、5 と同じく、正しい値を Claude に伝える（`wrangler.jsonc` は Claude が直して PR を出す）。
-     - **Why 括弧の中のコードで分けるのか**: JWT は、署名を先に確かめ、そのあとで発行元（`iss`）と宛先（`aud`）を確かめます。`ACCESS_TEAM_DOMAIN` が違うと、公開鍵を別の URL から取るので、`aud` の確認まで進まず、署名の段階で失敗するためです。
+     - **Why 括弧の中のコードと `claim` で分けるのか**: JWT は、署名を先に確かめ、そのあとで発行元（`iss`）と宛先（`aud`）を確かめます。`ACCESS_TEAM_DOMAIN` が違うと（大文字小文字の違いだけのときを除き）、公開鍵を別の URL から取るので、`aud` の確認まで進まず、署名の段階で失敗するためです。大文字小文字の違いだけなら、公開鍵の URL は同じ（ホスト名は小文字に直される）で署名が通り、`iss` の確認で失敗します。署名が通ったあとの失敗は、`ERR_JWT_CLAIM_VALIDATION_FAILED` というコードだけでは `aud` と `iss` のどちらが食い違ったか分からないので、`claim` の名前（食い違った項目。値は出ません）で分けます。
 
    - **500** のとき: ログの `[auth]` の行で原因が分かります。よくある原因は、Worker の `ALLOWED_EMAIL` の未登録です（7）。`ACCESS_AUD`・`ACCESS_TEAM_DOMAIN` が空のときや、`ACCESS_TEAM_DOMAIN` の書式が違うとき（`https://` が付いているなど）も 500 になります。
 3. 別の Google アカウントで開いて（シークレットウィンドウなど）、弾かれることも確かめる（要件 AU-1）。Google の画面でブロックされるか、Access の画面で弾かれれば OK です。
