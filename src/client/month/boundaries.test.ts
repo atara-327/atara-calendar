@@ -4,7 +4,13 @@ import { cellBoundary } from './boundaries';
 
 describe('階段状の線を引くマス', () => {
   it('各月の 1 日のマスは、左側と上側に月の境目の線を持つ', () => {
+    // 2026-10-01 は木曜日。
     expect(cellBoundary('2026-10-01')).toEqual({ top: 'month', left: 'month' });
+  });
+
+  it('日曜日の 1 日は、行の左端で、左に隣のマスがないので、上側にだけ線を持つ', () => {
+    // 2026-11-01 は日曜日。
+    expect(cellBoundary('2026-11-01')).toEqual({ top: 'month', left: 'none' });
   });
 
   it('各月の 2〜7 日のマスは、上側にだけ月の境目の線を持つ', () => {
@@ -19,7 +25,13 @@ describe('階段状の線を引くマス', () => {
   });
 
   it('1 月の 1 日のマスは、年の境目の太い線を持つ', () => {
+    // 2027-01-01 は金曜日。
     expect(cellBoundary('2027-01-01')).toEqual({ top: 'year', left: 'year' });
+  });
+
+  it('日曜日の 1 月 1 日は、上側にだけ年の境目の線を持つ', () => {
+    // 2023-01-01 は日曜日。
+    expect(cellBoundary('2023-01-01')).toEqual({ top: 'year', left: 'none' });
   });
 
   it('1 月の 2〜7 日のマスは、上側に年の境目の線を持つ', () => {
