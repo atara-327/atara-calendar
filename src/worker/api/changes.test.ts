@@ -32,17 +32,19 @@ function db(): D1Database {
 }
 
 describe('GET /api/changes', () => {
-  it('SY-1: 何も書いていないときは、rev 0・epoch・組み込みのワークスペースを返す', async () => {
+  it('SY-1: 何も書いていないときは、rev 1・epoch・「予定」と組み込みのワークスペースを返す', async () => {
     const res = await callApi(db(), 'GET', '/api/changes?since=0');
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      rev: 0,
+      rev: 1,
       epoch: expect.stringMatching(/^[0-9a-f]{16}$/) as unknown,
+      // rev の順（同じ rev なら id の順）。「予定」だけが、マイグレーションで rev を進めて入れた行（rev 1）。
       workspaces: [
         expect.objectContaining({ id: 'builtin-holiday', builtin: 'holiday' }),
         expect.objectContaining({ id: 'builtin-observance', builtin: 'observance' }),
         expect.objectContaining({ id: 'w1', builtin: null }),
+        expect.objectContaining({ id: 'default-workspace', name: '予定', builtin: null }),
       ],
       entries: [],
     });
@@ -61,9 +63,9 @@ describe('GET /api/changes', () => {
     await applyWrite(db(), { entries: [makeEntry({ id: 'b' })] });
     await applyWrite(db(), { entries: [makeEntry({ id: 'a', editedAt: 2000, deletedAt: 2000 })] });
 
-    const changes = await fetchChanges(db(), 2);
+    const changes = await fetchChanges(db(), 3);
 
-    expect(changes.rev).toBe(3);
+    expect(changes.rev).toBe(4);
     expect(changes.entries.map(({ id, deletedAt }) => ({ id, deletedAt }))).toEqual([
       { id: 'a', deletedAt: 2000 },
     ]);

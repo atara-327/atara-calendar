@@ -77,6 +77,21 @@ describe('PUT /api/workspaces/:id（作成・更新）', () => {
     expect(changes.workspaces.find(({ id }) => id === 'w1')).toEqual(updated);
   });
 
+  it('SY-3: マイグレーションが入れた「予定」は、edited_at が 0 なので、端末の最初の編集（名前・色）が勝つ', async () => {
+    const updated = makeWorkspace({
+      id: 'default-workspace',
+      name: '私用',
+      color: '#33B679',
+      editedAt: 1,
+    });
+
+    const res = await putWorkspace('default-workspace', updated);
+
+    expect(res.body).toEqual({ applied: true });
+    const changes = await fetchChanges(db(), 0);
+    expect(changes.workspaces.find(({ id }) => id === 'default-workspace')).toEqual(updated);
+  });
+
   it('SY-3: 同じ依頼を 2 回送ると、2 回目は stale で捨て、DB は変わらない', async () => {
     const workspace = makeWorkspace({ id: 'w2', editedAt: 2000 });
     await putWorkspace('w2', workspace);
@@ -518,6 +533,9 @@ describe('DELETE /api/workspaces/:id', () => {
   );
 
   it('11.5: 最後の 1 つのワークスペースは削除できない（400。last_workspace）。組み込みは数えない', async () => {
+    // マイグレーションが入れる「予定」を先に消して、w1 を最後の 1 つにする。
+    const deletedDefault = await deleteWorkspace('default-workspace', 4000);
+    expect(deletedDefault.body).toEqual({ applied: true });
     const before = await dumpTables(db());
 
     const res = await deleteWorkspace('w1', 5000);
@@ -531,10 +549,9 @@ describe('DELETE /api/workspaces/:id', () => {
   });
 
   it('11.5: ほかに 1 つ残っていれば削除でき、そのあとの最後の 1 つは削除できない', async () => {
-    await seedWorkspace(db(), 'w2');
-
+    // w1 のほかに残る 1 つは、マイグレーションが入れる「予定」。最後の 1 つも「予定」になる。
     const first = await deleteWorkspace('w1', 5000);
-    const last = await deleteWorkspace('w2', 6000);
+    const last = await deleteWorkspace('default-workspace', 6000);
 
     expect(first.body).toEqual({ applied: true });
     expect(last.status).toBe(400);

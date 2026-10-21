@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   createTestDatabase,
+  readMigrationFileStatements,
   readMigrationStatements,
   splitStatements,
   type TestDatabase,
 } from '../../../test/helpers/d1';
+import { makeWorkspace } from '../../../test/helpers/workspaces';
+import { applyWrite, readChanges } from './store';
 
 let testDatabase: TestDatabase;
 
@@ -21,19 +24,19 @@ beforeEach(async () => {
 });
 
 describe('マイグレーション後の初期状態', () => {
-  it('SY-1: meta は 1 行で、rev は 0、epoch は 16 桁の 16 進数', async () => {
+  it('SY-1: meta は 1 行で、rev は 1（「予定」を入れた分だけ進んでいる）、epoch は 16 桁の 16 進数', async () => {
     const { results } = await testDatabase.db
       .prepare('SELECT * FROM meta')
       .all<{ id: number; rev: number; epoch: string }>();
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ id: 1, rev: 0 });
+    expect(results[0]).toMatchObject({ id: 1, rev: 1 });
     expect(results[0]?.epoch).toMatch(/^[0-9a-f]{16}$/);
   });
 
   it('WS-4: 組み込みの「祝日」「記念日」が、全端末で同じ固定の id で入っている', async () => {
     const { results } = await testDatabase.db
-      .prepare('SELECT * FROM workspaces ORDER BY sort_order')
+      .prepare('SELECT * FROM workspaces WHERE builtin IS NOT NULL ORDER BY sort_order')
       .all();
 
     expect(results).toEqual([
@@ -60,6 +63,37 @@ describe('マイグレーション後の初期状態', () => {
         deleted_at: null,
       },
     ]);
+  });
+
+  it('4.2・11.5: 最初のワークスペース「予定」が、全端末で同じ固定の id で入っている', async () => {
+    const { results } = await testDatabase.db
+      .prepare('SELECT * FROM workspaces WHERE builtin IS NULL')
+      .all();
+
+    expect(results).toEqual([
+      {
+        id: 'default-workspace',
+        name: '予定',
+        color: '#039BE5',
+        sort_order: 0,
+        visible: 1,
+        builtin: null,
+        edited_at: 0,
+        rev: 1,
+        deleted_at: null,
+      },
+    ]);
+  });
+
+  it('SY-1: 「予定」は、初回の読み込みで返り、その rev は meta の rev と同じ（1 以上）', async () => {
+    const changes = await readChanges(testDatabase.db, 0);
+
+    const defaultWorkspace = changes.workspaces.find(
+      ({ workspace }) => workspace.id === 'default-workspace',
+    );
+    expect(defaultWorkspace?.workspace).toMatchObject({ name: '予定', builtin: null });
+    expect(defaultWorkspace?.rev).toBe(changes.rev);
+    expect(changes.rev).toBeGreaterThanOrEqual(1);
   });
 
   it('予定の表は空', async () => {
@@ -95,6 +129,75 @@ describe('マイグレーション後の初期状態', () => {
     await testDatabase.reset();
 
     expect(await read()).not.toBe(before);
+  });
+});
+
+describe('0002_default_workspace.sql', () => {
+  const statements = readMigrationFileStatements('0002_default_workspace.sql');
+
+  async function run(): Promise<void> {
+    await testDatabase.db.batch(statements.map((statement) => testDatabase.db.prepare(statement)));
+  }
+
+  async function readWorkspaces() {
+    return (await testDatabase.db.prepare('SELECT * FROM workspaces ORDER BY id').all()).results;
+  }
+
+  async function readRev() {
+    return testDatabase.db.prepare('SELECT rev FROM meta').first();
+  }
+
+  it('SY-1: すでに rev を覚えている端末も、差分（since）で「予定」を受け取れる', async () => {
+    // 0002 を当てる前の本番に見立てる。「予定」を消し、予定の行が書かれて rev が 5 まで進んだことにする。
+    await testDatabase.db.batch([
+      testDatabase.db.prepare("DELETE FROM workspaces WHERE id = 'default-workspace'"),
+      testDatabase.db.prepare('UPDATE meta SET rev = 5'),
+    ]);
+
+    await run();
+
+    const changes = await readChanges(testDatabase.db, 5);
+    expect(changes.rev).toBe(6);
+    expect(changes.workspaces.map(({ workspace, rev }) => ({ id: workspace.id, rev }))).toEqual([
+      { id: 'default-workspace', rev: 6 },
+    ]);
+  });
+
+  it('同じ id の行がすでにあれば、何も変えない（rev も進めない）', async () => {
+    await testDatabase.db
+      .prepare(
+        "UPDATE workspaces SET name = '仕事', edited_at = 1000 WHERE id = 'default-workspace'",
+      )
+      .run();
+    const before = await readWorkspaces();
+
+    await run();
+
+    expect(await readWorkspaces()).toEqual(before);
+    expect(await readRev()).toEqual({ rev: 1 });
+  });
+
+  it('「予定」が論理削除されていても、生き返らせず、rev も進めない', async () => {
+    await applyWrite(testDatabase.db, {
+      workspaces: [
+        makeWorkspace({
+          id: 'default-workspace',
+          name: '予定',
+          color: '#039BE5',
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+      ],
+    });
+    const before = await readWorkspaces();
+
+    await run();
+
+    expect(await readWorkspaces()).toEqual(before);
+    expect(await readRev()).toEqual({ rev: 2 });
+    expect(before).toContainEqual(
+      expect.objectContaining({ id: 'default-workspace', deleted_at: 2000, rev: 2 }),
+    );
   });
 });
 

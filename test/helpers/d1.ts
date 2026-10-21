@@ -34,12 +34,29 @@ export function splitStatements(sql: string): string[] {
   return statements;
 }
 
+/** migrations/ の SQL ファイル 1 つを、文ごとに分けて返す。1 つのマイグレーションだけを、後から当てるテストのため。 */
+export function readMigrationFileStatements(fileName: string): string[] {
+  return splitStatements(readFileSync(new URL(fileName, MIGRATIONS_DIR), 'utf8'));
+}
+
 /** migrations/*.sql を、ファイル名の順に、文ごとに分けて返す。 */
 export function readMigrationStatements(): string[] {
   return readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith('.sql'))
     .sort()
-    .flatMap((name) => splitStatements(readFileSync(new URL(name, MIGRATIONS_DIR), 'utf8')));
+    .flatMap(readMigrationFileStatements);
+}
+
+/**
+ * マイグレーション（0002）が入れた「予定」を消して、meta.rev を 0 に戻す。rev を 0 から数えるテストが、
+ * 自分で入れる rev 0 の行と、数え方をそろえるため。
+ * 「予定」が入っていることは、マイグレーション直後の DB を使う migration.test.ts で確かめる。
+ */
+export async function removeDefaultWorkspace(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM workspaces WHERE id = 'default-workspace'"),
+    db.prepare('UPDATE meta SET rev = 0'),
+  ]);
 }
 
 export interface TestDatabase {
