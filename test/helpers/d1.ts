@@ -48,8 +48,8 @@ export function readMigrationStatements(): string[] {
 }
 
 /**
- * マイグレーション（0002）が入れた「予定」を消して、meta.rev を 0 に戻す。rev を 0 から数えるテストが、
- * 自分で入れる rev 0 の行と、数え方をそろえるため。
+ * マイグレーション（0002 が入れ、0003 が色を直した）「予定」を消して、meta.rev を 0 に戻す。
+ * rev を 0 から数えるテストが、自分で入れる rev 0 の行と、数え方をそろえるため。
  * 「予定」が入っていることは、マイグレーション直後の DB を使う migration.test.ts で確かめる。
  */
 export async function removeDefaultWorkspace(db: D1Database): Promise<void> {
@@ -57,6 +57,21 @@ export async function removeDefaultWorkspace(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM workspaces WHERE id = 'default-workspace'"),
     db.prepare('UPDATE meta SET rev = 0'),
   ]);
+}
+
+/**
+ * データを復元した（過去の時点に戻した）ときの meta にする文。rev は、残っている行の rev の最大値になり、
+ * epoch は変わる。rev を、小さい値の直書きにしないのは、行の rev より小さい meta.rev は、本物の復元では
+ * 起きないため（マイグレーションが入れる「予定」の rev も、行の rev に含まれる）。
+ * 行を消す文より後に、同じ batch で流す。
+ */
+export function restoredMetaStatement(db: D1Database, epoch: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE meta SET epoch = ?1,
+         rev = (SELECT max(rev) FROM (SELECT rev FROM workspaces UNION ALL SELECT rev FROM entries))`,
+    )
+    .bind(epoch);
 }
 
 export interface TestDatabase {

@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDevice, fakeResponse, type Device } from '../../../test/helpers/device';
-import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
+import {
+  createTestDatabase,
+  restoredMetaStatement,
+  type TestDatabase,
+} from '../../../test/helpers/d1';
 import { makeDraft } from '../../../test/helpers/entries';
 import { readAllRows } from '../../../test/helpers/rows';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
@@ -975,7 +979,7 @@ describe('受け取る（設計書 6.3）', () => {
       // データを復元した（過去の時点に戻した）ことにする。その予定はなく、rev は戻り、epoch が変わる。
       await db().batch([
         db().prepare('DELETE FROM entries WHERE id = ?1').bind(entryId),
-        db().prepare("UPDATE meta SET rev = 1, epoch = 'restored'"),
+        restoredMetaStatement(db(), 'restored'),
       ]);
       // 復元の後に、端末で編集した（電波がない間）。
       device.network.online = false;

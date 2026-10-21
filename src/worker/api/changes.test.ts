@@ -32,14 +32,14 @@ function db(): D1Database {
 }
 
 describe('GET /api/changes', () => {
-  it('SY-1: 何も書いていないときは、rev 1・epoch・「予定」と組み込みのワークスペースを返す', async () => {
+  it('SY-1: 何も書いていないときは、rev 2・epoch・「予定」と組み込みのワークスペースを返す', async () => {
     const res = await callApi(db(), 'GET', '/api/changes?since=0');
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      rev: 1,
+      rev: 2,
       epoch: expect.stringMatching(/^[0-9a-f]{16}$/) as unknown,
-      // rev の順（同じ rev なら id の順）。「予定」だけが、マイグレーションで rev を進めて入れた行（rev 1）。
+      // rev の順（同じ rev なら id の順）。「予定」だけが、マイグレーションが rev を進めて入れ、色を直した行（rev 2）。
       workspaces: [
         expect.objectContaining({ id: 'builtin-holiday', builtin: 'holiday' }),
         expect.objectContaining({ id: 'builtin-observance', builtin: 'observance' }),
@@ -61,11 +61,12 @@ describe('GET /api/changes', () => {
   it('SY-1: since より後に変わった行だけを返し、削除した行も含める', async () => {
     await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
     await applyWrite(db(), { entries: [makeEntry({ id: 'b' })] });
+    const { rev } = await fetchChanges(db(), 0);
     await applyWrite(db(), { entries: [makeEntry({ id: 'a', editedAt: 2000, deletedAt: 2000 })] });
 
-    const changes = await fetchChanges(db(), 3);
+    const changes = await fetchChanges(db(), rev);
 
-    expect(changes.rev).toBe(4);
+    expect(changes.rev).toBe(rev + 1);
     expect(changes.entries.map(({ id, deletedAt }) => ({ id, deletedAt }))).toEqual([
       { id: 'a', deletedAt: 2000 },
     ]);
