@@ -11,11 +11,11 @@ import styles from './DayPlaceholder.module.css';
 export function DayPlaceholder({ date }: { date: DateStr }) {
   return (
     <main className={styles.screen}>
-      <div className={styles.status}>
+      <SyncOverview />
+      <div className={styles.titleRow}>
+        <h1 className={styles.date}>{formatDayTitle(date)}</h1>
         <PendingBadge />
       </div>
-      <SyncOverview />
-      <h1 className={styles.date}>{formatDayTitle(date)}</h1>
       <p className={styles.message}>日表示は実装 #9 で作ります</p>
       <button type="button" className={styles.button} onClick={goToMonth}>
         月表示に戻る
