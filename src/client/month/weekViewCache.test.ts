@@ -412,6 +412,28 @@ describe('範囲の端', () => {
     ]);
   });
 
+  it('範囲の中の日に始まる複数日の予定は、範囲の外の日まで横棒が伸び、外の日には「+N件」を出さない', () => {
+    // 2199-12-31 に始まり、2200-01-03 まで続く終日の予定が 3 件。2 行しか入らないので、どの日もあふれる（外の日も、数えるだけなら「+2件」になる）。
+    const cache = cacheOf(
+      ['a', 'b', 'c'].map((id) => ({
+        id,
+        title: id,
+        startDate: '2199-12-31',
+        endDate: '2200-01-03',
+      })),
+      { slots: 2 },
+    );
+
+    const items = cache.get(LAST_WEEK_NUMBER).items;
+    const mores = items.filter((item): item is MoreItem => item.kind === 'more');
+    const bars = items.filter((item): item is BarItem => item.kind === 'bar');
+
+    // 出せる行は 1 行（残りの 1 行が「+N件」）。その横棒は、範囲の外のマス（2200-01-01 = 列 3 から 2200-01-03 = 列 5）まで伸びる。
+    expect(bars.map((bar) => [bar.event.title, bar.startCol, bar.endCol])).toEqual([['a', 2, 5]]);
+    // 「+N件」は、範囲の中の日（2199-12-31 = 列 2）だけ。外の日（列 3 以降）には出ない。
+    expect(mores).toEqual([{ kind: 'more', col: 2, row: 1, count: 2 }]);
+  });
+
   it('範囲の中の週の日は、すべて inRange が true', () => {
     const days = cacheOf([]).get(week('2026-10-21')).days;
 

@@ -18,7 +18,9 @@ export interface DayView {
   date: DateStr;
   /**
    * 表示できる範囲（1900〜2199 年）の中の日か。最初と最後の週は、範囲の外の日を含む。
-   * 外の日は、日表示へ移れず（URL が `/` に戻される）、祝日・予定もないので、リンクにしない。
+   * 外の日は、日表示へ移れない（URL が `/` に戻される）ので、リンクにしない。祝日は求めない。
+   * 予定は、範囲の中の日に始まる複数日の回が、外の日まで横棒として伸びることがある（そのまま出す）。
+   * 外の日の「+N件」は、リンクの行き先がないので、出さない。
    */
   inRange: boolean;
   /** 祝日名。祝日でない日と、組み込みのワークスペース「祝日」が OFF のときは null。 */
@@ -197,6 +199,10 @@ export class WeekViewCache {
     const events = chunk.events.filter(
       (event) => event.startDate <= last && event.lastDate >= first,
     );
-    return { weekNumber, days, items: layoutWeek(events, first, this.slots) };
+    // 範囲の外の日の「+N件」は、行き先（日表示）がないので、出さない。横棒が外の日にかかるのは、そのままにする。
+    const items = layoutWeek(events, first, this.slots).filter(
+      (item) => item.kind !== 'more' || days[item.col]?.inRange === true,
+    );
+    return { weekNumber, days, items };
   }
 }
