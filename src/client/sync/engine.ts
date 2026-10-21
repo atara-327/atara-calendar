@@ -21,7 +21,7 @@ import type { LoadedRequests, PendingStorage } from './storage';
 /** 削除の「元に戻す」を押せる時間（ms）。この間は、サーバーに送らない（設計書 6.6）。 */
 export const DELETE_UNDO_MS = 5000;
 
-/** 画面を開いている間に、受け取る間隔（ms。設計書 6.3）。 */
+/** タブが前面にある間に、受け取る間隔（ms。設計書 6.3）。 */
 export const POLL_INTERVAL_MS = 60_000;
 
 /** setTimeout の戻り値。ブラウザは number、Node は object。 */
