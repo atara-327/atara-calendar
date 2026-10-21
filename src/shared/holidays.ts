@@ -312,6 +312,32 @@ export function observancesOfYear(
 }
 
 /**
+ * 期間 [from, to]（両端を含む）の祝日と記念日を、日付順に返す。from が to より後なら、どちらも空。
+ * 年をまたぐ期間は、年ごとに計算する。1900〜2199 年の外にかかると、例外を投げる（holidaysOfYear と同じ）。
+ * 画面（月表示）と GET /api/occurrences が、同じ一覧を作るために使う。
+ */
+export function namedDatesBetween(
+  from: DateStr,
+  to: DateStr,
+): { holidays: NamedDate[]; observances: NamedDate[] } {
+  const holidays: NamedDate[] = [];
+  const observances: NamedDate[] = [];
+  if (from > to) return { holidays, observances };
+
+  for (let year = dateToYmd(from).year; year <= dateToYmd(to).year; year++) {
+    for (const [date, name] of holidaysOfYear(year)) {
+      if (date >= from && date <= to) holidays.push({ date, name });
+    }
+    for (const observance of observancesOfYear(year)) {
+      if (observance.date >= from && observance.date <= to) observances.push(observance);
+    }
+  }
+  // 祝日は Map の挿入順で、日付順とは限らない。記念日は、年ごとに日付順で返ってくる。
+  holidays.sort(byDate);
+  return { holidays, observances };
+}
+
+/**
  * 休日（土曜・日曜・祝日・年末年始の 12/29〜1/3）かどうか。記念日は休日に含めない。
  * 祝日（holiday）より広いので、名前を分けている。
  */
