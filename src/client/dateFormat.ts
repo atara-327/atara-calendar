@@ -9,3 +9,10 @@ export function formatDayTitle(date: DateStr): string {
   const weekday = WEEKDAY_LABELS[dayOfWeek(date)] ?? '';
   return `${String(year)}年${String(month)}月${String(day)}日（${weekday}）`;
 }
+
+/** 「10月22日（木）」。年は付けない。マスのリンクの読み上げの名前に使う。 */
+export function formatMonthDay(date: DateStr): string {
+  const { month, day } = dateToYmd(date);
+  const weekday = WEEKDAY_LABELS[dayOfWeek(date)] ?? '';
+  return `${String(month)}月${String(day)}日（${weekday}）`;
+}

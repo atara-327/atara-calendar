@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
-import { WEEKDAY_LABELS } from '../dateFormat';
+import { formatMonthDay } from '../dateFormat';
 import { Link } from '../Link';
 import { dayPath } from '../route';
 import { cellBoundary } from './boundaries';
@@ -25,7 +25,7 @@ function boundaryClass({ top, left }: ReturnType<typeof cellBoundary>): string {
 }
 
 function DayCell({ day, today }: { day: DayView; today: DateStr }) {
-  const { month, day: dayOfMonth } = dateToYmd(day.date);
+  const { day: dayOfMonth } = dateToYmd(day.date);
   const weekday = dayOfWeek(day.date);
 
   if (!day.inRange) {
@@ -52,9 +52,7 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
   );
   const names = [holiday, ...day.observanceNames].filter((name) => name !== null);
   // 読み上げ用。「10月22日（木） 祝日名」。曜日は、見出しの行（aria-hidden）からは読めないので、ここに入れる。
-  const accessibleName = `${String(month)}月${String(dayOfMonth)}日（${WEEKDAY_LABELS[weekday] ?? ''}）${
-    names.length > 0 ? ` ${names.join('・')}` : ''
-  }`;
+  const accessibleName = `${formatMonthDay(day.date)}${names.length > 0 ? ` ${names.join('・')}` : ''}`;
 
   return (
     <Link
@@ -120,6 +118,8 @@ function MoreLink({ item, date }: { item: MoreItem; date: DateStr }) {
       to={dayPath(date)}
       className={styles.more}
       style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}
+      // 「+2件」だけでは、どの日の何なのかが、読み上げで分からない。
+      aria-label={`${formatMonthDay(date)}の予定、ほか ${String(item.count)} 件`}
     >
       +{item.count}件
     </Link>

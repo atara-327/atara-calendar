@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WEEKDAY_LABELS, formatDayTitle } from './dateFormat';
+import { WEEKDAY_LABELS, formatDayTitle, formatMonthDay } from './dateFormat';
 
 describe('日付の表記', () => {
   it('「2026年10月21日（水）」の形にする', () => {
@@ -14,5 +14,15 @@ describe('日付の表記', () => {
     expect(WEEKDAY_LABELS).toEqual(['日', '月', '火', '水', '木', '金', '土']);
     expect(formatDayTitle('2026-10-18')).toContain('（日）');
     expect(formatDayTitle('2026-10-24')).toContain('（土）');
+  });
+});
+
+describe('月日と曜日の表記', () => {
+  it('「10月22日（木）」の形にする（年は付けない）', () => {
+    expect(formatMonthDay('2026-10-22')).toBe('10月22日（木）');
+  });
+
+  it('月と日は 0 を付けない', () => {
+    expect(formatMonthDay('2027-01-01')).toBe('1月1日（金）');
   });
 });
