@@ -36,16 +36,18 @@ function isAuthFailure(response: FetchResponse): boolean {
 export type WriteOutcome =
   /** 200（applied: true も false も）。列から外して、次へ。 */
   | { kind: 'done' }
-  /** 4xx。直らないので、列から外す。clockSkew は、端末の時計が進んでいる（edited_at_in_future）。 */
+  /** API のエラー（4xx）。直らないので、列から外す。clockSkew は、端末の時計が進んでいる（edited_at_in_future）。 */
   | { kind: 'rejected'; clockSkew: boolean }
   /** ログインが切れている、または許可されていない。依頼は捨てずに、送信を止める。 */
   | { kind: 'auth' }
-  /** 5xx・通信の失敗など。外さずに止めて、次のきっかけで再び試す。 */
+  /** 5xx・通信の失敗・API のエラーの形でない 4xx など。外さずに止めて、次のきっかけで再び試す。 */
   | { kind: 'retry' };
 
-// 4xx は、依頼の中身が原因なので、何度送っても同じ結果になり、捨てる（設計書 6.2）。
-// 例外は、時間がたてば通る 408（タイムアウト）と 429（回数の制限）。Worker は返さないが、Cloudflare の前段が返しうる。
-// 捨てると、電波の悪い場所で、編集が黙って消える。
+// 4xx は、依頼の中身が原因なので、何度送っても同じ結果になり、捨てる（設計書 6.2）。ただし、次の 2 つは捨てない。
+// - 408（タイムアウト）と 429（回数の制限）。時間がたてば通る。Worker は返さないが、Cloudflare の前段が返しうる。
+// - 本文が、API のエラーの形（apiErrorBodySchema）でない 4xx。Worker は、必ずその形で返す。
+//   それ以外は、Cloudflare の前段の 400 や、配信の設定ミスの 404 など、依頼の中身ではなく、経路が原因なので、
+//   捨てると、送信待ちが全部消える。再び試し続けても、「未送信 N件」で気づける。
 const TRANSIENT_CLIENT_ERRORS: ReadonlySet<number> = new Set([408, 429]);
 
 /** 書き込みの応答を、端末の次の動きに直す。 */
@@ -64,7 +66,8 @@ export async function classifyWriteResponse(response: FetchResponse): Promise<Wr
     !TRANSIENT_CLIENT_ERRORS.has(response.status)
   ) {
     const body = await readJson(response, apiErrorBodySchema);
-    return { kind: 'rejected', clockSkew: body?.error === 'edited_at_in_future' };
+    if (body === undefined) return { kind: 'retry' };
+    return { kind: 'rejected', clockSkew: body.error === 'edited_at_in_future' };
   }
   return { kind: 'retry' };
 }

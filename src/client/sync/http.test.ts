@@ -52,12 +52,10 @@ describe('書き込みの応答の扱い（設計書 6.2）', () => {
     { status: 400, error: 'last_workspace' },
     { status: 404, error: 'not_found' },
     { status: 409, error: 'conflict' },
-    { status: 415, error: undefined },
-    { status: 413, error: undefined },
   ])(
-    '$status $error は、直らないので、列から外す（時計のずれではない）',
+    'API のエラー（$status $error）は、直らないので、列から外す（時計のずれではない）',
     async ({ status, error }) => {
-      const body = error === undefined ? { error: 'x' } : { error, message: '固定の文言' };
+      const body = { error, message: '固定の文言' };
       expect(await classifyWriteResponse(response(status, body))).toEqual({
         kind: 'rejected',
         clockSkew: false,
@@ -70,11 +68,19 @@ describe('書き込みの応答の扱い（設計書 6.2）', () => {
     expect(await classifyWriteResponse(res)).toEqual({ kind: 'rejected', clockSkew: true });
   });
 
-  it('4xx の本文が JSON でなくても、列から外す', async () => {
-    expect(await classifyWriteResponse(htmlResponse(400))).toEqual({
-      kind: 'rejected',
-      clockSkew: false,
-    });
+  // Worker は、4xx を必ず API のエラーの形（apiErrorBodySchema）で返す。それ以外の 4xx は、依頼の中身ではなく、
+  // 経路が原因（Cloudflare の前段の 400、配信の設定ミスの 404 など）。捨てると、送信待ちが全部消える（実装 #6 の確認 Q12）。
+  it.each([
+    { name: '本文が JSON でない 400（前段のエラーページなど）', res: htmlResponse(400) },
+    { name: '本文が JSON でない 404（配信の設定ミス）', res: htmlResponse(404) },
+    { name: '知らない種類の error', res: response(400, { error: 'x', message: 'm' }) },
+    { name: 'API のエラーの形でない JSON', res: response(413, { detail: 'too large' }) },
+    {
+      name: 'リクエストの確認の 415（本文が空の応答）',
+      res: response(415, { error: 'unsupported_media_type' }),
+    },
+  ])('$name の 4xx は、捨てずに、外さずに再び試す', async ({ res }) => {
+    expect(await classifyWriteResponse(res)).toEqual({ kind: 'retry' });
   });
 
   it.each([

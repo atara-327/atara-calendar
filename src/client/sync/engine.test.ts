@@ -483,6 +483,22 @@ describe('編集と送信（設計書 6.2）', () => {
       },
     );
 
+    it('API のエラーの形でない 4xx（前段のエラーページなど）は、捨てずに、外さずに再び試す（実装 #6 の確認 Q12）', async () => {
+      const device = await startedDevice();
+      device.network.override = ({ method }) =>
+        method === 'GET' ? undefined : fakeResponse(400, '<html>Bad Request</html>');
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      expect(pendingOf(device)).toBe(1);
+      expect(device.state().discarded.count).toBe(0);
+
+      device.network.override = null;
+      await device.engine.syncNow();
+
+      expect(pendingOf(device)).toBe(0);
+    });
+
     it('200 でも、書き込みの応答の形でない本文（中継ページの HTML など）は、外さずに再び試す', async () => {
       const device = await startedDevice();
       device.network.override = ({ method }) =>
