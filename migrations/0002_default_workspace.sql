@@ -10,9 +10,9 @@
 -- 「まだない」の条件を付けられず、すでに行があるときも rev だけが進む。
 
 UPDATE meta SET rev = rev + 1
-WHERE NOT EXISTS (SELECT 1 FROM workspaces WHERE id = 'default-workspace');
+WHERE id = 1 AND NOT EXISTS (SELECT 1 FROM workspaces WHERE id = 'default-workspace');
 
 INSERT INTO workspaces (id, name, color, sort_order, visible, builtin, edited_at, rev, deleted_at)
 SELECT 'default-workspace', '予定', '#039BE5', 0, 1, NULL, 0, meta.rev, NULL
 FROM meta
-WHERE NOT EXISTS (SELECT 1 FROM workspaces WHERE id = 'default-workspace');
+WHERE id = 1 AND NOT EXISTS (SELECT 1 FROM workspaces WHERE id = 'default-workspace');

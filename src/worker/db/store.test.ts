@@ -82,7 +82,7 @@ function interleavedWith(interleavingWrite: WriteRequest): Database {
 }
 
 describe('readChanges', () => {
-  it('SY-1: 何も書いていないときは、rev 0 と、組み込みの 2 つのワークスペースを返す', async () => {
+  it('SY-1: 「予定」を除いて rev 0 に戻した状態（beforeEach）で、何も書いていないときは、rev 0 と、組み込みの 2 つと w1 のワークスペースを返す', async () => {
     const changes = await readChanges(db(), 0);
 
     expect(changes.rev).toBe(0);

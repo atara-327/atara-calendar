@@ -534,7 +534,8 @@ describe('DELETE /api/workspaces/:id', () => {
 
   it('11.5: 最後の 1 つのワークスペースは削除できない（400。last_workspace）。組み込みは数えない', async () => {
     // マイグレーションが入れる「予定」を先に消して、w1 を最後の 1 つにする。
-    await deleteWorkspace('default-workspace', 4000);
+    const deletedDefault = await deleteWorkspace('default-workspace', 4000);
+    expect(deletedDefault.body).toEqual({ applied: true });
     const before = await dumpTables(db());
 
     const res = await deleteWorkspace('w1', 5000);

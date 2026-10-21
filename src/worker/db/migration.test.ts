@@ -6,7 +6,8 @@ import {
   splitStatements,
   type TestDatabase,
 } from '../../../test/helpers/d1';
-import { readChanges } from './store';
+import { makeWorkspace } from '../../../test/helpers/workspaces';
+import { applyWrite, readChanges } from './store';
 
 let testDatabase: TestDatabase;
 
@@ -64,7 +65,7 @@ describe('マイグレーション後の初期状態', () => {
     ]);
   });
 
-  it('WS-1: 最初のワークスペース「予定」が、全端末で同じ固定の id で入っている', async () => {
+  it('4.2・11.5: 最初のワークスペース「予定」が、全端末で同じ固定の id で入っている', async () => {
     const { results } = await testDatabase.db
       .prepare('SELECT * FROM workspaces WHERE builtin IS NULL')
       .all();
@@ -138,6 +139,14 @@ describe('0002_default_workspace.sql', () => {
     await testDatabase.db.batch(statements.map((statement) => testDatabase.db.prepare(statement)));
   }
 
+  async function readWorkspaces() {
+    return (await testDatabase.db.prepare('SELECT * FROM workspaces ORDER BY id').all()).results;
+  }
+
+  async function readRev() {
+    return testDatabase.db.prepare('SELECT rev FROM meta').first();
+  }
+
   it('SY-1: すでに rev を覚えている端末も、差分（since）で「予定」を受け取れる', async () => {
     // 0002 を当てる前の本番に見立てる。「予定」を消し、予定の行が書かれて rev が 5 まで進んだことにする。
     await testDatabase.db.batch([
@@ -155,8 +164,6 @@ describe('0002_default_workspace.sql', () => {
   });
 
   it('同じ id の行がすでにあれば、何も変えない（rev も進めない）', async () => {
-    const readWorkspaces = async () =>
-      (await testDatabase.db.prepare('SELECT * FROM workspaces ORDER BY id').all()).results;
     await testDatabase.db
       .prepare(
         "UPDATE workspaces SET name = '仕事', edited_at = 1000 WHERE id = 'default-workspace'",
@@ -167,7 +174,30 @@ describe('0002_default_workspace.sql', () => {
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await testDatabase.db.prepare('SELECT rev FROM meta').first()).toEqual({ rev: 1 });
+    expect(await readRev()).toEqual({ rev: 1 });
+  });
+
+  it('「予定」が論理削除されていても、生き返らせず、rev も進めない', async () => {
+    await applyWrite(testDatabase.db, {
+      workspaces: [
+        makeWorkspace({
+          id: 'default-workspace',
+          name: '予定',
+          color: '#039BE5',
+          editedAt: 2000,
+          deletedAt: 2000,
+        }),
+      ],
+    });
+    const before = await readWorkspaces();
+
+    await run();
+
+    expect(await readWorkspaces()).toEqual(before);
+    expect(await readRev()).toEqual({ rev: 2 });
+    expect(before).toContainEqual(
+      expect.objectContaining({ id: 'default-workspace', deleted_at: 2000, rev: 2 }),
+    );
   });
 });
 
