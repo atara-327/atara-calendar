@@ -56,7 +56,10 @@ export async function callParsed<T extends z.ZodType>(
   return schema.parse(res.body);
 }
 
-/** 予定の行が使う外部キーの相手を、rev 0 の行として入れる（rev の数え方を 0 から始めるため）。 */
+/**
+ * 予定の行が使う外部キーの相手を、rev 0 の行として入れる。applyWrite で入れると meta.rev が進み、
+ * テストが期待する rev（マイグレーション直後の次から数える）がずれるため。
+ */
 export async function seedWorkspace(db: D1Database, id: string, sortOrder = 0): Promise<void> {
   await db
     .prepare(

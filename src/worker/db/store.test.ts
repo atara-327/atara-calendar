@@ -2,7 +2,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { z } from 'zod';
 import { changeEntry, createEntry, deleteEntry } from '../../shared/recurrence';
 import type { Entry, EntryDraft } from '../../shared/schema';
-import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
+import {
+  createTestDatabase,
+  removeDefaultWorkspace,
+  type TestDatabase,
+} from '../../../test/helpers/d1';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { CorruptRowError } from './rows';
@@ -31,9 +35,13 @@ afterAll(async () => {
   await testDatabase.dispose();
 });
 
-/** 予定の行が使う外部キーの相手 'w1' を、rev 0 の行として最初から入れておく（rev の数え方を 0 から始めるため）。 */
+/**
+ * 予定の行が使う外部キーの相手 'w1' を、rev 0 の行として最初から入れておく（rev の数え方を 0 から始めるため）。
+ * マイグレーションが入れる「予定」は、rev を 1 から数えさせてしまうので、消しておく。
+ */
 beforeEach(async () => {
   await testDatabase.reset();
+  await removeDefaultWorkspace(testDatabase.db);
   await testDatabase.db
     .prepare(
       `INSERT INTO workspaces (id, name, color, sort_order, visible, builtin, edited_at, rev)
@@ -74,7 +82,7 @@ function interleavedWith(interleavingWrite: WriteRequest): Database {
 }
 
 describe('readChanges', () => {
-  it('SY-1: 何も書いていないときは、rev 0 と、組み込みの 2 つのワークスペースを返す', async () => {
+  it('SY-1: 「予定」を除いて rev 0 に戻した状態（beforeEach）で、何も書いていないときは、rev 0 と、組み込みの 2 つと w1 のワークスペースを返す', async () => {
     const changes = await readChanges(db(), 0);
 
     expect(changes.rev).toBe(0);
