@@ -8,6 +8,7 @@ import {
   holidaysOfYear,
   isDayOff,
   isWeekday,
+  namedDatesBetween,
   observancesOfYear,
 } from './holidays';
 
@@ -455,6 +456,75 @@ describe('HD-5: 記念日の上書き一覧', () => {
     expect(() =>
       observancesOfYear(2026, [{ year: 2026, name: '冬至', date: '2026-12-32' }]),
     ).toThrow(RangeError);
+  });
+});
+
+describe('HD-1〜HD-3: 期間の祝日と記念日', () => {
+  it('期間の祝日と記念日を、日付順で返す。年をまたいでもよい', () => {
+    const result = namedDatesBetween('2026-12-20', '2027-01-19');
+
+    expect(result.holidays).toEqual([
+      { date: '2027-01-01', name: '元日' },
+      { date: '2027-01-11', name: '成人の日' },
+    ]);
+    expect(result.observances).toEqual([
+      { date: '2026-12-22', name: '冬至' },
+      { date: '2026-12-24', name: 'クリスマスイブ' },
+      { date: '2026-12-25', name: 'クリスマス' },
+      { date: '2026-12-31', name: '大晦日' },
+    ]);
+  });
+
+  it('3 つ以上の年にまたがるとき、間の年も含める', () => {
+    const result = namedDatesBetween('2025-12-31', '2027-01-01');
+
+    expect(result.holidays.filter(({ name }) => name === '元日')).toEqual([
+      { date: '2026-01-01', name: '元日' },
+      { date: '2027-01-01', name: '元日' },
+    ]);
+    expect(result.observances.filter(({ name }) => name === '大晦日')).toEqual([
+      { date: '2025-12-31', name: '大晦日' },
+      { date: '2026-12-31', name: '大晦日' },
+    ]);
+  });
+
+  it('祝日は、同じ年の中でも日付順に返す（振替休日は、元の祝日の後に出る）', () => {
+    // 表の行の順では、みどりの日（5/4）が憲法記念日（5/3）より先で、振替休日（5/6）は年の最後に足される。
+    const { holidays } = namedDatesBetween('2026-05-01', '2026-05-31');
+
+    expect(holidays).toEqual([
+      { date: '2026-05-03', name: '憲法記念日' },
+      { date: '2026-05-04', name: 'みどりの日' },
+      { date: '2026-05-05', name: 'こどもの日' },
+      { date: '2026-05-06', name: '振替休日' },
+    ]);
+  });
+
+  it('期間の外の祝日・記念日は含めない', () => {
+    expect(namedDatesBetween('2027-01-02', '2027-01-10')).toEqual({
+      holidays: [],
+      observances: [],
+    });
+  });
+
+  it('両端の日を含む', () => {
+    expect(namedDatesBetween('2027-01-01', '2027-01-01').holidays).toEqual([
+      { date: '2027-01-01', name: '元日' },
+    ]);
+    expect(namedDatesBetween('2026-12-30', '2026-12-31').observances).toEqual([
+      { date: '2026-12-31', name: '大晦日' },
+    ]);
+  });
+
+  it.each([
+    { from: '2027-01-01', to: '2026-12-31' },
+    { from: '2027-01-19', to: '2026-12-20' },
+  ])('from が to より後（$from → $to）なら、どちらも空', ({ from, to }) => {
+    expect(namedDatesBetween(from, to)).toEqual({ holidays: [], observances: [] });
+  });
+
+  it('対応外の年（2199 年より後）にかかると、例外を投げる', () => {
+    expect(() => namedDatesBetween('2199-12-31', '2200-01-01')).toThrow(RangeError);
   });
 });
 
