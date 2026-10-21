@@ -3,7 +3,7 @@ import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import type { BarItem, MoreItem, TimedItem } from './layout';
 import { CHUNK_WEEKS, MAX_CACHED_CHUNKS, WeekViewCache } from './weekViewCache';
-import { FIRST_WEEK_NUMBER, LAST_WEEK_NUMBER, weekNumberOf } from './weeks';
+import { FIRST_WEEK_NUMBER, LAST_WEEK_NUMBER, weekDates, weekNumberOf } from './weeks';
 
 const workspaces = [
   makeWorkspace({ id: 'w1', color: '#039BE5' }),
@@ -274,6 +274,95 @@ describe('週に描く祝日名・記念日名', () => {
       '2026-10-23',
       '2026-10-24',
     ]);
+  });
+});
+
+describe('まとまり（4 週間）の境目をまたぐ予定', () => {
+  // 2026-10-18 以降で、最初に来る、まとまりの先頭の週。その 1 つ前の週が、前のまとまりの最後の週。
+  const nextStart =
+    FIRST_WEEK_NUMBER +
+    Math.ceil((weekNumberOf('2026-10-18') - FIRST_WEEK_NUMBER) / CHUNK_WEEKS) * CHUNK_WEEKS;
+  const previousLast = nextStart - 1;
+  // 前のまとまりの最後の週の、金曜日（列 5）と、次のまとまりの最初の週の、月曜日（列 1）・水曜日（列 3）。
+  const previousFriday = weekDates(previousLast)[5] ?? '';
+  const previousWednesday = weekDates(previousLast)[3] ?? '';
+  const nextMonday = weekDates(nextStart)[1] ?? '';
+  const nextWednesday = weekDates(nextStart)[3] ?? '';
+
+  function barsOf(cache: WeekViewCache, weekNumber: number): BarItem[] {
+    return cache.get(weekNumber).items.filter((item): item is BarItem => item.kind === 'bar');
+  }
+
+  it('境目をまたぐ横棒は、前の週で右が切れ、後ろの週で左が切れる（後ろのまとまりを先に計算しても）', () => {
+    const cache = cacheOf([
+      { id: 'e1', title: '帰省', startDate: previousFriday, endDate: nextMonday },
+    ]);
+
+    // 後ろのまとまりを先に計算する。
+    const [after] = barsOf(cache, nextStart);
+    const [before] = barsOf(cache, previousLast);
+
+    expect(after).toMatchObject({
+      startCol: 0,
+      endCol: 1,
+      continuesBefore: true,
+      continuesAfter: false,
+    });
+    expect(before).toMatchObject({
+      startCol: 5,
+      endCol: 6,
+      continuesBefore: false,
+      continuesAfter: true,
+    });
+    expect(cache.computedChunkCount).toBe(2);
+  });
+
+  it('前のまとまりから始まる、繰り返しの複数日の回は、後ろのまとまりにも出る', () => {
+    // 毎週金曜に始まる、金〜月（4 日間）の終日の予定。最初の回が、前のまとまりの最後の週の金曜。
+    const cache = cacheOf([
+      {
+        id: 's1',
+        title: '週末',
+        rrule: { freq: 'weekly', days: [5] },
+        startDate: previousFriday,
+        endDate: nextMonday,
+      },
+    ]);
+
+    // 後ろのまとまりを先に計算する。前のまとまりの金曜に始まった回が、月曜まで続いて見える。
+    const afterBars = barsOf(cache, nextStart);
+
+    expect(afterBars.map((bar) => [bar.startCol, bar.endCol, bar.continuesBefore])).toEqual([
+      [0, 1, true],
+      [5, 6, false],
+    ]);
+    expect(afterBars[1]).toMatchObject({ continuesAfter: true });
+  });
+
+  it('別のまとまりへ移した例外の回は、移した先に出て、元の日には出ない', () => {
+    // 毎日の系列の、前のまとまりの水曜の回だけを、次のまとまりの水曜に移した例外。
+    const cache = cacheOf([
+      { id: 's1', title: '毎日', rrule: { freq: 'daily' }, startDate: '2026-01-01' },
+      {
+        id: 'x1',
+        title: '移した回',
+        seriesId: 's1',
+        originalDate: previousWednesday,
+        startDate: nextWednesday,
+        endDate: nextWednesday,
+      },
+    ]);
+
+    // 移した先（後ろのまとまり）を先に計算する。
+    const moved = barsOf(cache, nextStart).filter((bar) => bar.event.title === '移した回');
+    const origin = barsOf(cache, previousLast).filter((bar) => bar.startCol === 3);
+
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatchObject({ startCol: 3, endCol: 3 });
+    // 元の日（前のまとまりの水曜）には、系列の回も、移した回も出ない。
+    expect(origin).toEqual([]);
+    // 移した先の日には、移した回のほかに、系列のその日の回（動いていない）が出る。
+    expect(barsOf(cache, nextStart).filter((bar) => bar.startCol === 3)).toHaveLength(2);
   });
 });
 
