@@ -1,0 +1,95 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useLayoutEffect, useMemo, useState } from 'react';
+import type { DateStr } from '../../shared/date';
+import { useSyncState } from '../sync/instance';
+import styles from './MonthView.module.css';
+import { MonthRow } from './MonthRow';
+import { loadScrollRows, saveScrollRows } from './scrollMemory';
+import { slotsFor } from './sizing';
+import { createViewSelector } from './stableRows';
+import { WeekViewCache } from './weekViewCache';
+import { WEEK_COUNT, scrollRowsForToday, weekOfRow } from './weeks';
+
+// 画面に見えている行の前後に、余分に描く行の数。速くスクロールしたときに、空白が見えないようにする。
+const OVERSCAN_ROWS = 4;
+
+interface MonthGridProps {
+  scrollElement: HTMLElement;
+  /** スクロールする領域の高さ。 */
+  viewportHeight: number;
+  rowHeight: number;
+  today: DateStr;
+  /** いちばん上に見える行が変わったときに呼ぶ（固定ヘッダーの年月を変えるため）。 */
+  onTopRowChange: (row: number) => void;
+}
+
+/**
+ * 週の行の仮想スクロール（MV-1）。画面に見えている行（と少しの余白）だけを描く。
+ * 行の高さは全部同じ（MV-6）なので、行の位置は、番号 × 高さで決まる。行の高さを測らない。
+ * 画面の大きさが変わって行の高さが変わるときは、呼び出し側が、key を変えて作り直す。
+ * 作り直しても、同じ位置を開く（scrollMemory）。
+ */
+export function MonthGrid({
+  scrollElement,
+  viewportHeight,
+  rowHeight,
+  today,
+  onTopRowChange,
+}: MonthGridProps) {
+  // 行が変わっていなければ、同じ view が返る（受け取りのたびに、週の情報を計算し直さないため。stableRows.ts）。
+  const [selectView] = useState(createViewSelector);
+  const view = useSyncState(selectView);
+  const slots = slotsFor(rowHeight);
+
+  // データ（view）か、マスに入る行数が変わったときだけ、作り直す。スクロールでは作り直さない（NF-6）。
+  const cache = useMemo(
+    () =>
+      new WeekViewCache({
+        entries: [...view.entries.values()],
+        workspaces: view.workspaces.values(),
+        slots,
+      }),
+    [view, slots],
+  );
+
+  // useVirtualizer が返す関数は、React Compiler の自動のメモ化と合わない、という警告が出る。
+  // このプロジェクトは React Compiler を使っていない（手でメモ化している）ので、警告の通りの問題は起きない。
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: WEEK_COUNT,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => rowHeight,
+    overscan: OVERSCAN_ROWS,
+    // 最初の描画から、開く位置の行を描く。省くと、いったん空で描いてから、描き直す。
+    initialOffset: () => (loadScrollRows() ?? scrollRowsForToday(today)) * rowHeight,
+    initialRect: { width: 0, height: viewportHeight },
+    onChange: (instance) => {
+      const first = instance.range?.startIndex;
+      if (first !== undefined) onTopRowChange(first);
+    },
+  });
+
+  // 日表示から戻ったとき・作り直したときに、同じ位置を開けるよう、消える直前のスクロールの位置を覚える。
+  // スクロールのたびに覚えない（scrollTop を読むと、ブラウザが、その場でレイアウトをやり直す。強制リフロー）。
+  // useEffect ではなく useLayoutEffect にするのは、後片付けが、要素が画面から外れる前に動くため（外れた後は、scrollTop が 0 になる）。
+  useLayoutEffect(
+    () => () => {
+      saveScrollRows(scrollElement.scrollTop / rowHeight);
+    },
+    [scrollElement, rowHeight],
+  );
+
+  return (
+    <div className={styles.sizer} style={{ height: virtualizer.getTotalSize() }}>
+      {virtualizer.getVirtualItems().map((item) => (
+        <div
+          key={item.key}
+          className={styles.rowFrame}
+          style={{ height: rowHeight, transform: `translateY(${String(item.start)}px)` }}
+        >
+          <MonthRow view={cache.get(weekOfRow(item.index))} slots={slots} today={today} />
+        </div>
+      ))}
+    </div>
+  );
+}

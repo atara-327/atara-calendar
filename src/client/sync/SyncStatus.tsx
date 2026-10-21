@@ -1,12 +1,15 @@
-import { liveWorkspaceIds } from '../../shared/workspace';
+import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from './instance';
-import { selectPendingCount, type SyncState } from './state';
+import { selectPendingCount } from './state';
 import styles from './SyncStatus.module.css';
 
-// 同期の状態の表示（設計書 6.2・6.5）。月表示などの本体（実装 #7 以降）ができるまでの、最小限の画面。
+// 同期の状態の表示（設計書 6.2・6.5）。月表示が使う。
 // 色は、設計書 11.1 の配色（global.css の CSS 変数）に合わせる。
 
-/** 「未送信 N件」。電波がない間に保存した変更が、まだ他の端末に届いていないことを、知っておけるようにする（設計書 6.5）。 */
+/**
+ * 「未送信 N件」。電波がない間に保存した変更が、まだ他の端末に届いていないことを、知っておけるようにする（設計書 6.5）。
+ * 置く場所は、使う側が決める（月表示では、ヘッダーの「今日」ボタンの隣）。
+ */
 export function PendingBadge() {
   const count = useSyncState(selectPendingCount);
   if (count === 0) return null;
@@ -17,24 +20,14 @@ export function PendingBadge() {
   );
 }
 
-function liveEntryCount(state: SyncState): number {
-  let count = 0;
-  for (const entry of state.view.entries.values()) {
-    if (entry.deletedAt === null) count += 1;
-  }
-  return count;
-}
-
-function liveWorkspaceCount(state: SyncState): number {
-  return liveWorkspaceIds(state.view.workspaces.values()).size;
-}
-
-/** 読み込みの状態と、読み込んだ件数。 */
+/**
+ * 読み込みの状態。読み込み中・読み込めなかった・別のタブで止めた、のときだけ、月表示の上に重ねて出す。
+ * 読み込めているときは、何も出さない（月表示の邪魔にならないように）。
+ * 親は、position: relative の領域にすること。
+ */
 export function SyncOverview() {
   const phase = useSyncState((state) => state.phase);
   const takenOver = useSyncState((state) => state.takenOver);
-  const entries = useSyncState(liveEntryCount);
-  const workspaces = useSyncState(liveWorkspaceCount);
 
   if (phase === 'stopped' && takenOver) {
     // 同じ端末で、別のタブを開いたので、このタブは動かさない（設計書 6.7。実装 #6 の確認 Q5）。
@@ -62,17 +55,12 @@ export function SyncOverview() {
   }
   if (phase !== 'ready') {
     return (
-      <section className={styles.overview} role="status">
+      <section className={classNames(styles.overview, styles.passive)} role="status">
         <p className={styles.muted}>読み込み中…</p>
       </section>
     );
   }
-  return (
-    <section className={styles.overview}>
-      <p>予定 {entries}件</p>
-      <p>ワークスペース {workspaces}件</p>
-    </section>
-  );
+  return null;
 }
 
 /** 画面の下に出す知らせ。 */
