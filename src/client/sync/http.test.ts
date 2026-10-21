@@ -84,7 +84,7 @@ describe('書き込みの応答の扱い（設計書 6.2）', () => {
       name: 'Access のログイン画面への転送（opaqueredirect）',
       res: response(0, null, 'opaqueredirect'),
     },
-  ])('$name は、依頼を捨てずに、送信を止める（Q6）', async ({ res }) => {
+  ])('$name は、依頼を捨てずに、送信を止める（実装 #6 の確認 Q6）', async ({ res }) => {
     expect(await classifyWriteResponse(res)).toEqual({ kind: 'auth' });
   });
 

@@ -37,7 +37,7 @@ export function SyncOverview() {
   const workspaces = useSyncState(liveWorkspaceCount);
 
   if (phase === 'stopped' && takenOver) {
-    // 同じ端末で、別のタブを開いたので、このタブは動かさない（設計書 6.2。Q5）。
+    // 同じ端末で、別のタブを開いたので、このタブは動かさない（設計書 6.7。実装 #6 の確認 Q5）。
     return (
       <section className={styles.overview} role="alert">
         <p>別のタブで開いたため、このタブは止めました</p>

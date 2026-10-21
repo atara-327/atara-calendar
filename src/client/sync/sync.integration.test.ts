@@ -213,7 +213,7 @@ describe('同じ予定を 2 台で編集して食い違ったとき（SY-3）', 
   });
 });
 
-describe('同じ端末の複数のタブ（Q5）', () => {
+describe('同じ端末の複数のタブ（実装 #6 の確認 Q5）', () => {
   /** 同じ端末の、古いタブと、新しく開いたタブ。錠と IndexedDB を共有する。 */
   function twoTabs() {
     const hub = new FakeLockHub();

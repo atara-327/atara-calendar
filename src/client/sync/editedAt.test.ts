@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEditedAtClock } from './editedAt';
 
-describe('editedAt の時計（Q1）', () => {
+describe('editedAt の時計（実装 #6 の確認 Q1）', () => {
   it('時計が進んでいるときは、今の時刻（ms）を返す', () => {
     let now = 1000;
     const clock = createEditedAtClock({ now: () => now });

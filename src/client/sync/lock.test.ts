@@ -24,7 +24,7 @@ function fakeLockManager() {
   return manager as unknown as LockManager;
 }
 
-describe('同じ端末の複数のタブ（Q5）', () => {
+describe('同じ端末の複数のタブ（実装 #6 の確認 Q5）', () => {
   it('錠が取れたら、acquire が解決する', async () => {
     const lock = createWebLock(fakeLockManager());
     await expect(lock.acquire(() => undefined)).resolves.toBeDefined();

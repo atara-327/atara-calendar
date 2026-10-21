@@ -48,7 +48,7 @@ export interface ConfirmingRequest {
 
 export interface SyncState {
   phase: SyncPhase;
-  /** 別のタブで開いたため、このタブを止めた（設計書 6.2。Q5）。phase が stopped のとき。 */
+  /** 別のタブで開いたため、このタブを止めた（設計書 6.7。実装 #6 の確認 Q5）。phase が stopped のとき。 */
   takenOver: boolean;
   /** サーバーから受け取った内容。 */
   base: BaseData;
@@ -62,12 +62,12 @@ export interface SyncState {
    */
   view: RowSet;
   /**
-   * サーバーが断った（4xx）依頼、または形が合わずに消した依頼の、数。画面に知らせる（Q2）。
+   * サーバーが断った（4xx）依頼、または形が合わずに消した依頼の、数。画面に知らせる（実装 #6 の確認 Q2）。
    * clockSkew は、edited_at_in_future で断られた依頼がある（端末の時計がずれている）。
    * 200 の applied: false（別の端末の新しい編集に負けた・対象がもうない）は、含めない。SY-3 どおりの正常な動き。
    */
   discarded: { count: number; clockSkew: boolean };
-  /** ログインが切れている、または許可されていない（401・403・Access のログイン画面への転送。Q6）。 */
+  /** ログインが切れている、または許可されていない（401・403・Access のログイン画面への転送。実装 #6 の確認 Q6）。 */
   authRequired: boolean;
   /** 受け取りの応答が、読める形でなかった（設計書 6.3）。 */
   syncError: boolean;

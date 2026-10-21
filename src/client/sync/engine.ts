@@ -245,7 +245,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         authRequired: false,
       });
     } else {
-      // 4xx。画面からは、すぐ消える（view を作り直すと、この依頼が重ならない）。利用者に、捨てたことを知らせる（Q2）。
+      // 4xx。画面からは、すぐ消える（view を作り直すと、この依頼が重ならない）。利用者に、捨てたことを知らせる（実装 #6 の確認 Q2）。
       update({
         queue,
         authRequired: false,

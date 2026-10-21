@@ -296,7 +296,7 @@ describe('編集と送信（設計書 6.2）', () => {
     expect((await device.storage.load()).requests).toEqual([]);
   });
 
-  describe('編集した時刻（Q1）', () => {
+  describe('編集した時刻（実装 #6 の確認 Q1）', () => {
     it('同じミリ秒に続けて編集しても、editedAt は必ず増える（2 回目が反映済みとして捨てられない）', async () => {
       const device = await startedDevice();
       device.network.online = false;
@@ -336,7 +336,7 @@ describe('編集と送信（設計書 6.2）', () => {
     });
   });
 
-  describe('サーバーの応答（Q2・Q6）', () => {
+  describe('サーバーの応答（実装 #6 の確認 Q2・Q6）', () => {
     it('4xx で断られた依頼は、列から外れて画面から消え、保存できなかった変更として知らせる', async () => {
       const device = await startedDevice();
       // 組み込みのワークスペースの名前は変えられない（400 builtin_workspace）。端末のやり直しは、この検証を真似ないので、
@@ -433,7 +433,7 @@ describe('編集と送信（設計書 6.2）', () => {
         respond: () => fakeResponse(0, null, 'opaqueredirect'),
       },
     ])(
-      '$name は、依頼を捨てずに送信を止め、ログインし直すよう知らせる。次のきっかけで再び試し、通れば続ける（Q6）',
+      '$name は、依頼を捨てずに送信を止め、ログインし直すよう知らせる。次のきっかけで再び試し、通れば続ける（実装 #6 の確認 Q6）',
       async ({ respond }) => {
         const device = await startedDevice();
         device.network.override = ({ method }) => (method === 'GET' ? undefined : respond());
