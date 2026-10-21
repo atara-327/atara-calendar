@@ -1,0 +1,238 @@
+.row {
+  position: relative;
+  height: 100%;
+}
+
+.cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.cell {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  border-right: 1px solid var(--color-grid);
+  border-bottom: 1px solid var(--color-grid);
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 範囲（1900〜2199 年）の外の日。リンクではなく、日付の数字だけを薄く出す。 */
+.outOfRange {
+  color: var(--color-observance);
+  opacity: 0.5;
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: -2px;
+}
+
+/*
+ * 月・年の境目の階段状の線（MV-3・MV-4）。マスごとに、左と上の線を持つ。色と太さは設計書 11.1。
+ * マスの境目の上に重ねる（1px 外側へはみ出して、隣のマスの普通の線を覆う）。
+ * 後ろの行ほど手前に描かれるので、上の行へはみ出した分は、上の行の線の上に出る。
+ */
+.topMonth::before,
+.topYear::before,
+.leftMonth::after,
+.leftYear::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.topMonth::before {
+  top: -1px;
+  right: -1px;
+  left: -1px;
+  height: 2px;
+  background-color: var(--color-month-border);
+}
+
+.topYear::before {
+  top: -1px;
+  right: -1px;
+  left: -1px;
+  height: 3px;
+  background-color: var(--color-year-border);
+}
+
+.leftMonth::after {
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 2px;
+  background-color: var(--color-month-border);
+}
+
+.leftYear::after {
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 3px;
+  background-color: var(--color-year-border);
+}
+
+.dateLine {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.sunday,
+.holiday {
+  color: var(--color-holiday);
+}
+
+.saturday {
+  color: var(--color-saturday);
+}
+
+.today {
+  background-color: var(--color-today);
+  color: var(--color-bg);
+  font-weight: 700;
+}
+
+.monthLabel {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.holidayName,
+.observanceName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.holidayName {
+  color: var(--color-holiday);
+}
+
+.observanceName {
+  color: var(--color-observance);
+}
+
+/* 予定の層。マスの上に重ねて、予定のない場所のクリックは、下のマスに通す。 */
+.events {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.events > * {
+  pointer-events: auto;
+}
+
+.bar,
+.timed,
+.more {
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 1px 2px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.bar {
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+}
+
+.continuesBefore {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.continuesAfter {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.timed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  overflow: hidden;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.time {
+  flex: none;
+}
+
+.timedText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * 幅の狭い画面（スマホ）では、時刻を出さない。マスが 1 / 7 の幅（約 55px）しかなく、
+ * 「15:00 歯医者」を出すと、時刻だけで幅が埋まり、題名が読めないため。時刻は日表示で見る。
+ */
+@media (max-width: 640px) {
+  .time {
+    display: none;
+  }
+}
+
+/* 1 月 1 日のラベルの年（「2027年」）。幅の狭い画面では、マスに入りきらないので省く（年は、上の固定ヘッダーにある）。 */
+@media (max-width: 640px) {
+  .labelYear {
+    display: none;
+  }
+}
+
+.more {
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--color-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.more:hover {
+  background-color: var(--color-grid);
+}

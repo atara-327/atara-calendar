@@ -1,0 +1,103 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.headerEnd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todayButton {
+  padding: 4px 12px;
+  border: 1px solid var(--color-observance);
+  border-radius: 16px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.todayButton:hover {
+  background-color: var(--color-grid);
+}
+
+/* 曜日の見出し。日付のマスと同じ 7 等分の幅にそろえる（スクロール領域のスクロールバーは隠している）。 */
+.weekdays {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-grid);
+  font-size: 12px;
+  text-align: center;
+}
+
+.weekday {
+  color: var(--color-observance);
+}
+
+.sundayLabel {
+  color: var(--color-holiday);
+}
+
+.saturdayLabel {
+  color: var(--color-saturday);
+}
+
+/* 行の高さを測る領域（scroller）の外側。SyncOverview を、スクロールの上に重ねて出すための基準。 */
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * スクロールバーは隠す。数百年分の長さでは、つまみが、位置の目安にならないため。
+ * 隠さないと、バーの幅のぶん、マスの幅が曜日の見出しとずれる。
+ */
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.sizer {
+  position: relative;
+  width: 100%;
+}
+
+.rowFrame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  contain: layout style;
+}

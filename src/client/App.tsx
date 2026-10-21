@@ -1,11 +1,13 @@
-import { PendingBadge, SyncNotices, SyncOverview } from './sync/SyncStatus';
+import { DayPlaceholder } from './day/DayPlaceholder';
+import { MonthView } from './month/MonthView';
+import { useRoute } from './navigation';
+import { SyncNotices } from './sync/SyncStatus';
 
-// 月表示・日表示（実装 #7 以降）ができるまでは、同期の状態だけを出す。
 export function App() {
+  const route = useRoute();
   return (
     <>
-      <PendingBadge />
-      <SyncOverview />
+      {route.name === 'day' ? <DayPlaceholder date={route.date} /> : <MonthView />}
       <SyncNotices />
     </>
   );
