@@ -45,11 +45,6 @@ export function weekOfRow(row: number): number {
   return row + FIRST_WEEK_NUMBER;
 }
 
-/** 日付が、表示できる範囲（1900〜2199 年）の中か。 */
-export function isInRange(date: DateStr): boolean {
-  return date >= MIN_DATE && date <= MAX_DATE;
-}
-
 /** 範囲の外にはみ出した日付を、範囲の端に寄せる。祝日の計算が対応するのは、1900〜2199 年だけのため。 */
 export function clampToRange(date: DateStr): DateStr {
   if (date < MIN_DATE) return MIN_DATE;

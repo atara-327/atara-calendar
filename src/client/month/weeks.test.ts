@@ -5,7 +5,6 @@ import {
   LAST_WEEK_NUMBER,
   WEEK_COUNT,
   clampToRange,
-  isInRange,
   rowOfWeek,
   scrollRowsForToday,
   weekDates,
@@ -81,13 +80,6 @@ describe('表示できる範囲（1900年1月〜2199年12月）', () => {
     expect(rowOfWeek(LAST_WEEK_NUMBER)).toBe(WEEK_COUNT - 1);
     expect(weekOfRow(0)).toBe(FIRST_WEEK_NUMBER);
     expect(weekOfRow(rowOfWeek(weekNumberOf('2026-10-21')))).toBe(weekNumberOf('2026-10-21'));
-  });
-
-  it('範囲の判定は、日付の端（1900-01-01 と 2199-12-31）を含む', () => {
-    expect(isInRange('1900-01-01')).toBe(true);
-    expect(isInRange('2199-12-31')).toBe(true);
-    expect(isInRange('1899-12-31')).toBe(false);
-    expect(isInRange('2200-01-01')).toBe(false);
   });
 
   it('範囲の外にはみ出した日付は、範囲の端に寄せる', () => {
