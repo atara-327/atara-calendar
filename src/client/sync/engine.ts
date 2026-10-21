@@ -315,6 +315,9 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     update({ queue: queue.filter(({ id }) => id !== requestId) });
     persist(() => env.storage.remove(requestId));
     armHoldTimer();
+    // 取り消した依頼が先頭で、待ち中だったときは、その後ろの依頼が、これまで待たされていた。
+    // 送り始めないと、次のきっかけ（最大 60 秒後）まで、後ろの依頼が送られない。
+    run(syncSoon());
     return true;
   }
 

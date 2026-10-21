@@ -706,6 +706,24 @@ describe('削除の「元に戻す」（設計書 6.6・OT-1）', () => {
     expect((await readAllRows(db())).entries.get(other?.entryId ?? '')?.title).toBe('後ろ');
   });
 
+  it('先頭の待ち中の削除を元に戻すと、これまで待たされていた後ろの依頼を、すぐ送る', async () => {
+    const { device, entryId } = await deviceWithEntry();
+    const accepted = device.engine.deleteEntry(toTarget(entryId));
+    const other = device.engine.createEntry(makeDraft({ title: '後ろ' }));
+    await device.engine.settled();
+    expect(pendingOf(device)).toBe(2);
+    const writesBefore = device.network.writes.length;
+
+    device.clock.advance(1000);
+    device.engine.undo(accepted?.requestId ?? '');
+    await device.engine.settled();
+
+    // 次のきっかけ（60 秒ごとの受け取りなど）を待たずに送られている。
+    expect(pendingOf(device)).toBe(0);
+    expect(device.network.writes.slice(writesBefore).map(({ method }) => method)).toEqual(['PUT']);
+    expect((await readAllRows(db())).entries.get(other?.entryId ?? '')?.title).toBe('後ろ');
+  });
+
   it('タブが裏に回ると、待ちをやめて、すぐ送る。そのときの送信には keepalive を付ける', async () => {
     const { device, entryId } = await deviceWithEntry();
     device.engine.deleteEntry(toTarget(entryId));
