@@ -706,6 +706,64 @@ describe('削除の「元に戻す」（設計書 6.6・OT-1）', () => {
     expect((await readAllRows(db())).entries.get(other?.entryId ?? '')?.title).toBe('後ろ');
   });
 
+  describe('ワークスペースの削除', () => {
+    async function deviceWithExtraWorkspace() {
+      const device = await startedDevice();
+      device.engine.saveWorkspace({
+        id: 'extra',
+        name: '私用',
+        color: '#4285F4',
+        sortOrder: 1,
+        visible: true,
+        builtin: null,
+      });
+      await device.engine.settled();
+      expect((await readAllRows(db())).workspaces.get('extra')?.deletedAt).toBeNull();
+      return device;
+    }
+
+    it('元に戻すの間（5 秒）は、サーバーに送らず、画面からはすぐ消える。過ぎたら送る', async () => {
+      const device = await deviceWithExtraWorkspace();
+      const writesBefore = device.network.writes.length;
+
+      device.engine.deleteWorkspace('extra');
+      await device.engine.settled();
+
+      expect(device.state().view.workspaces.get('extra')?.deletedAt).not.toBeNull();
+      expect(device.network.writes).toHaveLength(writesBefore);
+
+      device.clock.advance(DELETE_UNDO_MS);
+      await device.engine.settled();
+
+      expect(device.network.writes.slice(writesBefore).map(({ method }) => method)).toEqual([
+        'DELETE',
+      ]);
+      expect((await readAllRows(db())).workspaces.get('extra')?.deletedAt).not.toBeNull();
+    });
+
+    it('元に戻すと、何も送られず、ワークスペースも中の予定も、画面で元に戻る', async () => {
+      const device = await deviceWithExtraWorkspace();
+      const inside = device.engine.createEntry(
+        makeDraft({ workspaceId: 'extra', title: '私用の予定' }),
+      );
+      await device.engine.settled();
+      const writesBefore = device.network.writes.length;
+      const accepted = device.engine.deleteWorkspace('extra');
+      await device.engine.settled();
+      expect(entryIn(device, inside?.entryId ?? '')?.deletedAt).not.toBeNull();
+
+      expect(device.engine.undo(accepted?.requestId ?? '')).toBe(true);
+      await device.engine.settled();
+
+      expect(device.state().view.workspaces.get('extra')?.deletedAt).toBeNull();
+      expect(entryIn(device, inside?.entryId ?? '')?.deletedAt).toBeNull();
+      device.clock.advance(DELETE_UNDO_MS * 2);
+      await device.engine.settled();
+      expect(device.network.writes).toHaveLength(writesBefore);
+      expect((await readAllRows(db())).workspaces.get('extra')?.deletedAt).toBeNull();
+    });
+  });
+
   it('先頭の待ち中の削除を元に戻すと、これまで待たされていた後ろの依頼を、すぐ送る', async () => {
     const { device, entryId } = await deviceWithEntry();
     const accepted = device.engine.deleteEntry(toTarget(entryId));

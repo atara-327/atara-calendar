@@ -84,6 +84,7 @@ export interface SyncEngine {
   /** 削除は、DELETE_UNDO_MS の間、送らずに待つ。その間なら、undo で取り消せる（設計書 6.6）。 */
   deleteEntry(target: EntryTarget): Accepted | null;
   saveWorkspace(workspace: Omit<Workspace, 'editedAt' | 'deletedAt'>): Accepted | null;
+  /** 予定の削除と同じく、DELETE_UNDO_MS の間、送らずに待ち、その間なら、undo で取り消せる。 */
   deleteWorkspace(id: string): Accepted | null;
   /** 削除の「元に戻す」。まだ送っていなければ、列と IndexedDB から消して true。送り始めていたら false。 */
   undo(requestId: string): boolean;
@@ -561,11 +562,12 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       }));
     },
     deleteWorkspace(id) {
-      return submit((editedAt) => ({
-        type: 'deleteWorkspace',
-        targetId: id,
-        body: { editedAt },
-      }));
+      // 予定の削除と同じく、元に戻すの間は送らない。ワークスペースの削除は、中の予定がすべて消えるので、
+      // 削除のなかで、間違えたときの被害がいちばん大きい（設計書 6.6。実装 #6 の確認 Q8）。
+      return submit(
+        (editedAt) => ({ type: 'deleteWorkspace', targetId: id, body: { editedAt } }),
+        DELETE_UNDO_MS,
+      );
     },
     undo,
     dismissDiscarded() {
