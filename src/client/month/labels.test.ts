@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayLabel, dayLabelParts, headerTitle } from './labels';
+import { dayLabelParts, headerTitle } from './labels';
 import { FIRST_WEEK_NUMBER, LAST_WEEK_NUMBER, weekNumberOf } from './weeks';
 
 describe('固定ヘッダーの年月', () => {
@@ -38,37 +38,23 @@ describe('固定ヘッダーの年月', () => {
 });
 
 describe('1 日のラベル', () => {
-  it('各月の 1 日には「10月」のようなラベルを付ける', () => {
-    expect(dayLabel('2026-10-01')).toBe('10月');
-    expect(dayLabel('2026-02-01')).toBe('2月');
-    expect(dayLabel('2026-12-01')).toBe('12月');
+  it('各月の 1 日には「10月」のようなラベルを付ける（年は付けない）', () => {
+    expect(dayLabelParts('2026-10-01')).toEqual({ year: null, month: '10月' });
+    expect(dayLabelParts('2026-02-01')).toEqual({ year: null, month: '2月' });
+    expect(dayLabelParts('2026-12-01')).toEqual({ year: null, month: '12月' });
   });
 
-  it('1 月 1 日は、年も付けて「2027年1月」にする', () => {
-    expect(dayLabel('2027-01-01')).toBe('2027年1月');
-  });
-
-  it('1 日以外にはラベルを付けない', () => {
-    expect(dayLabel('2026-10-02')).toBeNull();
-    expect(dayLabel('2026-10-31')).toBeNull();
-    expect(dayLabel('2027-01-02')).toBeNull();
-  });
-});
-
-describe('1 日のラベルの部品', () => {
-  it('1 月 1 日は、年の部分と月の部分に分かれる（幅の狭い画面で、年だけ省けるように）', () => {
+  it('1 月 1 日は、年も付けて「2027年1月」にする（年の部分と月の部分に分かれる。幅の狭い画面で、年だけ省けるように）', () => {
     expect(dayLabelParts('2027-01-01')).toEqual({ year: '2027年', month: '1月' });
   });
 
-  it('1 月以外の 1 日は、年の部分がない', () => {
-    expect(dayLabelParts('2026-10-01')).toEqual({ year: null, month: '10月' });
-  });
-
-  it('1 日以外は null', () => {
+  it('1 日以外にはラベルを付けない', () => {
     expect(dayLabelParts('2026-10-02')).toBeNull();
+    expect(dayLabelParts('2026-10-31')).toBeNull();
+    expect(dayLabelParts('2027-01-02')).toBeNull();
   });
 
-  it('範囲（1900〜2199 年）の外の 1 日は null（最後の週にはみ出した 2200-01-01 に「2200年1月」を付けない）', () => {
+  it('範囲（1900〜2199 年）の外の 1 日には付けない（最後の週にはみ出した 2200-01-01 に「2200年1月」を付けない）', () => {
     expect(dayLabelParts('2200-01-01')).toBeNull();
     expect(dayLabelParts('1900-01-01')).toEqual({ year: '1900年', month: '1月' });
   });
