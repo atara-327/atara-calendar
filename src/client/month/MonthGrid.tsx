@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DateStr } from '../../shared/date';
 import { useSyncState } from '../sync/instance';
 import styles from './MonthView.module.css';
@@ -27,7 +27,7 @@ interface MonthGridProps {
  * 週の行の仮想スクロール（MV-1）。画面に見えている行（と少しの余白）だけを描く。
  * 行の高さは全部同じ（MV-6）なので、行の位置は、番号 × 高さで決まる。行の高さを測らない。
  * 画面の大きさが変わって行の高さが変わるときは、呼び出し側が、key を変えて作り直す。
- * 作り直しても、同じ位置を開く（scrollMemory）。
+ * 作り直しても、同じ位置を開く（scrollMemory。位置は onChange で覚える）。
  */
 export function MonthGrid({
   scrollElement,
@@ -64,20 +64,19 @@ export function MonthGrid({
     initialOffset: () => (loadScrollRows() ?? scrollRowsForToday(today)) * rowHeight,
     initialRect: { width: 0, height: viewportHeight },
     onChange: (instance) => {
+      // 日表示から戻ったとき・画面の大きさが変わって作り直したときに、同じ位置を開けるよう、位置を覚える。
+      // 呼ばれるのは、見える行が変わったときと、スクロールが始まった・止まったとき。止まったときの値が、最後の位置になる。
+      // scrollOffset は、ライブラリがスクロールの出来事で持っている値なので、DOM（scrollTop）を読まない。
+      // 読むと、ブラウザが、その場でレイアウトをやり直す（強制リフロー）。
+      // 画面が消える直前に、scrollTop から覚える形（useLayoutEffect の後片付け）にしないのは、作り直すとき、
+      // 新しい MonthGrid が覚えた位置を読む（initialOffset）のが、古い MonthGrid の後片付けより先になり、
+      // 古い位置に飛ぶため。新しいインスタンスの最初の onChange は、initialOffset を当てた値なので、
+      // 覚えた位置を、0 などで上書きしない。
+      saveScrollRows((instance.scrollOffset ?? 0) / rowHeight);
       const first = instance.range?.startIndex;
       if (first !== undefined) onTopRowChange(first);
     },
   });
-
-  // 日表示から戻ったとき・作り直したときに、同じ位置を開けるよう、消える直前のスクロールの位置を覚える。
-  // スクロールのたびに覚えない（scrollTop を読むと、ブラウザが、その場でレイアウトをやり直す。強制リフロー）。
-  // useEffect ではなく useLayoutEffect にするのは、後片付けが、要素が画面から外れる前に動くため（外れた後は、scrollTop が 0 になる）。
-  useLayoutEffect(
-    () => () => {
-      saveScrollRows(scrollElement.scrollTop / rowHeight);
-    },
-    [scrollElement, rowHeight],
-  );
 
   return (
     <div className={styles.sizer} style={{ height: virtualizer.getTotalSize() }}>
