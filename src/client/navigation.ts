@@ -60,9 +60,10 @@ export function goToMonth(): void {
 export function useRoute(): Route {
   const pathname = useSyncExternalStore(subscribe, getPathname);
   const route = useMemo(() => parseRoute(pathname), [pathname]);
-  const invalid = route === null;
+  // 依存は pathname にする。不正かどうかの真偽だけに依存すると、不正なパスから、別の不正なパスへ変わったとき
+  // （どちらも「不正」のまま）に、effect が動かず、URL が置き換わらない。
   useEffect(() => {
-    if (invalid) replacePath(MONTH_PATH);
-  }, [invalid]);
+    if (parseRoute(pathname) === null) replacePath(MONTH_PATH);
+  }, [pathname]);
   return route ?? { name: 'month' };
 }
