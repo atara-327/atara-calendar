@@ -1,0 +1,56 @@
+.pending {
+  position: fixed;
+  top: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--color-observance);
+}
+
+.notices {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-holiday);
+  background-color: var(--color-grid);
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.button {
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid var(--color-observance);
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.overview {
+  padding: 32px 16px;
+}
+
+.overview p {
+  margin: 0 0 8px;
+}
+
+.muted {
+  color: var(--color-observance);
+}
