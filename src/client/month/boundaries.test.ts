@@ -41,7 +41,7 @@ describe('階段状の線を引くマス', () => {
   });
 
   it('範囲（1900〜2199 年）の外の日は、月・年の境目でも、線を持たない', () => {
-    // 最後の週にはみ出した 2200-01-01（土曜日の 1 つ前の、水曜日）。
+    // 最後の週にはみ出した 2200-01-01（水曜日）。
     expect(cellBoundary('2200-01-01')).toEqual({ top: 'none', left: 'none' });
     expect(cellBoundary('2200-01-03')).toEqual({ top: 'none', left: 'none' });
     expect(cellBoundary('1899-12-31')).toEqual({ top: 'none', left: 'none' });
