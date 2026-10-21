@@ -483,6 +483,31 @@ describe('編集と送信（設計書 6.2）', () => {
       },
     );
 
+    it('429 を受けても、続けて送り直さず、次のきっかけ（60 秒ごと）でだけ再び試す。回数の制限を、短い間に叩き続けない（実装 #6 の確認 Q7）', async () => {
+      const device = await startedDevice();
+      device.network.override = ({ method }) =>
+        method === 'GET' ? undefined : fakeResponse(429, { error: 'too_many_requests' });
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+      const attempts = () => device.network.writes.length;
+      expect(attempts()).toBe(1);
+      // 再送のためのタイマーはない。残っているのは、60 秒ごとの受け取りのタイマーだけ。
+      expect(device.clock.pendingTimerCount).toBe(1);
+
+      device.clock.advance(POLL_INTERVAL_MS - 1);
+      await device.engine.settled();
+      expect(attempts()).toBe(1);
+
+      device.clock.advance(1);
+      await device.engine.settled();
+      expect(attempts()).toBe(2);
+
+      device.clock.advance(POLL_INTERVAL_MS);
+      await device.engine.settled();
+      expect(attempts()).toBe(3);
+      expect(pendingOf(device)).toBe(1);
+    });
+
     it('API のエラーの形でない 4xx（前段のエラーページなど）は、捨てずに、外さずに再び試す（実装 #6 の確認 Q12）', async () => {
       const device = await startedDevice();
       device.network.override = ({ method }) =>
