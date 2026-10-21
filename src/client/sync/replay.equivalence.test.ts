@@ -7,13 +7,18 @@ import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { writeResponseSchema } from '../../shared/api';
 import type { Entry, EntryDraft, Workspace } from '../../shared/schema';
 import { applyWrite } from '../../worker/db/store';
-import { replayRequests } from './replay';
+import { replayRequests, type RowSet } from './replay';
 import { toHttpRequest, type PendingRequest } from './requests';
 
 // 端末の「やり直し」（replay.ts）が、サーバーの書き込みと同じ行を書くことを、本物の Worker（Miniflare の D1）と
 // 見比べて確かめる（設計書 5.2「端末とサーバーは同じ結果になる」）。
 // 同じ行を、サーバーと端末の両方に用意し、同じ依頼を、サーバーには HTTP で、端末にはやり直しで当てて、
-// 結果の全行（削除済みを含む）が一致することを見る。サーバーが 4xx にする依頼は、端末が当てない（行が変わらない）ことを見る。
+// 結果の全行（削除済みを含む）が一致することを見る。
+// サーバーが書かない依頼（200 で捨てる・409・日付の計算が範囲を出る 400）は、端末も当てない（行が変わらない）ことを見る。
+// サーバーの入力の検証の 400（組み込みのワークスペースの保護・最後の 1 つのワークスペースの保護など）は、
+// 端末が真似ない（replay.ts）ので、ここでは扱わない。
+// 全件の読み込み（since=0）は、削除済みの行を含まないので、開き直した直後の端末は、削除済みの行を持たない。
+// その場合も、生きている行が一致することを見る。例外は、since0Differs を付けた 2 つの依頼（設計書 6.4）。
 
 let testDatabase: TestDatabase;
 
@@ -161,6 +166,8 @@ interface Scenario {
   workspaces?: Workspace[];
   entries?: Entry[];
   request: PendingRequest;
+  /** 全件の読み込みの直後（削除済みの行を持たない端末）では、結果が一時的に食い違う依頼。 */
+  since0Differs?: true;
 }
 
 const scenarios: Scenario[] = [
@@ -193,6 +200,7 @@ const scenarios: Scenario[] = [
     name: '削除済みの同じ id の行がある作成',
     entries: [makeEntry({ id: 'e1', editedAt: 500, deletedAt: 500 })],
     request: putEntry('e1', 2000),
+    since0Differs: true,
   },
   {
     name: '削除済みのワークスペースへの作成',
@@ -456,6 +464,7 @@ const scenarios: Scenario[] = [
   {
     name: '削除済みのワークスペースの更新（生き返らせない）',
     request: putWorkspace(makeWorkspace({ id: 'w3', name: '生き返り', editedAt: 2000 })),
+    since0Differs: true,
   },
   {
     name: 'ワークスペースの削除（中の予定ごと）',
@@ -515,6 +524,19 @@ function sortedById<T extends { id: string }>(rows: ReadonlyMap<string, T>): T[]
   return [...rows.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
+/** 全件の読み込み（since=0）の応答と同じ、削除済みの行を含まない行の集まり。 */
+function withoutDeleted(rows: RowSet): RowSet {
+  return {
+    workspaces: new Map([...rows.workspaces].filter(([, row]) => row.deletedAt === null)),
+    entries: new Map([...rows.entries].filter(([, row]) => row.deletedAt === null)),
+  };
+}
+
+function liveRows(rows: RowSet) {
+  const live = withoutDeleted(rows);
+  return { workspaces: sortedById(live.workspaces), entries: sortedById(live.entries) };
+}
+
 describe('端末の「やり直し」は、サーバーの書き込みと同じ行を書く（設計書 5.2）', () => {
   it.each(scenarios)('$name', async ({ workspaces = [], entries = [], request }) => {
     // どのシナリオでも、最後の 1 つ以外のワークスペースを消せるように、w1・w2 の 2 つの利用者のワークスペースを置く。
@@ -532,4 +554,163 @@ describe('端末の「やり直し」は、サーバーの書き込みと同じ�
     expect(sortedById(replayed.workspaces)).toEqual(sortedById(after.workspaces));
     expect(sortedById(replayed.entries)).toEqual(sortedById(after.entries));
   });
+});
+
+describe('全件の読み込みの直後（削除済みの行を持たない端末）', () => {
+  it.each(scenarios.filter(({ since0Differs }) => since0Differs !== true))(
+    '$name: 生きている行が、サーバーと一致する',
+    async ({ workspaces = [], entries = [], request }) => {
+      await applyWrite(db(), { workspaces: [w1, w2, goneW3, ...workspaces], entries });
+      const before = await readAllRows(db());
+
+      const { method, url, body } = toHttpRequest(request);
+      await callApi(db(), method, url, { body });
+      const after = await readAllRows(db());
+
+      expect(liveRows(replayRequests(withoutDeleted(before), [request]))).toEqual(liveRows(after));
+    },
+  );
+
+  // 削除済みの行がないと、端末は、サーバーが断る理由（削除済みの行がある）を知らず、依頼を当てる。
+  // 送信が終われば、受け取り（削除済みの行を含む）で、サーバーの内容に直る（上の、全行を見るテストと同じ状態になる）。
+  it.each(scenarios.filter(({ since0Differs }) => since0Differs === true))(
+    '$name: 一時的に食い違う（受け取りで直る）',
+    async ({ workspaces = [], entries = [], request }) => {
+      await applyWrite(db(), { workspaces: [w1, w2, goneW3, ...workspaces], entries });
+      const before = await readAllRows(db());
+
+      const { method, url, body } = toHttpRequest(request);
+      await callApi(db(), method, url, { body });
+      const after = await readAllRows(db());
+
+      expect(liveRows(replayRequests(withoutDeleted(before), [request]))).not.toEqual(
+        liveRows(after),
+      );
+      expect(liveRows(replayRequests(before, [request]))).toEqual(liveRows(after));
+    },
+  );
+});
+
+describe('依頼を続けて当てる', () => {
+  // 先の依頼が作った行を、後の依頼が対象にする。サーバーには 1 つずつ HTTP で送り、端末は全部をまとめてやり直す。
+  // 1 つずつ当てるテスト（上）では、依頼の間の、行の受け渡し（新しい id・削除した行・捨てた依頼の後）を確かめられない。
+  const put = putEntry;
+  const patch = (
+    id: string,
+    editedAt: number,
+    rest: Omit<Partial<PatchBody>, 'editedAt'> = {},
+  ): PendingRequest =>
+    patchEntry(id, {
+      occurrenceDate: '2026-10-19',
+      newId: `n${String(editedAt)}`,
+      ...rest,
+      editedAt,
+    });
+  const del = (
+    id: string,
+    editedAt: number,
+    rest: Omit<Partial<DeleteBody>, 'editedAt'> = {},
+  ): PendingRequest =>
+    deleteEntry(id, {
+      occurrenceDate: '2026-10-19',
+      newId: `n${String(editedAt)}`,
+      ...rest,
+      editedAt,
+    });
+
+  const sequences: { name: string; requests: PendingRequest[] }[] = [
+    {
+      name: '毎日の系列を、作る → 例外 → 例外を書き換える → これ以降を変更 → 回を削除 → すべて変更 → ワークスペースごと削除',
+      requests: [
+        put('s', 1000, {
+          rrule: { freq: 'daily' },
+          startDate: '2026-10-19',
+          endDate: '2026-10-19',
+        }),
+        patch('s', 1001, { scope: 'this', occurrenceDate: '2026-10-21', changes: { title: 'x' } }),
+        patch('s', 1002, { scope: 'this', occurrenceDate: '2026-10-21', changes: { title: 'y' } }),
+        patch('s', 1003, {
+          scope: 'following',
+          occurrenceDate: '2026-10-23',
+          changes: { title: 'f' },
+        }),
+        del('n1003', 1004, { scope: 'this', occurrenceDate: '2026-10-25' }),
+        patch('s', 1005, {
+          scope: 'all',
+          occurrenceDate: '2026-10-20',
+          changes: { location: 'L' },
+        }),
+        deleteWorkspace('w1', 1006),
+      ],
+    },
+    {
+      name: '曜日の系列の 1 回を別のワークスペースへ移す → そのワークスペースを削除 → その後の変更と作成',
+      requests: [
+        put('s', 1000, {
+          rrule: { freq: 'weekly', days: [1, 3] },
+          startDate: '2026-10-19',
+          endDate: '2026-10-19',
+        }),
+        patch('s', 1001, {
+          scope: 'this',
+          occurrenceDate: '2026-10-21',
+          changes: { workspaceId: 'w2', startDate: '2026-10-22', endDate: '2026-10-22' },
+        }),
+        deleteWorkspace('w2', 1002),
+        patch('s', 1003, { scope: 'all', changes: { title: 'T' } }),
+        patch('s', 1004, {
+          scope: 'all',
+          occurrenceDate: '2026-10-21',
+          changes: { startDate: '2026-10-22', endDate: '2026-10-22' },
+        }),
+        del('s', 1005, { scope: 'following', occurrenceDate: '2026-11-02' }),
+        put('e2', 1006, { workspaceId: 'w2' }),
+      ],
+    },
+    {
+      name: '同じ依頼の 2 回目・古い依頼・削除の後の編集が、途中に混ざる',
+      requests: [
+        put('a', 1000),
+        put('a', 1000),
+        patch('a', 999, { changes: { title: '古い' } }),
+        patch('a', 1001, { changes: { title: '新しい' } }),
+        del('a', 1002),
+        del('a', 1002),
+        patch('a', 1003, { changes: { title: '削除の後' } }),
+      ],
+    },
+  ];
+
+  it.each(sequences)('$name: 全行が一致する', async ({ requests }) => {
+    await applyWrite(db(), { workspaces: [w1, w2] });
+    const before = await readAllRows(db());
+
+    for (const request of requests) {
+      const { method, url, body } = toHttpRequest(request);
+      const response = await callApi(db(), method, url, { body });
+      // 4xx の依頼を混ぜていない。1 つでも 4xx なら、この確認の前提（サーバーが全部を受け付ける）が崩れる。
+      expect(response.status).toBe(200);
+    }
+    const after = await readAllRows(db());
+    const replayed = replayRequests(before, requests);
+
+    expect(sortedById(replayed.workspaces)).toEqual(sortedById(after.workspaces));
+    expect(sortedById(replayed.entries)).toEqual(sortedById(after.entries));
+  });
+
+  it.each(sequences)(
+    '$name: 全件の読み込みの直後（削除済みの行なし）でも、生きている行が一致する',
+    async ({ requests }) => {
+      await applyWrite(db(), { workspaces: [w1, w2] });
+      const before = await readAllRows(db());
+
+      for (const request of requests) {
+        const { method, url, body } = toHttpRequest(request);
+        await callApi(db(), method, url, { body });
+      }
+      const after = await readAllRows(db());
+
+      expect(liveRows(replayRequests(withoutDeleted(before), requests))).toEqual(liveRows(after));
+    },
+  );
 });
