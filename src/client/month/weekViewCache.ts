@@ -38,13 +38,16 @@ interface WeekViewSource {
   slots: number;
 }
 
-// 回の一覧と祝日は、この数の週をまとめて求める。1 週ずつ求めると、そのたびに全行を走査するため。
-// 大きくしすぎると、スクロールで新しい週が出てくるたびに、使わない週まで計算する。
-const CHUNK_WEEKS = 8;
+// 回の一覧と祝日は、この数の週をまとめて求める。1 週ずつ求めると、そのたびに全行を走査し、
+// 祝日の一覧を作り直すため。大きくしすぎると、1 回の計算が長くなって、速くスクロールしたときに、
+// その 1 回でフレームが落ちる（回の一覧の計算は、期間の長さにほぼ比例する）。
+// 実測（Node）では、系列 120 件・単発 3000 件で、4 週が約 3ms、8 週が約 7ms だった。
+export const CHUNK_WEEKS = 4;
 
 // 覚えておくまとまりの数の上限。上限を超えたら、いちばん長く使っていないものから捨てる。
 // 遠くまでスクロールしても、覚える量が増え続けないようにするため。
-const MAX_CACHED_CHUNKS = 48;
+// 画面に見える行（約 6）と余白を含めても、数まとまりしか使わないので、十分に余裕がある。
+export const MAX_CACHED_CHUNKS = 96;
 
 interface Chunk {
   events: readonly MonthEvent[];
@@ -72,7 +75,12 @@ export class WeekViewCache {
 
   constructor({ entries, workspaces, slots }: WeekViewSource) {
     const all = [...workspaces];
-    this.entries = entries;
+    // タイムブロック（MV-10）は出さないので、展開の前に除く。毎日・平日の時間割は、系列の数が多くなりやすく、
+    // 展開して捨てるのが無駄になるため。除いてよいのは、系列と例外の行の kind が同じ（作成後に変えられない。
+    // 設計書 4.5）で、タイムブロックの例外が、予定の回を抑えることがないため。
+    // 表示が OFF のワークスペースの予定は、同じようには除けない。別のワークスペースへ移した例外の行を除くと、
+    // その例外が抑えていた、元の系列の回が現れてしまうため（設計書 5.1）。展開した回から除く。
+    this.entries = entries.filter((entry) => entry.kind === 'event');
     this.slots = slots;
     this.liveIds = liveWorkspaceIds(all);
 

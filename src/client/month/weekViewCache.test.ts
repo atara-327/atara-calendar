@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import type { BarItem, MoreItem, TimedItem } from './layout';
-import { WeekViewCache } from './weekViewCache';
+import { CHUNK_WEEKS, MAX_CACHED_CHUNKS, WeekViewCache } from './weekViewCache';
 import { FIRST_WEEK_NUMBER, LAST_WEEK_NUMBER, weekNumberOf } from './weeks';
 
 const workspaces = [
@@ -122,6 +122,27 @@ describe('週に描く予定', () => {
     expect(cache.get(week('2026-10-21')).items).toEqual([]);
   });
 
+  it('タイムブロックの系列が混ざっていても、予定の回は出て、タイムブロックは出ない', () => {
+    const cache = cacheOf([
+      {
+        id: 'b1',
+        kind: 'block',
+        workspaceId: null,
+        rrule: { freq: 'daily' },
+        allDay: false,
+        startDate: '2026-10-01',
+        startTime: '09:00',
+        endDate: '2026-10-01',
+        endTime: '18:00',
+      },
+      { id: 'e1', startDate: '2026-10-21' },
+    ]);
+
+    const items = cache.get(week('2026-10-21')).items as BarItem[];
+
+    expect(items.map((item) => item.event.key)).toEqual(['e1:2026-10-21']);
+  });
+
   it('表示が OFF のワークスペースの予定は出さない', () => {
     const cache = cacheOf(
       [
@@ -134,6 +155,27 @@ describe('週に描く予定', () => {
     const items = cache.get(week('2026-10-21')).items as BarItem[];
 
     expect(items.map((item) => item.event.key)).toEqual(['e1:2026-10-21']);
+  });
+
+  it('別のワークスペースへ移した回が OFF のワークスペースにあるとき、元の日に、系列の回が現れない', () => {
+    const cache = cacheOf(
+      [
+        { id: 's1', workspaceId: 'w1', rrule: { freq: 'daily' }, startDate: '2026-10-19' },
+        // 10-21 の回だけ、OFF のワークスペースへ移した例外。
+        {
+          id: 'x1',
+          seriesId: 's1',
+          originalDate: '2026-10-21',
+          workspaceId: 'w2',
+          startDate: '2026-10-21',
+        },
+      ],
+      { workspaces: [...workspaces, makeWorkspace({ id: 'w2', visible: false })] },
+    );
+
+    const items = cache.get(week('2026-10-21')).items as BarItem[];
+
+    expect(items.map((item) => item.startCol)).toEqual([1, 2, 4, 5, 6]);
   });
 
   it('削除済みのワークスペースの予定は出さない', () => {
@@ -290,18 +332,24 @@ describe('必要な週の分だけ計算して、覚えておく（NF-6）', () 
   it('覚えるまとまりの数には上限があり、遠くまでスクロールしても増え続けない', () => {
     const cache = cacheOf([]);
 
-    for (let offset = 0; offset < 2000; offset += 8) cache.get(FIRST_WEEK_NUMBER + offset);
+    for (let chunk = 0; chunk < MAX_CACHED_CHUNKS * 3; chunk++) {
+      cache.get(FIRST_WEEK_NUMBER + chunk * CHUNK_WEEKS);
+    }
 
-    expect(cache.computedChunkCount).toBeLessThanOrEqual(48);
+    expect(cache.computedChunkCount).toBe(MAX_CACHED_CHUNKS);
   });
 
   it('上限を超えて捨てられた週も、求め直せば同じ内容になる', () => {
-    const cache = cacheOf([{ id: 'e1', startDate: '1900-02-01' }]);
-    const before = cache.get(FIRST_WEEK_NUMBER + 4);
+    const cache = cacheOf([{ id: 'e1', startDate: '1900-01-02' }]);
+    const before = cache.get(FIRST_WEEK_NUMBER);
 
-    for (let offset = 8; offset < 8 * 60; offset += 8) cache.get(FIRST_WEEK_NUMBER + offset);
-    const after = cache.get(FIRST_WEEK_NUMBER + 4);
+    for (let chunk = 1; chunk <= MAX_CACHED_CHUNKS + 5; chunk++) {
+      cache.get(FIRST_WEEK_NUMBER + chunk * CHUNK_WEEKS);
+    }
+    const after = cache.get(FIRST_WEEK_NUMBER);
 
     expect(after).toEqual(before);
+    expect(after).not.toBe(before);
+    expect(after.items).toHaveLength(1);
   });
 });
