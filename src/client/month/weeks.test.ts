@@ -7,6 +7,7 @@ import {
   clampToRange,
   isInRange,
   rowOfWeek,
+  scrollRowsForToday,
   weekDates,
   weekNumberOf,
   weekOfRow,
@@ -93,5 +94,19 @@ describe('表示できる範囲（1900年1月〜2199年12月）', () => {
     expect(clampToRange('1899-12-31')).toBe('1900-01-01');
     expect(clampToRange('2200-01-04')).toBe('2199-12-31');
     expect(clampToRange('2026-10-21')).toBe('2026-10-21');
+  });
+});
+
+describe('最初に開いたときの位置', () => {
+  it('今日の週が、画面の上から 2 行目に来る（先週が 1 行目）', () => {
+    const rows = scrollRowsForToday('2026-10-21');
+
+    // 上から 0 行目 = 先週、1 行目（2 行目）= 今日の週。
+    expect(weekOfRow(rows)).toBe(weekNumberOf('2026-10-14'));
+    expect(weekOfRow(rows + 1)).toBe(weekNumberOf('2026-10-21'));
+  });
+
+  it('今日の週の日曜日でも、土曜日でも、同じ位置になる', () => {
+    expect(scrollRowsForToday('2026-10-18')).toBe(scrollRowsForToday('2026-10-24'));
   });
 });

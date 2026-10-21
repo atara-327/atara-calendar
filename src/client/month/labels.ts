@@ -12,12 +12,27 @@ export function headerTitle(topWeekNumber: number): string {
   return `${String(year)}年${String(month)}月`;
 }
 
+/** 1 日のラベルの、年の部分（1 月 1 日だけ。「2027年」）と、月の部分（「1月」）。 */
+export interface DayLabelParts {
+  year: string | null;
+  month: string;
+}
+
+/**
+ * 各月の 1 日のマスに付けるラベル（MV-5）の部品。1 日以外は null。
+ * 年の部分を分けるのは、幅の狭い画面（スマホ）で、年だけ省けるようにするため（MonthRow.module.css）。
+ */
+export function dayLabelParts(date: DateStr): DayLabelParts | null {
+  const { year, month, day } = dateToYmd(date);
+  if (day !== 1) return null;
+  return { year: month === 1 ? `${String(year)}年` : null, month: `${String(month)}月` };
+}
+
 /**
  * 各月の 1 日のマスに付けるラベル（MV-5）。「10月」。1 月 1 日だけ、年も付けて「2027年1月」。
  * 1 日以外は null。
  */
 export function dayLabel(date: DateStr): string | null {
-  const { year, month, day } = dateToYmd(date);
-  if (day !== 1) return null;
-  return month === 1 ? `${String(year)}年1月` : `${String(month)}月`;
+  const parts = dayLabelParts(date);
+  return parts === null ? null : `${parts.year ?? ''}${parts.month}`;
 }

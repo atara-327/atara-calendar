@@ -56,3 +56,14 @@ export function clampToRange(date: DateStr): DateStr {
   if (date > MAX_DATE) return MAX_DATE;
   return date;
 }
+
+/** 最初に開いたときと、「今日」ボタンで、今日の週を、上から何行目に置くか（0 始まり。2 行目）。 */
+const TODAY_ROW_FROM_TOP = 1;
+
+/**
+ * 今日の週が、画面の上から 2 行目に来るときの、スクロールの位置（先頭の週から、何週ぶん下か）。
+ * 2 行目にするのは、先週の予定も少し見えるようにするため（設計書 11.2）。
+ */
+export function scrollRowsForToday(today: DateStr): number {
+  return rowOfWeek(weekNumberOf(today)) - TODAY_ROW_FROM_TOP;
+}

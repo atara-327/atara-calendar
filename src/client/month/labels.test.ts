@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayLabel, headerTitle } from './labels';
+import { dayLabel, dayLabelParts, headerTitle } from './labels';
 import { FIRST_WEEK_NUMBER, LAST_WEEK_NUMBER, weekNumberOf } from './weeks';
 
 describe('固定ヘッダーの年月', () => {
@@ -52,5 +52,19 @@ describe('1 日のラベル', () => {
     expect(dayLabel('2026-10-02')).toBeNull();
     expect(dayLabel('2026-10-31')).toBeNull();
     expect(dayLabel('2027-01-02')).toBeNull();
+  });
+});
+
+describe('1 日のラベルの部品', () => {
+  it('1 月 1 日は、年の部分と月の部分に分かれる（幅の狭い画面で、年だけ省けるように）', () => {
+    expect(dayLabelParts('2027-01-01')).toEqual({ year: '2027年', month: '1月' });
+  });
+
+  it('1 月以外の 1 日は、年の部分がない', () => {
+    expect(dayLabelParts('2026-10-01')).toEqual({ year: null, month: '10月' });
+  });
+
+  it('1 日以外は null', () => {
+    expect(dayLabelParts('2026-10-02')).toBeNull();
   });
 });
