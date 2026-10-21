@@ -61,11 +61,12 @@ describe('GET /api/changes', () => {
   it('SY-1: since より後に変わった行だけを返し、削除した行も含める', async () => {
     await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
     await applyWrite(db(), { entries: [makeEntry({ id: 'b' })] });
+    const { rev } = await fetchChanges(db(), 0);
     await applyWrite(db(), { entries: [makeEntry({ id: 'a', editedAt: 2000, deletedAt: 2000 })] });
 
-    const changes = await fetchChanges(db(), 4);
+    const changes = await fetchChanges(db(), rev);
 
-    expect(changes.rev).toBe(5);
+    expect(changes.rev).toBe(rev + 1);
     expect(changes.entries.map(({ id, deletedAt }) => ({ id, deletedAt }))).toEqual([
       { id: 'a', deletedAt: 2000 },
     ]);

@@ -59,6 +59,21 @@ export async function removeDefaultWorkspace(db: D1Database): Promise<void> {
   ]);
 }
 
+/**
+ * データを復元した（過去の時点に戻した）ときの meta にする文。rev は、残っている行の rev の最大値になり、
+ * epoch は変わる。rev を、小さい値の直書きにしないのは、行の rev より小さい meta.rev は、本物の復元では
+ * 起きないため（マイグレーションが入れる「予定」の rev も、行の rev に含まれる）。
+ * 行を消す文より後に、同じ batch で流す。
+ */
+export function restoredMetaStatement(db: D1Database, epoch: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE meta SET epoch = ?1,
+         rev = (SELECT max(rev) FROM (SELECT rev FROM workspaces UNION ALL SELECT rev FROM entries))`,
+    )
+    .bind(epoch);
+}
+
 export interface TestDatabase {
   db: D1Database;
   /** すべてのテーブルを消して、マイグレーションを流し直す。テストごとに、初期状態から始めるため。 */

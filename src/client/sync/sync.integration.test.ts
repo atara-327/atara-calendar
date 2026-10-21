@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDevice, FakeLockHub, fakeResponse, type Device } from '../../../test/helpers/device';
-import { createTestDatabase, type TestDatabase } from '../../../test/helpers/d1';
+import {
+  createTestDatabase,
+  restoredMetaStatement,
+  type TestDatabase,
+} from '../../../test/helpers/d1';
 import { makeDraft } from '../../../test/helpers/entries';
 import { readAllRows } from '../../../test/helpers/rows';
 import type { Entry } from '../../shared/schema';
@@ -338,9 +342,9 @@ describe('サーバーが復元されたとき（設計書 付録 A.1）', () =>
     // データを、rev が小さかったころに戻した（復元）。epoch も変える。
     await db().batch([
       db().prepare("DELETE FROM entries WHERE title LIKE '復元前%'"),
-      db().prepare("UPDATE meta SET rev = 1, epoch = 'after-restore'"),
+      restoredMetaStatement(db(), 'after-restore'),
     ]);
-    // 復元の後に、A が書く。rev は 2 になる（B が覚えている rev より、ずっと小さい）。
+    // 復元の後に、A が書く。rev は、復元した rev の次になる（B が覚えている rev より、ずっと小さい）。
     const fromA = a.engine.createEntry(makeDraft({ title: '復元の後' }));
     await a.engine.settled();
 

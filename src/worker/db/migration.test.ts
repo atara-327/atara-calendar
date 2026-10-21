@@ -31,8 +31,9 @@ async function readWorkspaces() {
   return (await testDatabase.db.prepare('SELECT * FROM workspaces ORDER BY id').all()).results;
 }
 
-async function readRev() {
-  return testDatabase.db.prepare('SELECT rev FROM meta').first();
+async function readRev(): Promise<number> {
+  const row = await testDatabase.db.prepare('SELECT rev FROM meta').first<{ rev: number }>();
+  return row?.rev ?? Number.NaN;
 }
 
 describe('マイグレーション後の初期状態', () => {
@@ -174,11 +175,12 @@ describe('0002_default_workspace.sql', () => {
       )
       .run();
     const before = await readWorkspaces();
+    const revBefore = await readRev();
 
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await readRev()).toEqual({ rev: 2 });
+    expect(await readRev()).toBe(revBefore);
   });
 
   it('「予定」が論理削除されていても、生き返らせず、rev も進めない', async () => {
@@ -194,13 +196,14 @@ describe('0002_default_workspace.sql', () => {
       ],
     });
     const before = await readWorkspaces();
+    const revBefore = await readRev();
 
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await readRev()).toEqual({ rev: 3 });
+    expect(await readRev()).toBe(revBefore);
     expect(before).toContainEqual(
-      expect.objectContaining({ id: 'default-workspace', deleted_at: 2000, rev: 3 }),
+      expect.objectContaining({ id: 'default-workspace', deleted_at: 2000, rev: revBefore }),
     );
   });
 });
@@ -213,17 +216,18 @@ describe('0003_default_workspace_color.sql', () => {
   }
 
   it('SY-1: 0002 の後の「予定」の色を #4FC3F7 にして rev を進め、すでに rev を覚えている端末も、差分（since）で受け取れる', async () => {
-    // 0002 を当てた直後の本番に見立てる。端末は、0002 が「予定」を入れた rev 6 までを受け取っている。
+    // 0002 を当てた直後の本番に見立てる。端末は、0002 が「予定」を入れた rev までを受け取っている。
     await testDatabase.db.batch([
       testDatabase.db.prepare("DELETE FROM workspaces WHERE id = 'default-workspace'"),
       testDatabase.db.prepare('UPDATE meta SET rev = 5'),
     ]);
     await runStatements(readMigrationFileStatements('0002_default_workspace.sql'));
+    const revBefore = await readRev();
 
     await run();
 
-    const changes = await readChanges(testDatabase.db, 6);
-    expect(changes.rev).toBe(7);
+    const changes = await readChanges(testDatabase.db, revBefore);
+    expect(changes.rev).toBe(revBefore + 1);
     expect(
       changes.workspaces.map(({ workspace, rev }) => ({
         id: workspace.id,
@@ -231,16 +235,17 @@ describe('0003_default_workspace_color.sql', () => {
         editedAt: workspace.editedAt,
         rev,
       })),
-    ).toEqual([{ id: 'default-workspace', color: '#4FC3F7', editedAt: 0, rev: 7 }]);
+    ).toEqual([{ id: 'default-workspace', color: '#4FC3F7', editedAt: 0, rev: revBefore + 1 }]);
   });
 
   it('もう一度当てても、何も変えない（rev も進めない）', async () => {
     const before = await readWorkspaces();
+    const revBefore = await readRev();
 
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await readRev()).toEqual({ rev: 2 });
+    expect(await readRev()).toBe(revBefore);
   });
 
   it('4.2: 「予定」が編集済み（edited_at が 0 でない）なら、利用者が選んだ色を残し、rev も進めない', async () => {
@@ -250,13 +255,14 @@ describe('0003_default_workspace_color.sql', () => {
       ],
     });
     const before = await readWorkspaces();
+    const revBefore = await readRev();
 
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await readRev()).toEqual({ rev: 3 });
+    expect(await readRev()).toBe(revBefore);
     expect(before).toContainEqual(
-      expect.objectContaining({ id: 'default-workspace', color: '#E57373', rev: 3 }),
+      expect.objectContaining({ id: 'default-workspace', color: '#E57373', rev: revBefore }),
     );
   });
 
@@ -267,13 +273,14 @@ describe('0003_default_workspace_color.sql', () => {
       ],
     });
     const before = await readWorkspaces();
+    const revBefore = await readRev();
 
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await readRev()).toEqual({ rev: 3 });
+    expect(await readRev()).toBe(revBefore);
     expect(before).toContainEqual(
-      expect.objectContaining({ id: 'default-workspace', color: '#039BE5', rev: 3 }),
+      expect.objectContaining({ id: 'default-workspace', color: '#039BE5', rev: revBefore }),
     );
   });
 
@@ -290,11 +297,12 @@ describe('0003_default_workspace_color.sql', () => {
       ],
     });
     const before = await readWorkspaces();
+    const revBefore = await readRev();
 
     await run();
 
     expect(await readWorkspaces()).toEqual(before);
-    expect(await readRev()).toEqual({ rev: 3 });
+    expect(await readRev()).toBe(revBefore);
     expect(before).toContainEqual(
       expect.objectContaining({ id: 'default-workspace', color: '#039BE5', deleted_at: 2000 }),
     );
