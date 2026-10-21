@@ -48,8 +48,8 @@ export function readMigrationStatements(): string[] {
 }
 
 /**
- * マイグレーション（0002）が入れた「予定」を消して、meta.rev を 0 に戻す。rev を 0 から数えるテストが、
- * 自分で入れる rev 0 の行と、数え方をそろえるため。
+ * マイグレーション（0002 が入れ、0003 が色を直した）「予定」を消して、meta.rev を 0 に戻す。
+ * rev を 0 から数えるテストが、自分で入れる rev 0 の行と、数え方をそろえるため。
  * 「予定」が入っていることは、マイグレーション直後の DB を使う migration.test.ts で確かめる。
  */
 export async function removeDefaultWorkspace(db: D1Database): Promise<void> {
