@@ -88,7 +88,8 @@ export function SyncNotices() {
         <p className={styles.notice} role="alert">
           <span>
             保存できなかった変更が {discarded.count} 件あります
-            {discarded.clockSkew && '。端末の時計がずれています。時計を合わせてください'}
+            {discarded.clockSkew &&
+              '。端末の時計がずれています。時計を合わせてから、ページを開き直してください'}
           </span>
           <button
             type="button"
