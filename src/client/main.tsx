@@ -1,3 +1,5 @@
+// 最初の import にする。zod のスキーマ（./App 以降が読み込む）を作る前に、設定を効かせるため。
+import './zodConfig';
 import '@fontsource/noto-sans-jp/400.css';
 import '@fontsource/noto-sans-jp/700.css';
 import './global.css';
