@@ -6,6 +6,12 @@ import {
   type Entry,
   type Workspace,
 } from '../../shared/schema';
+import {
+  rowDateSchema as dateSchema,
+  rowIdSchema as idSchema,
+  rowTimeSchema as timeSchema,
+  rowTimestampSchema as timestampSchema,
+} from '../../shared/structure';
 
 // DB の行（snake_case・真偽値は 0/1・rrule は JSON の文字列）と、型（camelCase）の相互変換。
 // rev と next_notify_at はサーバーの都合の列なので、Entry・Workspace には入れず、読み込み結果で別に持つ（設計書 4.2）。
@@ -144,12 +150,9 @@ const rruleColumnSchema = z
 // DB にある行が「壊れた行」になり、readChanges が例外になって、全端末の同期が止まる。
 // ここは、DB の行として成り立つか（型・必須・日付と時刻の形・rrule の形）だけを確かめる。
 // 入力のルールは、書き込むとき（store.ts の applyWrite）に確かめる。
+// 構造だけを見る部品は、画面の受け取りの確認（shared/structure.ts）と同じものを使う。
+// DB の行は列名が snake_case で、真偽値が 0/1 なので、スキーマの全体は共有できず、部品だけを共有する。
 // kind・builtin・rrule だけは型側と同じものを使う。閉じた集合で、DB の CHECK 制約やコードの分岐の元になる値のため。
-const idSchema = z.string().min(1);
-const dateSchema = z.iso.date();
-const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
-const timestampSchema = z.number().int();
-
 const entryRowSchema = z
   .object({
     id: idSchema,

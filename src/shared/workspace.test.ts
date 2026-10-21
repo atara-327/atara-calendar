@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deepFreeze, makeEntry } from '../../test/helpers/entries';
 import { makeWorkspace } from '../../test/helpers/workspaces';
 import { markCancelled } from './recurrence';
-import { deleteWorkspace } from './workspace';
+import { deleteWorkspace, isInLiveWorkspace, liveWorkspaceIds } from './workspace';
 
 const workspace = makeWorkspace({ id: 'w1', editedAt: 1000 });
 
@@ -184,5 +184,33 @@ describe('WS-1・Q6: ワークスペースの削除', () => {
       ['plain', 5000],
       ['moved', null],
     ]);
+  });
+});
+
+describe('削除済みのワークスペースの予定を除くための判定', () => {
+  const workspaces = [
+    makeWorkspace({ id: 'live' }),
+    makeWorkspace({ id: 'gone', deletedAt: 3000 }),
+    makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday' }),
+  ];
+
+  it('liveWorkspaceIds は、削除されていないワークスペースの id だけを返す', () => {
+    expect(liveWorkspaceIds(workspaces)).toEqual(new Set(['live', 'builtin-holiday']));
+  });
+
+  it('生きているワークスペースを指す行は、そのワークスペースの予定として扱う', () => {
+    expect(isInLiveWorkspace({ workspaceId: 'live' }, liveWorkspaceIds(workspaces))).toBe(true);
+  });
+
+  it('削除済みのワークスペースを指す行は、除く対象になる', () => {
+    expect(isInLiveWorkspace({ workspaceId: 'gone' }, liveWorkspaceIds(workspaces))).toBe(false);
+  });
+
+  it('存在しないワークスペースを指す行も、除く対象になる', () => {
+    expect(isInLiveWorkspace({ workspaceId: 'unknown' }, liveWorkspaceIds(workspaces))).toBe(false);
+  });
+
+  it('タイムブロック（workspaceId が null）は、ワークスペースに属さないので、常に残す', () => {
+    expect(isInLiveWorkspace({ workspaceId: null }, new Set())).toBe(true);
   });
 });

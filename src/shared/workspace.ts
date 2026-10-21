@@ -54,3 +54,27 @@ export function deleteWorkspace({
   }
   return { workspace: { ...workspace, deletedAt: editedAt, editedAt }, entries: written };
 }
+
+/** 削除されていないワークスペースの id。 */
+export function liveWorkspaceIds(workspaces: Iterable<Workspace>): Set<string> {
+  const ids = new Set<string>();
+  for (const workspace of workspaces) {
+    if (workspace.deletedAt === null) ids.add(workspace.id);
+  }
+  return ids;
+}
+
+/**
+ * 削除されていないワークスペースの予定か。タイムブロック（workspaceId が null）は、ワークスペースに属さないので常に true。
+ * ワークスペースの削除は、中の予定も（別のワークスペースの系列の例外を含めて）消す。しかし、書き込みが重なると
+ * （設計書 6.4）、削除したワークスペースを指す、削除されていない行が残ることがある。そういう行を、画面にも
+ * GET /api/occurrences にも出さないために、同じ判定を使う。
+ * 展開の前ではなく、展開した回に当てる。先に除くと、除いた例外の行が抑えていた、元の系列の回が現れてしまう
+ * （設計書 5.1）。表示の ON/OFF（visible）は、画面の都合なので、ここでは見ない。
+ */
+export function isInLiveWorkspace(
+  row: { workspaceId: string | null },
+  liveIds: ReadonlySet<string>,
+): boolean {
+  return row.workspaceId === null || liveIds.has(row.workspaceId);
+}
