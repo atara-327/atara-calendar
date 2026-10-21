@@ -47,7 +47,9 @@ export type WriteOutcome =
 // - 408（タイムアウト）と 429（回数の制限）。時間がたてば通る。Worker は返さないが、Cloudflare の前段が返しうる。
 //   再び試すのは、次のきっかけ（編集・online・前面に戻る・60 秒ごと）でだけで、続けて繰り返さない（engine.ts の sendLoop）。
 //   429 を、短い間に叩き続けることはない。
-// - 本文が、API のエラーの形（apiErrorBodySchema）でない 4xx。Worker は、必ずその形で返す。
+// - 本文が、API のエラーの形（apiErrorBodySchema）でない 4xx。Worker の API の処理（設計書 5.1 のエラーの表と 404）は、
+//   4xx を必ずこの形で返す。リクエストの確認（security.ts。設計書 10.3）の 403・415 は別の形で、403 は、上の、止める側に入る。
+//   415 は、端末が必ず Content-Type を付けるので起きない（起きても、再び試すだけ）。
 //   それ以外は、Cloudflare の前段の 400 や、配信の設定ミスの 404 など、依頼の中身ではなく、経路が原因なので、
 //   捨てると、送信待ちが全部消える。再び試し続けても、「未送信 N件」で気づける。
 const TRANSIENT_CLIENT_ERRORS: ReadonlySet<number> = new Set([408, 429]);

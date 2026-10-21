@@ -68,15 +68,17 @@ describe('書き込みの応答の扱い（設計書 6.2）', () => {
     expect(await classifyWriteResponse(res)).toEqual({ kind: 'rejected', clockSkew: true });
   });
 
-  // Worker は、4xx を必ず API のエラーの形（apiErrorBodySchema）で返す。それ以外の 4xx は、依頼の中身ではなく、
-  // 経路が原因（Cloudflare の前段の 400、配信の設定ミスの 404 など）。捨てると、送信待ちが全部消える（実装 #6 の確認 Q12）。
+  // Worker の API の処理（設計書 5.1 のエラーの表と 404）は、4xx を必ず API のエラーの形（apiErrorBodySchema）で返す。
+  // それ以外の 4xx は、依頼の中身ではなく、経路が原因（Cloudflare の前段の 400、配信の設定ミスの 404 など）。
+  // 捨てると、送信待ちが全部消える（実装 #6 の確認 Q12）。リクエストの確認の 415（設計書 10.3）も、別の形。端末は必ず
+  // Content-Type を付けるので、起きないが、起きても、再び試すだけ。
   it.each([
     { name: '本文が JSON でない 400（前段のエラーページなど）', res: htmlResponse(400) },
     { name: '本文が JSON でない 404（配信の設定ミス）', res: htmlResponse(404) },
     { name: '知らない種類の error', res: response(400, { error: 'x', message: 'm' }) },
     { name: 'API のエラーの形でない JSON', res: response(413, { detail: 'too large' }) },
     {
-      name: 'リクエストの確認の 415（本文が空の応答）',
+      name: 'API の形でない、リクエストの確認の 415',
       res: response(415, { error: 'unsupported_media_type' }),
     },
   ])('$name の 4xx は、捨てずに、外さずに再び試す', async ({ res }) => {
