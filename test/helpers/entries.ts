@@ -1,4 +1,4 @@
-import type { Entry } from '../../src/shared/schema';
+import type { Entry, EntryDraft } from '../../src/shared/schema';
 
 /**
  * テスト用の行。id 以外を省くと、終日で 1 日だけの、繰り返さない予定になる。
@@ -27,6 +27,27 @@ export function makeEntry(overrides: Partial<Entry> & Pick<Entry, 'id'>): Entry 
     notifyOffsetMin: 10,
     editedAt: 1000,
     deletedAt: null,
+    ...overrides,
+  };
+}
+
+/** テスト用の、新しく作るときの下書き。何も渡さないと、時間指定の 1 回きりの予定になる。 */
+export function makeDraft(overrides: Partial<EntryDraft> = {}): EntryDraft {
+  return {
+    kind: 'event',
+    title: '歯医者',
+    workspaceId: 'default-workspace',
+    allDay: false,
+    startDate: '2026-10-19',
+    startTime: '15:00',
+    endDate: '2026-10-19',
+    endTime: '16:00',
+    location: null,
+    url: null,
+    memo: null,
+    rrule: null,
+    notifyEnabled: true,
+    notifyOffsetMin: 10,
     ...overrides,
   };
 }
