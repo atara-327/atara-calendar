@@ -21,6 +21,12 @@
   text-decoration: none;
 }
 
+/* 範囲（1900〜2199 年）の外の日。リンクではなく、日付の数字だけを薄く出す。 */
+.outOfRange {
+  color: var(--color-observance);
+  opacity: 0.5;
+}
+
 .cell:focus-visible {
   outline: 2px solid var(--color-today);
   outline-offset: -2px;

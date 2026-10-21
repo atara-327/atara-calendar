@@ -67,4 +67,9 @@ describe('1 日のラベルの部品', () => {
   it('1 日以外は null', () => {
     expect(dayLabelParts('2026-10-02')).toBeNull();
   });
+
+  it('範囲（1900〜2199 年）の外の 1 日は null（最後の週にはみ出した 2200-01-01 に「2200年1月」を付けない）', () => {
+    expect(dayLabelParts('2200-01-01')).toBeNull();
+    expect(dayLabelParts('1900-01-01')).toEqual({ year: '1900年', month: '1月' });
+  });
 });

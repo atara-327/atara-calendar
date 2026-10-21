@@ -221,7 +221,12 @@ describe('週に描く祝日名・記念日名', () => {
     // 2026-11-03 は文化の日（火曜）。
     const day = cache.get(week('2026-11-03')).days[2];
 
-    expect(day).toEqual({ date: '2026-11-03', holidayName: '文化の日', observanceNames: [] });
+    expect(day).toEqual({
+      date: '2026-11-03',
+      inRange: true,
+      holidayName: '文化の日',
+      observanceNames: [],
+    });
   });
 
   it('記念日の日には、記念日名が付く。重なる日は、すべて付く', () => {
@@ -384,6 +389,33 @@ describe('範囲の端', () => {
     expect(view.days.at(-1)?.date).toBe('2200-01-04');
     // 2199-12-31（火）までは出るが、範囲の外（2200 年）の日の回は出ない。
     expect(view.items.map((item) => (item as BarItem).startCol)).toEqual([0, 1, 2]);
+  });
+
+  it('範囲の外の日（1899-12-31 と 2200-01-01 以降）は、inRange が false になる', () => {
+    const cache = cacheOf([]);
+
+    const first = cache.get(FIRST_WEEK_NUMBER).days.map((day) => [day.date, day.inRange]);
+    const last = cache.get(LAST_WEEK_NUMBER).days.map((day) => [day.date, day.inRange]);
+
+    expect(first[0]).toEqual(['1899-12-31', false]);
+    expect(first.slice(1).every(([, inRange]) => inRange === true)).toBe(true);
+    expect(last.slice(0, 3)).toEqual([
+      ['2199-12-29', true],
+      ['2199-12-30', true],
+      ['2199-12-31', true],
+    ]);
+    expect(last.slice(3)).toEqual([
+      ['2200-01-01', false],
+      ['2200-01-02', false],
+      ['2200-01-03', false],
+      ['2200-01-04', false],
+    ]);
+  });
+
+  it('範囲の中の週の日は、すべて inRange が true', () => {
+    const days = cacheOf([]).get(week('2026-10-21')).days;
+
+    expect(days.every((day) => day.inRange)).toBe(true);
   });
 
   it('範囲の外の週は、例外を投げる', () => {

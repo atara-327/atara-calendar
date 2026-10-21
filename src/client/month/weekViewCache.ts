@@ -2,7 +2,7 @@ import { addDays, type DateStr } from '../../shared/date';
 import { namedDatesBetween } from '../../shared/holidays';
 import { occurrencesInPeriod } from '../../shared/period';
 import { lastCoveredDate, type Occurrence } from '../../shared/recurrence';
-import type { Entry, Workspace } from '../../shared/schema';
+import { isDateInSupportedYears, type Entry, type Workspace } from '../../shared/schema';
 import { liveWorkspaceIds } from '../../shared/workspace';
 import { layoutWeek, type MonthEvent, type WeekItem } from './layout';
 import {
@@ -16,6 +16,11 @@ import {
 /** 1 日のマスに出す、日付のまわりの情報。 */
 export interface DayView {
   date: DateStr;
+  /**
+   * 表示できる範囲（1900〜2199 年）の中の日か。最初と最後の週は、範囲の外の日を含む。
+   * 外の日は、日表示へ移れず（URL が `/` に戻される）、祝日・予定もないので、リンクにしない。
+   */
+  inRange: boolean;
   /** 祝日名。祝日でない日と、組み込みのワークスペース「祝日」が OFF のときは null。 */
   holidayName: string | null;
   /** 記念日の名前（同じ日に重なることがある）。「記念日」が OFF のときは空。 */
@@ -184,6 +189,7 @@ export class WeekViewCache {
     const last = addDays(first, 6);
     const days = weekDates(weekNumber).map((date): DayView => ({
       date,
+      inRange: isDateInSupportedYears(date),
       holidayName: this.showHolidays ? (chunk.holidays.get(date) ?? null) : null,
       observanceNames: this.showObservances ? (chunk.observances.get(date) ?? []) : [],
     }));

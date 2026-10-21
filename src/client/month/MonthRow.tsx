@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
+import { WEEKDAY_LABELS } from '../dateFormat';
 import { Link } from '../Link';
 import { dayPath } from '../route';
 import { cellBoundary } from './boundaries';
@@ -26,22 +27,41 @@ function boundaryClass({ top, left }: ReturnType<typeof cellBoundary>): string {
 function DayCell({ day, today }: { day: DayView; today: DateStr }) {
   const { month, day: dayOfMonth } = dateToYmd(day.date);
   const weekday = dayOfWeek(day.date);
+
+  if (!day.inRange) {
+    // 範囲（1900〜2199 年）の外の日。日表示へ移れない（URL が `/` に戻される）ので、リンクにしない。
+    // ラベルと、月・年の境目の線も付けない（cellBoundary・dayLabelParts が、外の日は付けない）。日付の数字は薄く出す。
+    return (
+      <div className={classNames(styles.cell, styles.outOfRange)} aria-hidden="true">
+        <span className={styles.dateLine} style={{ height: DATE_HEADER_HEIGHT }}>
+          <span className={styles.number}>{dayOfMonth}</span>
+        </span>
+      </div>
+    );
+  }
+
   const label = dayLabelParts(day.date);
   const holiday = day.holidayName;
+  const isToday = day.date === today;
   const numberClass = classNames(
     styles.number,
-    day.date === today && styles.today,
-    day.date !== today && holiday !== null && styles.holiday,
-    day.date !== today && holiday === null && weekday === SUNDAY && styles.sunday,
-    day.date !== today && holiday === null && weekday === SATURDAY && styles.saturday,
+    isToday && styles.today,
+    !isToday && holiday !== null && styles.holiday,
+    !isToday && holiday === null && weekday === SUNDAY && styles.sunday,
+    !isToday && holiday === null && weekday === SATURDAY && styles.saturday,
   );
   const names = [holiday, ...day.observanceNames].filter((name) => name !== null);
+  // 読み上げ用。「10月22日（木） 祝日名」。曜日は、見出しの行（aria-hidden）からは読めないので、ここに入れる。
+  const accessibleName = `${String(month)}月${String(dayOfMonth)}日（${WEEKDAY_LABELS[weekday] ?? ''}）${
+    names.length > 0 ? ` ${names.join('・')}` : ''
+  }`;
 
   return (
     <Link
       to={dayPath(day.date)}
       className={classNames(styles.cell, boundaryClass(cellBoundary(day.date)))}
-      aria-label={`${String(month)}月${String(dayOfMonth)}日${names.length > 0 ? ` ${names.join('・')}` : ''}`}
+      aria-label={accessibleName}
+      aria-current={isToday ? 'date' : undefined}
     >
       <span className={styles.dateLine} style={{ height: DATE_HEADER_HEIGHT }}>
         <span className={numberClass}>{dayOfMonth}</span>

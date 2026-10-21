@@ -40,6 +40,15 @@ describe('階段状の線を引くマス', () => {
     expect(cellBoundary('2027-01-08')).toEqual({ top: 'none', left: 'none' });
   });
 
+  it('範囲（1900〜2199 年）の外の日は、月・年の境目でも、線を持たない', () => {
+    // 最後の週にはみ出した 2200-01-01（土曜日の 1 つ前の、水曜日）。
+    expect(cellBoundary('2200-01-01')).toEqual({ top: 'none', left: 'none' });
+    expect(cellBoundary('2200-01-03')).toEqual({ top: 'none', left: 'none' });
+    expect(cellBoundary('1899-12-31')).toEqual({ top: 'none', left: 'none' });
+    // 範囲の中の端は、これまでどおり線を持つ。
+    expect(cellBoundary('1900-01-01')).toEqual({ top: 'year', left: 'year' });
+  });
+
   it('12 月の最終日は、線を持たない（線は次の月の側が持つ）', () => {
     expect(cellBoundary('2026-12-31')).toEqual({ top: 'none', left: 'none' });
   });

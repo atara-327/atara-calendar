@@ -1,4 +1,5 @@
 import { addDays, dateToYmd, type DateStr } from '../../shared/date';
+import { isDateInSupportedYears } from '../../shared/schema';
 import { weekStartDate } from './weeks';
 
 const WEDNESDAY_OFFSET = 3;
@@ -19,12 +20,13 @@ export interface DayLabelParts {
 }
 
 /**
- * 各月の 1 日のマスに付けるラベル（MV-5）の部品。1 日以外は null。
+ * 各月の 1 日のマスに付けるラベル（MV-5）の部品。1 日以外と、範囲の外の日は null。
  * 年の部分を分けるのは、幅の狭い画面（スマホ）で、年だけ省けるようにするため（MonthRow.module.css）。
  */
 export function dayLabelParts(date: DateStr): DayLabelParts | null {
   const { year, month, day } = dateToYmd(date);
-  if (day !== 1) return null;
+  // 範囲（1900〜2199 年）の外の日（最後の週にはみ出した 2200-01-01 など）には、付けない。
+  if (day !== 1 || !isDateInSupportedYears(date)) return null;
   return { year: month === 1 ? `${String(year)}年` : null, month: `${String(month)}月` };
 }
 
