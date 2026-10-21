@@ -236,19 +236,22 @@ export function createDevice({
   dbName,
   idPrefix,
   clock = new ManualClock(),
+  storage: storageOverride,
 }: {
   db: D1Database;
   hub?: FakeLockHub;
   dbName?: string;
   idPrefix?: string;
   clock?: ManualClock;
+  /** 送信待ちの保存先。省くと、fake-indexeddb の上の本物の実装。保存の失敗を再現するときに渡す。 */
+  storage?: PendingStorage;
 }): Device {
   deviceCounter += 1;
   const name = dbName ?? `test-device-${String(deviceCounter)}`;
   const prefix = idPrefix ?? `dev${String(deviceCounter)}`;
   const network = new WorkerNetwork(db);
   const page = new FakePage();
-  const storage = createIdbStorage({ dbName: name });
+  const storage = storageOverride ?? createIdbStorage({ dbName: name });
   let ids = 0;
   const engine = createSyncEngine({
     fetch: network.fetch,

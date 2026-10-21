@@ -1,4 +1,4 @@
-import { createStore, del, entries, set } from 'idb-keyval';
+import { createStore, del, entries, set, type UseStore } from 'idb-keyval';
 import { z } from 'zod';
 import { editedAtOf, pendingRequestSchema, type PendingRequest } from './requests';
 
@@ -39,10 +39,18 @@ export function createIdbStorage({
   dbName = 'atara-calendar-sync',
   storeName = 'pending-requests',
 }: { dbName?: string; storeName?: string } = {}): PendingStorage {
-  const store = createStore(dbName, storeName);
+  // IndexedDB を開くのは、最初の読み書きまで遅らせる。idb-keyval の createStore は、作った時点で開くので、
+  // IndexedDB が使えない環境（プライベートブラウズなど）では、ここで例外になり、画面を描く前に落ちる。
+  // 読み書きの中で失敗すれば、エンジンが storageFailed にして、メモリの上では動き続けられる。
+  let opened: UseStore | undefined;
+  const openStore = (): UseStore => {
+    opened ??= createStore(dbName, storeName);
+    return opened;
+  };
 
   return {
     async load() {
+      const store = openStore();
       const stored = await entries<IDBValidKey, unknown>(store);
       const requests: StoredRequest[] = [];
       let discarded = 0;
@@ -63,10 +71,10 @@ export function createIdbStorage({
       return { requests, discarded };
     },
     async save(item) {
-      await set(item.id, item, store);
+      await set(item.id, item, openStore());
     },
     async remove(id) {
-      await del(id, store);
+      await del(id, openStore());
     },
   };
 }

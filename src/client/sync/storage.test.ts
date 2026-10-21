@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { createStore, entries, set } from 'idb-keyval';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PendingRequest } from './requests';
 import { createIdbStorage, type StoredRequest } from './storage';
 
@@ -122,5 +122,19 @@ describe('送信待ちの IndexedDB への保存（設計書 6.2）', () => {
       // 消してあるので、次の起動では、数えない。
       expect(await storage.load()).toEqual({ requests: [stored('good', 1000)], discarded: 0 });
     });
+  });
+});
+
+describe('IndexedDB が使えない環境', () => {
+  it('保存先を作っただけでは、IndexedDB に触れない（画面を描く前に落ちない）。読み書きで、失敗として返す', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    try {
+      const storage = createIdbStorage({ dbName: newDbName() });
+
+      await expect(storage.load()).rejects.toThrow();
+      await expect(storage.save(stored('a', 1000))).rejects.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -173,6 +173,29 @@ describe('起動（設計書 6章）', () => {
   });
 });
 
+describe('IndexedDB が使えないとき', () => {
+  const brokenStorage = {
+    load: () => Promise.reject(new Error('IndexedDB が使えません')),
+    save: () => Promise.reject(new Error('IndexedDB が使えません')),
+    remove: () => Promise.reject(new Error('IndexedDB が使えません')),
+  };
+
+  it('メモリの上では動き続け、保存できないことを知らせる。送信待ちは、送れる', async () => {
+    const device = await startedDevice({ db: db(), storage: brokenStorage });
+
+    expect(device.state().phase).toBe('ready');
+    expect(device.state().storageFailed).toBe(true);
+
+    const created = device.engine.createEntry(makeDraft({ title: '保存できなくても送る' }));
+    await device.engine.settled();
+
+    expect(pendingOf(device)).toBe(0);
+    expect((await readAllRows(db())).entries.get(created?.entryId ?? '')?.title).toBe(
+      '保存できなくても送る',
+    );
+  });
+});
+
 describe('編集と送信（設計書 6.2）', () => {
   it('編集は、すぐ画面に出すデータに出る。送り終えると、未送信が 0 になり、サーバーに入っている', async () => {
     const device = await startedDevice();
