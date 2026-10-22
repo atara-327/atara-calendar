@@ -348,6 +348,74 @@ describe('開いた予定を変更する', () => {
   });
 });
 
+describe('終日の予定を時間指定に変える（通知の分は、意味が変わる。設計書 4.3）', () => {
+  /** API から入れた、終日の予定（通知の分は、フォームの固定の値とは限らない）。 */
+  async function deviceWithAllDay(notifyOffsetMin: number) {
+    const device = await startedDevice();
+    const apiValues = { ...setAllDay(newValues({ title: '誕生日' }), true) };
+    const draft = { ...toDraft(apiValues), notifyOffsetMin };
+    const accepted = device.engine.createEntry(draft);
+    if (accepted === null) throw new Error('エンジンが受け付けませんでした');
+    await device.engine.settled();
+    return { device, entryId: accepted.entryId };
+  }
+
+  it('終日の -360（当日の朝 6 時）と同じ -360 を、時間指定で入力しても、フォームの確認が止める（開始の 6 時間後の通知を作らない）', async () => {
+    const { device, entryId } = await deviceWithAllDay(-360);
+    const occurrence = occurrenceOf(device, entryId);
+    const values = {
+      ...setAllDay(editValues(occurrence, AT_1420), false),
+      notifyOffsetText: '-360',
+    };
+
+    expect(validateForm(values, occurrence).notify).toBeDefined();
+  });
+
+  it('時間指定にして、元と同じ数（5）を入力して保存すると、サーバーの行は、フォームの下書きと一致する', async () => {
+    const { device, entryId } = await deviceWithAllDay(5);
+    const occurrence = occurrenceOf(device, entryId);
+    const values = {
+      ...setAllDay(editValues(occurrence, AT_1420), false),
+      notifyOffsetText: '5',
+    };
+    expect(validateForm(values, occurrence)).toEqual({});
+    device.network.calls.length = 0;
+
+    const changes = change(device, occurrence, values);
+    await device.engine.settled();
+
+    // 数が同じでも、通知の分を送る（終日を変えたため）。
+    expect(changes).toMatchObject({ allDay: false, notifyOffsetMin: 5 });
+    expect(device.network.writes[0]?.body).toMatchObject({ changes: { notifyOffsetMin: 5 } });
+    const draft = toDraft(values);
+    expect((await readAllRows(testDatabase.db)).entries.get(entryId)).toMatchObject({
+      allDay: draft.allDay,
+      startTime: draft.startTime,
+      endTime: draft.endTime,
+      notifyEnabled: draft.notifyEnabled,
+      notifyOffsetMin: draft.notifyOffsetMin,
+    });
+    expect(device.state().discarded.count).toBe(0);
+  });
+
+  it('時間指定に変えて、通知の分を直さなければ、初期値（10 分前）になり、サーバーの行も、10 分前の時間指定になる', async () => {
+    const { device, entryId } = await deviceWithAllDay(-360);
+    const occurrence = occurrenceOf(device, entryId);
+    const values = setAllDay(editValues(occurrence, AT_1420), false);
+    expect(validateForm(values, occurrence)).toEqual({});
+
+    change(device, occurrence, values);
+    await device.engine.settled();
+
+    expect((await readAllRows(testDatabase.db)).entries.get(entryId)).toMatchObject({
+      allDay: false,
+      startTime: '15:00',
+      endTime: '16:00',
+      notifyOffsetMin: 10,
+    });
+  });
+});
+
 describe('削除と、元に戻す（OT-1）', () => {
   async function deviceWithEvent() {
     const device = await startedDevice();

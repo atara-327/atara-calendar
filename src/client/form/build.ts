@@ -51,6 +51,7 @@ export function toDraft(values: FormValues): EntryDraft {
  * 何も変えていなければ、空のオブジェクト。
  * 終了日は、開始日を変えたときも入れる。開始日だけを渡すと、サーバーが、終了日を同じ日数だけずらして、
  * 1 回の長さを保つ（4.5）。フォームで終了を、開始から別の長さに直していたときに、その直しを失わないため。
+ * 通知の分は、終日を切り替えたときも入れる（数が同じでも。意味が違うため）。
  * kind と繰り返しのルールは入れない（kind は作成後に変えられない。ルールはフォームにまだない）。
  */
 export function toChanges(values: FormValues, original: Occurrence): EntryChanges {
@@ -68,7 +69,9 @@ export function toChanges(values: FormValues, original: Occurrence): EntryChange
   if (isTextChanged(original.url, values.url)) changes.url = draft.url;
   if (isTextChanged(original.memo, values.memo)) changes.memo = draft.memo;
   if (draft.notifyEnabled !== original.notifyEnabled) changes.notifyEnabled = draft.notifyEnabled;
-  if (draft.notifyOffsetMin !== original.notifyOffsetMin) {
+  // 終日を切り替えたときは、同じ数でも入れる。終日と時間指定では、分の意味が違う（設計書 4.3）ので、
+  // 数が同じでも、変えた項目として、フォームの値を、はっきり送る。
+  if (draft.notifyOffsetMin !== original.notifyOffsetMin || draft.allDay !== original.allDay) {
     changes.notifyOffsetMin = draft.notifyOffsetMin;
   }
   return changes;

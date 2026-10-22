@@ -197,6 +197,38 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     expect(toChanges(values, allDayOriginal)).toEqual({ title: '誕生日' });
   });
 
+  it('終日を切り替えたときは、通知の分も、元と同じ数でも入る（分の意味が違うため）', () => {
+    // 終日の 5（前日 23:55）を、時間指定の 5（開始の 5 分前）にする。数は同じだが、意味が変わる。
+    const allDayOriginal = makeOccurrence({ allDay: true, notifyOffsetMin: 5 });
+    const values = {
+      ...setAllDay(editValues(allDayOriginal, AT_1420), false),
+      notifyOffsetText: '5',
+    };
+
+    expect(toChanges(values, allDayOriginal)).toEqual({
+      allDay: false,
+      startTime: '15:00',
+      endTime: '16:00',
+      notifyOffsetMin: 5,
+    });
+  });
+
+  it('時間指定を終日にしたときも、通知の分が入る（固定の -360）', () => {
+    const timedOriginal = makeOccurrence({
+      allDay: false,
+      startTime: '15:00',
+      endTime: '16:00',
+      notifyOffsetMin: -360,
+    });
+
+    expect(toChanges(setAllDay(editValues(timedOriginal, AT_1420), true), timedOriginal)).toEqual({
+      allDay: true,
+      startTime: null,
+      endTime: null,
+      notifyOffsetMin: -360,
+    });
+  });
+
   it('場所・URL・メモを入力したら入り、空にしたら null（空にした）になる', () => {
     expect(
       toChanges(edit({ location: '渋谷', url: 'https://example.com', memo: 'メモ' }), original()),

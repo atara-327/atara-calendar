@@ -23,19 +23,35 @@ export interface FormErrors extends ScheduleErrors {
   form?: string;
 }
 
+/** 通知の分を、開いたときから変えていないか（分の数と、終日かどうかが、どちらも同じ）。 */
+function isUnchanged(
+  values: Pick<FormValues, 'allDay'>,
+  offset: number,
+  original: Pick<Occurrence, 'notifyOffsetMin' | 'allDay'> | undefined,
+): boolean {
+  return (
+    original !== undefined &&
+    values.allDay === original.allDay &&
+    offset === original.notifyOffsetMin
+  );
+}
+
 function tooLong(name: string, limit: number): string {
   return `${name}は ${limit.toLocaleString('ja-JP')} 文字までにしてください`;
 }
 
 /**
  * 誤りがなければ、空のオブジェクト。
- * original は、編集で開いた回。時間指定の通知の分は、開いたときの値から変えていなければ、範囲の確認を通す
+ * original は、編集で開いた回。時間指定の通知の分は、開いたときから変えていなければ、範囲の確認を通す
  * （API から入った、開始より後の通知（負の値）を、題名だけ直したいときに、直させないため。変えていない項目は、
  * 送らない（build.ts の toChanges）ので、サーバーにも届かない）。変えたときは、0〜10080。
+ * 「変えていない」は、分の数と、終日かどうかの両方が同じこと。終日と時間指定では、同じ数でも意味が違う
+ * （設計書 4.3。終日の -360 は「当日の朝 6 時」、時間指定の -360 は「開始の 6 時間後」）ので、終日を切り替えたなら、
+ * 元の終日の分と同じ数を打っても、範囲の確認を通さない。
  */
 export function validateForm(
   values: FormValues,
-  original?: Pick<Occurrence, 'notifyOffsetMin'>,
+  original?: Pick<Occurrence, 'notifyOffsetMin' | 'allDay'>,
 ): FormErrors {
   const errors: FormErrors = validateSchedule(values);
   // 空白だけのタイトルは、サーバーは通すが、月表示で何も書いていない予定になるので、空と同じにする。
@@ -51,7 +67,7 @@ export function validateForm(
     if (offset === null) {
       errors.notify = '通知のタイミングは、整数（分）で入力してください';
     } else if (
-      offset !== original?.notifyOffsetMin &&
+      !isUnchanged(values, offset, original) &&
       (offset < TIMED_NOTIFY_RANGE.min || offset > TIMED_NOTIFY_RANGE.max)
     ) {
       errors.notify = `通知のタイミングは、${String(TIMED_NOTIFY_RANGE.min)}〜${TIMED_NOTIFY_RANGE.max.toLocaleString('ja-JP')} 分の間で入力してください`;

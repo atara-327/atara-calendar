@@ -101,7 +101,7 @@ describe('保存の前の確認', () => {
 
   describe('API から入った、開始より後の通知（時間指定で、通知の分が負の値）', () => {
     // 時間指定の予定の通知は、画面では 0〜10080 だけ。API は、終日のために、-1440 から通す。
-    const original = { notifyOffsetMin: -30 };
+    const original = { notifyOffsetMin: -30, allDay: false };
 
     it('開いたときの値から変えていなければ、題名だけ直して保存できる（変えていない項目は送らない）', () => {
       expect(validateForm(valid({ notifyOffsetText: '-30' }), original)).toEqual({});
@@ -118,6 +118,36 @@ describe('保存の前の確認', () => {
 
     it('開いた回の値と同じでも、整数でなければ誤り', () => {
       expect(validateForm(valid({ notifyOffsetText: '' }), original).notify).toBeDefined();
+    });
+
+    it('終日だった予定を時間指定にしたら、元の分と同じ負の値でも誤り（終日と時間指定では、同じ数でも意味が違う）', () => {
+      // 終日の -360 は「当日の朝 6 時」、時間指定の -360 は「開始の 6 時間後」。
+      const allDayOriginal = { notifyOffsetMin: -360, allDay: true };
+      const toTimed = setAllDay(setAllDay(valid(), true), false);
+
+      expect(
+        validateForm({ ...toTimed, notifyOffsetText: '-360' }, allDayOriginal).notify,
+      ).toBeDefined();
+      expect(
+        validateForm(
+          { ...toTimed, notifyOffsetText: '-30' },
+          { ...allDayOriginal, notifyOffsetMin: -30 },
+        ).notify,
+      ).toBeDefined();
+    });
+
+    it('終日だった予定を時間指定にして、0〜10080 の分を入れたら通る（元と同じ数でも）', () => {
+      const allDayOriginal = { notifyOffsetMin: 5, allDay: true };
+      const toTimed = setAllDay(setAllDay(valid(), true), false);
+
+      expect(validateForm({ ...toTimed, notifyOffsetText: '5' }, allDayOriginal)).toEqual({});
+      expect(validateForm(toTimed, allDayOriginal)).toEqual({});
+    });
+
+    it('時間指定だった予定を終日にしたら、通知の分は確かめない（固定の値で、入力欄がない）', () => {
+      const timedOriginal = { notifyOffsetMin: -30, allDay: false };
+
+      expect(validateForm(setAllDay(valid(), true), timedOriginal)).toEqual({});
     });
   });
 
