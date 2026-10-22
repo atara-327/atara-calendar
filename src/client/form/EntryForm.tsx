@@ -7,7 +7,13 @@ import {
   type SubmitEvent,
   type ReactNode,
 } from 'react';
-import { INPUT_LIMITS, type Rrule, type Workspace } from '../../shared/schema';
+import {
+  INPUT_LIMITS,
+  type EntryChanges,
+  type Rrule,
+  type Scope,
+  type Workspace,
+} from '../../shared/schema';
 import { MAX_YEAR, MIN_YEAR } from '../../shared/solarTerms';
 import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from '../sync/instance';
@@ -19,7 +25,7 @@ import { CloseIcon } from './icons';
 import { closeEntryForm } from './instance';
 import { loadLastWorkspaceId, saveLastWorkspaceId } from './lastWorkspace';
 import { mapSearchUrl, openableUrl } from './links';
-import { unavailableMessage } from './messages';
+import { scopeUnavailableMessage, unavailableMessage } from './messages';
 import {
   DEFAULT_ALL_DAY_NOTIFY_MIN,
   TIMED_NOTIFY_RANGE,
@@ -29,6 +35,8 @@ import {
 import { RepeatControls } from './RepeatControls';
 import { describeFirstOccurrence, firstOccurrence, repeatBaseDate, seriesRruleOf } from './repeat';
 import { moveStart } from './schedule';
+import { decideScope, type ScopeDecision } from './scope';
+import { ScopeStep, type ScopeStepKind } from './ScopeStep';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
 import {
@@ -44,7 +52,8 @@ import { defaultWorkspaceId, selectableWorkspaces } from './workspaceChoices';
 // 予定・タイムブロックの入力フォーム（設計書 11.4。要件 EV-1〜4・8、TB-1〜6、NT-2〜4、OT-1）。
 // スマホでは下から出るシート、PC では中央のダイアログ。ネイティブの <dialog>（showModal）を使う。
 // Why: フォーカスの閉じ込め・Esc で閉じる・背景を操作できなくする、が、追加の部品なしで手に入る。
-// 値の決め方・確認・本文の作り方は、画面に依存しない関数（values.ts・validate.ts・build.ts など）にある。
+// 値の決め方・確認・本文の作り方・繰り返しの欄の値・変更・削除の範囲の決め方は、画面に依存しない関数
+// （values.ts・validate.ts・build.ts・repeat.ts・scope.ts など）にある。
 
 const DATE_MIN = `${String(MIN_YEAR)}-01-01`;
 const DATE_MAX = `${String(MAX_YEAR)}-12-31`;
@@ -244,6 +253,16 @@ export function EntryForm({ target }: { target: FormTarget }) {
   // 保存を押したあとに、確認の誤りを、すべて出す。押す前は、開始・終了と、通知の分の誤り（入力の途中で、すぐ分かる）だけ出す。
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  // 範囲を聞く段（設計書 11.4）。null のときは、入力の段。変更の中身（changes）は、範囲を決めた時点のものを持つ
+  // （範囲は、この changes に当てて決めたので、送るのも、同じものにする）。
+  const [scopeStep, setScopeStep] = useState<{
+    kind: ScopeStepKind;
+    scopes: readonly Scope[];
+    selected: Scope;
+    changes: EntryChanges | null;
+  } | null>(null);
+  // 範囲を聞く段から戻ったとき、フォーカスを返す先（段を押したボタン）。
+  const returnFocus = useRef<ScopeStepKind | null>(null);
 
   const original = target.mode === 'edit' ? target.occurrence : undefined;
   const errors = useMemo(() => validateForm(values, original), [values, original]);
@@ -268,8 +287,6 @@ export function EntryForm({ target }: { target: FormTarget }) {
       ? null
       : describeFirstOccurrence(firstOccurrence(values), values.startDate);
 
-  // 繰り返しの予定の変更は、まだできない。行き止まりにならないよう、中身は見せて、保存と削除を出さない。
-  const readOnly = target.mode === 'edit' && target.occurrence.recurring;
   const isEvent = values.kind === 'event';
 
   // 開いたとき showModal し、閉じるとき close する。useEffect ではなく useLayoutEffect にするのは、
@@ -285,73 +302,162 @@ export function EntryForm({ target }: { target: FormTarget }) {
     };
   }, [target.mode]);
 
+  // 範囲を聞く段に入ったら、選んでいる範囲にフォーカスを置く。戻ったら、段を出したボタンに戻す。
+  // 段の中身は、入力の段と差し替わるので、押したボタンが DOM から外れ、フォーカスが失われるため。
+  const inScopeStep = scopeStep !== null;
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog === null) return;
+    if (inScopeStep) {
+      dialog.querySelector<HTMLElement>('input[name="scope"]:checked')?.focus();
+    } else if (returnFocus.current !== null) {
+      dialog.querySelector<HTMLElement>(`button[name="${returnFocus.current}"]`)?.focus();
+      returnFocus.current = null;
+    }
+  }, [inScopeStep]);
+
   const update = (patch: Partial<FormValues>) => {
     setValues((current) => ({ ...current, ...patch }));
   };
 
-  function save(): void {
-    const engine = getSyncEngine();
+  /**
+   * エンジンに渡す処理を実行する。受け付けられなかったとき（null）は、理由を出して null を返す。
+   * 確認（validateForm）を通った入力で、エンジンが例外を投げるのは、確認とサーバーの決まりの食い違い。
+   * 黙って閉じず、入力を残して知らせる。
+   */
+  function submit<T>(action: '保存' | '削除', run: () => T | null): T | null {
     try {
-      if (target.mode === 'create') {
-        const draft = toDraft(values);
-        if (engine.createEntry(draft) === null) {
-          setFailure(unavailableMessage(engine.store.getState().phase, '保存'));
-          return;
-        }
-        // 覚えるのは、新しく作った予定のワークスペースだけ（EV-8）。編集で別のワークスペースへ移しただけで、
-        // 次の初期値が変わると、紛らわしい。タイムブロックはワークスペースを持たない。
-        if (draft.kind === 'event' && draft.workspaceId !== null) {
-          saveLastWorkspaceId(draft.workspaceId);
-        }
-      } else {
-        const changes = toChanges(values, target.occurrence, originalRrule);
-        // 何も変えていないなら、何も送らない。送ると、行の編集時刻と rev だけが進み、他の端末が受け取り直す。
-        if (Object.keys(changes).length > 0) {
-          const accepted = engine.changeEntry(
-            // 繰り返さない予定は、範囲を使わない（設計書 5.1）。型に合わせて、予定全体を表す 'all' にする。
-            {
-              seriesId: target.occurrence.seriesId,
-              occurrenceDate: target.occurrence.occurrenceDate,
-              scope: 'all',
-            },
-            changes,
-          );
-          if (accepted === null) {
-            setFailure(unavailableMessage(engine.store.getState().phase, '保存'));
-            return;
-          }
-        }
-      }
+      const accepted = run();
+      if (accepted !== null) return accepted;
+      setFailure(unavailableMessage(getSyncEngine().store.getState().phase, action));
     } catch (error) {
-      // 確認（validateForm）を通った入力で、エンジンが例外を投げるのは、確認とサーバーの決まりの食い違い。
-      // 黙って閉じず、入力を残して知らせる。
-      console.error('予定を保存できませんでした', error);
-      setFailure('保存できませんでした。入力内容を確かめてください');
-      return;
+      console.error(`予定を${action}できませんでした`, error);
+      setFailure(`${action}できませんでした。入力内容を確かめてください`);
+    }
+    return null;
+  }
+
+  function createEntry(): void {
+    const draft = toDraft(values);
+    if (submit('保存', () => getSyncEngine().createEntry(draft)) === null) return;
+    // 覚えるのは、新しく作った予定のワークスペースだけ（EV-8）。編集で別のワークスペースへ移しただけで、
+    // 次の初期値が変わると、紛らわしい。タイムブロックはワークスペースを持たない。
+    if (draft.kind === 'event' && draft.workspaceId !== null) {
+      saveLastWorkspaceId(draft.workspaceId);
     }
     closeEntryForm();
   }
 
-  function remove(): void {
+  /** 範囲を決められなかったとき（もうない・どの範囲も選べない）の理由を出す。 */
+  function reject(decision: Extract<ScopeDecision, { kind: 'gone' | 'unavailable' }>): void {
+    setFailure(scopeUnavailableMessage(decision));
+  }
+
+  function changeEntry(scope: Scope, changes: EntryChanges): void {
     if (target.mode !== 'edit') return;
-    const engine = getSyncEngine();
-    const accepted = engine.deleteEntry({
-      seriesId: target.occurrence.seriesId,
-      occurrenceDate: target.occurrence.occurrenceDate,
-      scope: 'all',
-    });
-    if (accepted === null) {
-      setFailure(unavailableMessage(engine.store.getState().phase, '削除'));
+    const { seriesId, occurrenceDate } = target.occurrence;
+    const accepted = submit('保存', () =>
+      getSyncEngine().changeEntry({ seriesId, occurrenceDate, scope }, changes),
+    );
+    if (accepted !== null) closeEntryForm();
+  }
+
+  function saveEdit(): void {
+    if (target.mode !== 'edit') return;
+    const changes = toChanges(values, target.occurrence, originalRrule);
+    // 何も変えていないなら、何も送らない（範囲も聞かない）。送ると、行の編集時刻と rev だけが進み、他の端末が受け取り直す。
+    if (Object.keys(changes).length === 0) {
+      closeEntryForm();
       return;
     }
+    // 選べる範囲は、変えた内容を、手元の行に当てて決める（設計書 11.4。scope.ts）。
+    const decision = decideScope({
+      rows: getSyncEngine().store.getState().view.entries.values(),
+      occurrence: target.occurrence,
+      action: { kind: 'change', changes },
+    });
+    switch (decision.kind) {
+      case 'single':
+        // 繰り返さない予定は、範囲を使わない（設計書 5.1）。型に合わせて、予定全体を表す 'all' にする。
+        changeEntry('all', changes);
+        return;
+      case 'choose':
+        // 選べる範囲が 1 つだけでも、聞く（何が起きるかを、利用者が確かめられるように）。
+        setScopeStep({
+          kind: 'save',
+          scopes: decision.scopes,
+          selected: decision.scopes[0],
+          changes,
+        });
+        return;
+      default:
+        reject(decision);
+    }
+  }
+
+  function save(): void {
+    if (target.mode === 'create') createEntry();
+    else saveEdit();
+  }
+
+  function deleteEntry(scope: Scope): void {
+    if (target.mode !== 'edit') return;
+    const { seriesId, occurrenceDate } = target.occurrence;
+    const accepted = submit('削除', () =>
+      getSyncEngine().deleteEntry({ seriesId, occurrenceDate, scope }),
+    );
+    if (accepted === null) return;
     // 確認は出さず、削除したあとに、5 秒の間、元に戻せるようにする（設計書 11.4・6.6）。
     showDeletedNotice(accepted.requestId);
     closeEntryForm();
   }
 
+  function remove(): void {
+    if (target.mode !== 'edit') return;
+    setFailure(null);
+    const decision = decideScope({
+      rows: getSyncEngine().store.getState().view.entries.values(),
+      occurrence: target.occurrence,
+      action: { kind: 'delete' },
+    });
+    switch (decision.kind) {
+      case 'single':
+        deleteEntry('all');
+        return;
+      case 'choose':
+        setScopeStep({
+          kind: 'delete',
+          scopes: decision.scopes,
+          selected: decision.scopes[0],
+          changes: null,
+        });
+        return;
+      default:
+        reject(decision);
+    }
+  }
+
+  /** 範囲を決めたあとの、保存・削除。 */
+  function applyScope(): void {
+    if (scopeStep === null) return;
+    setFailure(null);
+    if (scopeStep.kind === 'delete') deleteEntry(scopeStep.selected);
+    else if (scopeStep.changes !== null) changeEntry(scopeStep.selected, scopeStep.changes);
+  }
+
+  function backToForm(): void {
+    if (scopeStep === null) return;
+    returnFocus.current = scopeStep.kind;
+    setFailure(null);
+    setScopeStep(null);
+  }
+
   function handleSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
-    if (readOnly) return;
+    if (scopeStep !== null) {
+      applyScope();
+      return;
+    }
     setAttempted(true);
     setFailure(null);
     if (Object.keys(errors).length > 0) {
@@ -400,20 +506,26 @@ export function EntryForm({ target }: { target: FormTarget }) {
           >
             <CloseIcon />
           </button>
-          {!readOnly && (
-            <button type="submit" className={styles.saveButton}>
+          {scopeStep === null && (
+            <button type="submit" name="save" className={styles.saveButton}>
               保存
             </button>
           )}
         </header>
 
-        <fieldset className={styles.fieldset} disabled={readOnly}>
+        {scopeStep !== null ? (
+          <ScopeStep
+            action={scopeStep.kind}
+            scopes={scopeStep.scopes}
+            selected={scopeStep.selected}
+            error={failure}
+            onSelect={(selected) => {
+              setScopeStep({ ...scopeStep, selected });
+            }}
+            onBack={backToForm}
+          />
+        ) : (
           <div className={styles.body}>
-            {readOnly && (
-              <p className={classNames(styles.notice, styles.wide)} role="status">
-                繰り返しの予定の変更は、まだできません
-              </p>
-            )}
             {formError !== null && (
               <p className={classNames(styles.error, styles.wide)} role="alert">
                 {formError}
@@ -685,15 +797,20 @@ export function EntryForm({ target }: { target: FormTarget }) {
               />
             </Field>
 
-            {target.mode === 'edit' && !readOnly && (
+            {target.mode === 'edit' && (
               <div className={classNames(styles.footer, styles.wide)}>
-                <button type="button" className={styles.deleteButton} onClick={remove}>
+                <button
+                  type="button"
+                  name="delete"
+                  className={styles.deleteButton}
+                  onClick={remove}
+                >
                   削除
                 </button>
               </div>
             )}
           </div>
-        </fieldset>
+        )}
       </form>
     </dialog>
   );

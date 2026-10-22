@@ -34,7 +34,7 @@ export type ScopeDecision =
   /** 繰り返さない予定。範囲を聞かずに、書き換える（設計書 4.5。ルールを付けて、繰り返す予定にする場合も含む）。 */
   | { kind: 'single' }
   /** 選べる範囲（1 つだけのときも、聞く）。「この予定のみ」「これ以降すべて」「すべて」の順。 */
-  | { kind: 'choose'; scopes: readonly Scope[] }
+  | { kind: 'choose'; scopes: readonly [Scope, ...Scope[]] }
   /** どの範囲も、受け付けられない。保存しない。 */
   | { kind: 'unavailable'; reason: UnavailableReason }
   /** 対象の予定・回が、もうない（開いている間に、ほかの端末で変更・削除された）。保存しない。 */
@@ -117,8 +117,10 @@ export function decideScope({
     result: trial(seriesRows, target, scope, action),
   }));
   if (results.some(({ result }) => result === 'gone')) return { kind: 'gone' };
-  const scopes = results.filter(({ result }) => result === 'accepted').map(({ scope }) => scope);
-  if (scopes.length > 0) return { kind: 'choose', scopes };
+  const [first, ...rest] = results
+    .filter(({ result }) => result === 'accepted')
+    .map(({ scope }) => scope);
+  if (first !== undefined) return { kind: 'choose', scopes: [first, ...rest] };
 
   // どの範囲も選べないのが、ルールと日付を同時に変えたためか。ルールも日付も変えていて、日付の変更を外すと、
   // 選べる範囲があれば、そうである。理由を、ルールの種類（毎日・平日・休日）から決めないのは、画面に決まりを
