@@ -51,6 +51,42 @@ describe('新しく作るときの初期値', () => {
     });
   });
 
+  it('開始を決めて開くと、今日の次の正時ではなく、その開始から 1 時間になる（日表示から。他の項目は同じ）', () => {
+    const values = createValues({
+      kind: 'block',
+      nowMs: AT_1420,
+      workspaceId: 'w1',
+      start: { date: '2026-10-25', time: '09:30' },
+    });
+
+    expect(values).toMatchObject({
+      kind: 'block',
+      startDate: '2026-10-25',
+      startTime: '09:30',
+      endDate: '2026-10-25',
+      endTime: '10:30',
+      notifyEnabled: false,
+    });
+    expect(values).toEqual({
+      ...createValues({ kind: 'block', nowMs: AT_1420, workspaceId: 'w1' }),
+      startDate: '2026-10-25',
+      startTime: '09:30',
+      endDate: '2026-10-25',
+      endTime: '10:30',
+    });
+  });
+
+  it('開始を決めて開いたとき、23:30 なら、終了は翌日の 0:30', () => {
+    expect(
+      createValues({
+        kind: 'block',
+        nowMs: AT_1420,
+        workspaceId: null,
+        start: { date: '2026-10-25', time: '23:30' },
+      }),
+    ).toMatchObject({ endDate: '2026-10-26', endTime: '00:30' });
+  });
+
   it('ワークスペースが 1 つもなければ null', () => {
     expect(
       createValues({ kind: 'event', nowMs: AT_1420, workspaceId: null }).workspaceId,

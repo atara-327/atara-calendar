@@ -3,6 +3,7 @@ import {
   defaultSchedule,
   moveStart,
   nextFullHour,
+  scheduleFromStart,
   toAllDay,
   toTimed,
   validateSchedule,
@@ -66,6 +67,40 @@ describe('開始の初期値: 今日の、次の正時', () => {
       date: '2026-10-23',
       time: '01:00',
     });
+  });
+});
+
+describe('開始を決めて作るときの開始と終了（日表示のタップ・( + ) から）', () => {
+  it('終了は、開始の 1 時間後（時間指定）', () => {
+    expect(scheduleFromStart({ date: '2026-10-22', time: '09:15' })).toEqual({
+      allDay: false,
+      startDate: '2026-10-22',
+      startTime: '09:15',
+      endDate: '2026-10-22',
+      endTime: '10:15',
+    });
+  });
+
+  it('23:30 なら、終了は翌日の 0:30（日付をまたいでよい。TB-6）', () => {
+    expect(scheduleFromStart({ date: '2026-10-22', time: '23:30' })).toMatchObject({
+      startDate: '2026-10-22',
+      startTime: '23:30',
+      endDate: '2026-10-23',
+      endTime: '00:30',
+    });
+  });
+
+  it('月末の 23:00 なら、終了は翌月 1 日の 0:00', () => {
+    expect(scheduleFromStart({ date: '2026-10-31', time: '23:00' })).toMatchObject({
+      endDate: '2026-11-01',
+      endTime: '00:00',
+    });
+  });
+
+  it('今日の次の正時から作るときは、その次の正時を開始にして、同じ形になる', () => {
+    expect(defaultSchedule(AT_1420)).toEqual(
+      scheduleFromStart({ date: '2026-10-22', time: '15:00' }),
+    );
   });
 });
 

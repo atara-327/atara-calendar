@@ -3,7 +3,7 @@ import { namedDatesBetween } from '../../shared/holidays';
 import { occurrencesInPeriod } from '../../shared/period';
 import { lastCoveredDate, type Occurrence } from '../../shared/recurrence';
 import { isDateInSupportedYears, type Entry, type Workspace } from '../../shared/schema';
-import { liveWorkspaceIds } from '../../shared/workspace';
+import { workspaceDisplayOf } from '../workspaceDisplay';
 import { layoutWeek, type MonthEvent, type WeekItem } from './layout';
 import {
   FIRST_WEEK_NUMBER,
@@ -81,32 +81,21 @@ export class WeekViewCache {
   private readonly chunks = new Map<number, Chunk>();
 
   constructor({ entries, workspaces, slots }: WeekViewSource) {
-    const all = [...workspaces];
     // タイムブロック（MV-10）は出さないので、展開の前に除く。毎日・平日の時間割は、系列の数が多くなりやすく、
     // 展開して捨てるのが無駄になるため。除いてよいのは、系列と例外の行の kind が同じ（作成後に変えられない。
     // 設計書 4.5）で、タイムブロックの例外が、予定の回を抑えることがないため。
     // 表示が OFF のワークスペースの予定は、同じようには除けない。別のワークスペースへ移した例外の行を除くと、
-    // その例外が抑えていた、元の系列の回が現れてしまうため（設計書 5.1）。展開した回から除く。
+    // その例外が抑えていた、元の系列の回が現れてしまうため（設計書 5.1）。展開した回から除く（toMonthEvent）。
     this.entries = entries.filter((entry) => entry.kind === 'event');
     this.slots = slots;
-    this.liveIds = liveWorkspaceIds(all);
 
     // 表示が OFF のワークスペースの予定は出さない（WS-3）。削除済みのワークスペースの予定は、
     // occurrencesInPeriod が除くので、ここでは見ない。
-    // 組み込みの「祝日」「記念日」の行がないときは、出す。マイグレーションが必ず入れる行なので、
-    // 行がないのは、まだ何も読み込んでいないときだけ。
-    const colors = new Map<string, string>();
-    let showHolidays = true;
-    let showObservances = true;
-    for (const workspace of all) {
-      if (workspace.deletedAt !== null) continue;
-      if (workspace.builtin === 'holiday') showHolidays = workspace.visible;
-      else if (workspace.builtin === 'observance') showObservances = workspace.visible;
-      else if (workspace.visible) colors.set(workspace.id, workspace.color);
-    }
-    this.colors = colors;
-    this.showHolidays = showHolidays;
-    this.showObservances = showObservances;
+    const display = workspaceDisplayOf(workspaces);
+    this.liveIds = display.liveIds;
+    this.colors = display.colors;
+    this.showHolidays = display.showHolidays;
+    this.showObservances = display.showObservances;
   }
 
   /** これまでに計算したまとまりの数。計算が、描いた週の分だけに収まっていることの確認に使う。 */

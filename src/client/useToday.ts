@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { todayJst } from '../../shared/date';
-import type { DateStr } from '../../shared/date';
+import { todayJst } from '../shared/date';
+import type { DateStr } from '../shared/date';
 
 // 日付が変わったら、「今日」の印と「今日」ボタンの行き先を変える。
 // 日付が変わる瞬間に 1 回だけ動くタイマーにしないのは、タブが裏に回ると、ブラウザがタイマーを
