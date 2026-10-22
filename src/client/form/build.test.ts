@@ -212,6 +212,41 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     ).toEqual({ location: null, url: null, memo: null });
   });
 
+  it('API から入った空文字（場所・URL・メモ）は、触らなければ、変えていないことになる（null を送らない）', () => {
+    // サーバーの入力の検証は、場所・メモの空文字を通す。URL は通さないが、読み込みの確認は構造だけなので、行にはありうる。
+    const emptyStrings = makeOccurrence({ location: '', url: '', memo: '' });
+
+    expect(toChanges(editValues(emptyStrings, AT_1420), emptyStrings)).toEqual({});
+    expect(
+      toChanges({ ...editValues(emptyStrings, AT_1420), title: '題名だけ' }, emptyStrings),
+    ).toEqual({ title: '題名だけ' });
+  });
+
+  it('API から入った空文字の場所に、入力したら入り、そのあと空にしたら null（空にした）になる', () => {
+    const emptyStrings = makeOccurrence({ location: '' });
+
+    expect(
+      toChanges({ ...editValues(emptyStrings, AT_1420), location: '渋谷' }, emptyStrings),
+    ).toEqual({ location: '渋谷' });
+    const filled = makeOccurrence({ location: '渋谷' });
+    expect(toChanges({ ...editValues(filled, AT_1420), location: '' }, filled)).toEqual({
+      location: null,
+    });
+  });
+
+  it('何も変えずに保存したときは、何も送らない（開いた回が、どんな値でも、changes が空）', () => {
+    const occurrences = [
+      makeOccurrence({ location: '', memo: '' }),
+      makeOccurrence({ location: '渋谷', url: 'https://example.com', memo: 'メモ' }),
+      makeOccurrence({ allDay: true, notifyOffsetMin: -480 }),
+      makeOccurrence({ allDay: false, startTime: '09:00', endTime: '10:00', notifyOffsetMin: -30 }),
+    ];
+
+    for (const occurrence of occurrences) {
+      expect(toChanges(editValues(occurrence, AT_1420), occurrence)).toEqual({});
+    }
+  });
+
   it('場所が空のままなら、変えていないことになる（元が null で、入力欄が空文字）', () => {
     expect(toChanges(edit({ location: '' }), original())).toEqual({});
   });

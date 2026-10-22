@@ -232,7 +232,8 @@ export function EntryForm({ target }: { target: FormTarget }) {
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const errors = useMemo(() => validateForm(values), [values]);
+  const original = target.mode === 'edit' ? target.occurrence : undefined;
+  const errors = useMemo(() => validateForm(values, original), [values, original]);
   const shown: FormErrors = attempted
     ? errors
     : {

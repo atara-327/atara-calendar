@@ -1,4 +1,5 @@
 import { entryProblem } from '../../shared/entryRules';
+import type { Occurrence } from '../../shared/recurrence';
 import { INPUT_LIMITS, entryDraftInputSchema } from '../../shared/schema';
 import { toDraft } from './build';
 import { TIMED_NOTIFY_RANGE, parseNotifyOffset } from './notify';
@@ -26,8 +27,16 @@ function tooLong(name: string, limit: number): string {
   return `${name}は ${limit.toLocaleString('ja-JP')} 文字までにしてください`;
 }
 
-/** 誤りがなければ、空のオブジェクト。 */
-export function validateForm(values: FormValues): FormErrors {
+/**
+ * 誤りがなければ、空のオブジェクト。
+ * original は、編集で開いた回。時間指定の通知の分は、開いたときの値から変えていなければ、範囲の確認を通す
+ * （API から入った、開始より後の通知（負の値）を、題名だけ直したいときに、直させないため。変えていない項目は、
+ * 送らない（build.ts の toChanges）ので、サーバーにも届かない）。変えたときは、0〜10080。
+ */
+export function validateForm(
+  values: FormValues,
+  original?: Pick<Occurrence, 'notifyOffsetMin'>,
+): FormErrors {
   const errors: FormErrors = validateSchedule(values);
   // 空白だけのタイトルは、サーバーは通すが、月表示で何も書いていない予定になるので、空と同じにする。
   if (values.title.trim() === '') errors.title = 'タイトルを入力してください';
@@ -41,7 +50,10 @@ export function validateForm(values: FormValues): FormErrors {
     const offset = parseNotifyOffset(values.notifyOffsetText);
     if (offset === null) {
       errors.notify = '通知のタイミングは、整数（分）で入力してください';
-    } else if (offset < TIMED_NOTIFY_RANGE.min || offset > TIMED_NOTIFY_RANGE.max) {
+    } else if (
+      offset !== original?.notifyOffsetMin &&
+      (offset < TIMED_NOTIFY_RANGE.min || offset > TIMED_NOTIFY_RANGE.max)
+    ) {
       errors.notify = `通知のタイミングは、${String(TIMED_NOTIFY_RANGE.min)}〜${TIMED_NOTIFY_RANGE.max.toLocaleString('ja-JP')} 分の間で入力してください`;
     }
   }

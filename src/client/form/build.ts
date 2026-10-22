@@ -11,6 +11,15 @@ function orNull(text: string): string | null {
   return text === '' ? null : text;
 }
 
+/**
+ * 文字の欄を、開いた回の値から変えたか。空文字と null は、同じ「空」とみなす。
+ * API から、空文字（''）が入ることがある（場所・メモ）。null と比べると、触っていないのに、変えたことになり、
+ * null を送ってしまう（空文字が、null に書き換わる）。
+ */
+function isTextChanged(original: string | null, text: string): boolean {
+  return (original ?? '') !== text;
+}
+
 /** 新しく作るときの下書き。予定・タイムブロックのどちらも、ここで、列の組み合わせを合わせる。 */
 export function toDraft(values: FormValues): EntryDraft {
   const isEvent = values.kind === 'event';
@@ -55,9 +64,9 @@ export function toChanges(values: FormValues, original: Occurrence): EntryChange
   if (draft.startTime !== original.startTime) changes.startTime = draft.startTime;
   if (startDateChanged || draft.endDate !== original.endDate) changes.endDate = draft.endDate;
   if (draft.endTime !== original.endTime) changes.endTime = draft.endTime;
-  if (draft.location !== original.location) changes.location = draft.location;
-  if (draft.url !== original.url) changes.url = draft.url;
-  if (draft.memo !== original.memo) changes.memo = draft.memo;
+  if (isTextChanged(original.location, values.location)) changes.location = draft.location;
+  if (isTextChanged(original.url, values.url)) changes.url = draft.url;
+  if (isTextChanged(original.memo, values.memo)) changes.memo = draft.memo;
   if (draft.notifyEnabled !== original.notifyEnabled) changes.notifyEnabled = draft.notifyEnabled;
   if (draft.notifyOffsetMin !== original.notifyOffsetMin) {
     changes.notifyOffsetMin = draft.notifyOffsetMin;

@@ -99,6 +99,28 @@ describe('保存の前の確認', () => {
     });
   });
 
+  describe('API から入った、開始より後の通知（時間指定で、通知の分が負の値）', () => {
+    // 時間指定の予定の通知は、画面では 0〜10080 だけ。API は、終日のために、-1440 から通す。
+    const original = { notifyOffsetMin: -30 };
+
+    it('開いたときの値から変えていなければ、題名だけ直して保存できる（変えていない項目は送らない）', () => {
+      expect(validateForm(valid({ notifyOffsetText: '-30' }), original)).toEqual({});
+    });
+
+    it('変えたときは、これまでどおり、0〜10080 の間だけ', () => {
+      expect(validateForm(valid({ notifyOffsetText: '-10' }), original).notify).toBeDefined();
+      expect(validateForm(valid({ notifyOffsetText: '45' }), original)).toEqual({});
+    });
+
+    it('新しく作るとき（開いた回がない）は、負の値は通さない', () => {
+      expect(validateForm(valid({ notifyOffsetText: '-30' })).notify).toBeDefined();
+    });
+
+    it('開いた回の値と同じでも、整数でなければ誤り', () => {
+      expect(validateForm(valid({ notifyOffsetText: '' }), original).notify).toBeDefined();
+    });
+  });
+
   describe('終日の通知の時刻（固定。入力欄がない）', () => {
     it('固定の値（-360）の終日は、誤りがない', () => {
       expect(validateForm(setAllDay(valid(), true))).toEqual({});
