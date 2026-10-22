@@ -1,24 +1,13 @@
 /*
- * 画面の下の左に出す。右下は、( + ) ボタン。幅の狭い画面では、( + ) ボタンの幅（56px）と余白を空ける。
- * 領域そのものは、クリックを通す（月表示のマスを隠さないため）。知らせの上だけ、押せる。
+ * 「削除しました［元に戻す］」の並び。画面の下の列（BottomNotices）の中に置かれ、同期の知らせの下に出る。
+ * 置き場所は、その列が決める。ここは、知らせを縦に並べるだけ。
  */
-.container {
-  position: fixed;
-  right: 8px;
-  bottom: 8px;
-  left: 8px;
-  z-index: 4;
+.list {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  pointer-events: none;
-}
-
-@media (max-width: 640px) {
-  .container {
-    right: 88px;
-  }
+  max-width: 100%;
 }
 
 .notice {

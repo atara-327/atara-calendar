@@ -18,14 +18,14 @@ export function showDeletedNotice(requestId: string): void {
 }
 
 /**
- * 画面の下の「削除しました［元に戻す］」（OT-1。設計書 6.6）。
+ * 画面の下の「削除しました［元に戻す］」（OT-1。設計書 6.6）。置き場所は、同期の知らせと同じ列（BottomNotices）。
  * 中身がないときも、読み上げ用の領域（role="status"）は置いておく。あとから領域を足すと、
  * 読み上げソフトが、出てきた知らせを読まないことがある。
  */
 export function UndoNotices() {
   const notices = useStore(undoNotices.store, (state) => state.notices);
   return (
-    <div className={styles.container} role="status">
+    <div className={styles.list} role="status">
       {notices.map((notice) => (
         <p key={notice.id} className={styles.notice}>
           {notice.status === 'waiting' ? (

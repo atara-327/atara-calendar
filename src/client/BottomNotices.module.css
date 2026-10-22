@@ -1,0 +1,20 @@
+/*
+ * 画面の下の左に、知らせを縦に積む。右は、( + ) ボタン（右 16px・幅 56px）と、その左の余白（16px）のぶん空ける。
+ * ( + ) ボタン（z-index 3）より手前に出して、どう重なっても、知らせが ( + ) の下に隠れないようにする。
+ * 列そのものは、クリックを通す（月表示のマスを隠さないため）。知らせの上だけ、押せる。
+ */
+.column {
+  position: fixed;
+  right: 88px;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: 640px;
+  padding: 8px;
+  pointer-events: none;
+}
