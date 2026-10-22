@@ -26,9 +26,9 @@ export function RepeatControls({
   /** 選択欄の id（項目名の <label> が指す）。 */
   id: string;
   values: RepeatFields & { startDate: string };
-  /** 毎月・毎年の説明の基準にする日付（repeat.ts の repeatBaseDate）。 */
-  baseDate: string;
-  /** 「最初の回は 10月24日（水）になります」。開始日がずれないときや、求めないときは null。 */
+  /** 毎月・毎年の説明の基準にする日付（repeat.ts の repeatDescriptionDate）。決められないときは null。 */
+  baseDate: string | null;
+  /** 「最初の回は 10月21日（水）になります」。開始日がずれないときや、求めないときは null。 */
   firstNote: string | null;
   /** 誤りの文言の id。誤りがあるときだけ渡す。 */
   describedBy: string | undefined;

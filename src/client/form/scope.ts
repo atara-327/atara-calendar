@@ -194,3 +194,42 @@ export function recheckScope({
       return { kind: 'rejected', decision: result };
   }
 }
+
+/** 保存したあとの系列（ルールと、最初の回の日付）。 */
+export interface SeriesAfter {
+  /** null は、繰り返さない予定になる（ルールをなくした）。 */
+  rrule: Entry['rrule'];
+  startDate: string;
+}
+
+/**
+ * 変更を、この範囲で保存したあとの、系列のルールと最初の回の日付。範囲を聞く段で、範囲ごとに、保存したあとに
+ * どうなるかを出すのに使う。「この予定のみ」は、系列を変えない（例外の行が 1 つできるだけ）ので null。
+ * 日付のずらし方と、ルールに合う最初の日への動かし方は、画面で計算せず、shared の changeEntry を当てた結果から読む
+ * （範囲によって、基準の日が違う。「すべて」は系列の開始日、「これ以降すべて」は開いた回の日付から）。
+ * 書く行のうち、系列の行を探す。「これ以降すべて」は、新しい系列（新しい行の id）で、最初の回から数えるときは、
+ * 元の系列の行（「すべて」と同じ）。
+ */
+export function seriesAfterChange({
+  rows,
+  occurrence,
+  changes,
+  scope,
+}: {
+  rows: Iterable<Entry>;
+  occurrence: Pick<Occurrence, 'seriesId' | 'occurrenceDate'>;
+  changes: EntryChanges;
+  scope: Scope;
+}): SeriesAfter | null {
+  if (scope === 'this') return null;
+  const { seriesId, occurrenceDate } = occurrence;
+  const seriesRows = [...rows].filter((row) => row.id === seriesId || row.seriesId === seriesId);
+  const written = apply(seriesRows, { seriesId, occurrenceDate }, scope, {
+    kind: 'change',
+    changes,
+  });
+  const row =
+    written.find((entry) => entry.id === TRIAL_NEW_ID && entry.seriesId === null) ??
+    written.find((entry) => entry.id === seriesId && entry.seriesId === null);
+  return row === undefined ? null : { rrule: row.rrule, startDate: row.startDate };
+}

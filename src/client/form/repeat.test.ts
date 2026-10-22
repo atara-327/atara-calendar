@@ -7,7 +7,8 @@ import {
   describeRepeat,
   firstOccurrence,
   hasNoWeeklyDays,
-  repeatBaseDate,
+  repeatDescriptionDate,
+  describeSeriesAfter,
   repeatFieldsOf,
   rruleOf,
   seriesRruleOf,
@@ -212,27 +213,109 @@ describe('繰り返しの説明（設計書 4.4・Q9・RP-2・RP-5）', () => {
   });
 });
 
-describe('説明の基準にする日付', () => {
+describe('日付を含む説明の、基準にする日付', () => {
   const monthly: Rrule = { freq: 'monthly' };
-  const original = { rrule: monthly, occurrenceDate: '2026-10-15' };
+  // 毎月 15 日の系列の 10-15 の回。
+  const recurring = {
+    recurring: true,
+    rrule: monthly,
+    occurrenceDate: '2026-10-15',
+    startDate: '2026-10-15',
+  };
 
   it('新しく作るときは、開始日', () => {
-    expect(repeatBaseDate(input({ repeat: 'monthly' }, '2026-10-22'))).toBe('2026-10-22');
-  });
-
-  it('開いた予定のルールを変えていなければ、回の日付（別の日に移した例外の回でも、ルールの基準の日）', () => {
-    // 毎月 15 日の系列の、10-15 の回を、10-17 に移した例外の回を開いた。開始日は 10-17。
-    expect(repeatBaseDate(input({ repeat: 'monthly' }, '2026-10-17'), original)).toBe('2026-10-15');
-  });
-
-  it('開いた予定のルールを変えたら、新しいルールの基準は、開始日', () => {
-    expect(repeatBaseDate(input({ repeat: 'yearly' }, '2026-10-17'), original)).toBe('2026-10-17');
+    expect(repeatDescriptionDate(input({ repeat: 'monthly' }, '2026-10-22'))).toBe('2026-10-22');
   });
 
   it('繰り返さない予定にルールを付けるときは、開始日', () => {
-    const single = { rrule: null, occurrenceDate: '2026-10-15' };
+    const single = { ...recurring, recurring: false, rrule: null };
 
-    expect(repeatBaseDate(input({ repeat: 'monthly' }, '2026-10-17'), single)).toBe('2026-10-17');
+    expect(repeatDescriptionDate(input({ repeat: 'monthly' }, '2026-10-17'), single)).toBe(
+      '2026-10-17',
+    );
+  });
+
+  it('すでに繰り返している予定で、ルールも開始日も変えていなければ、今のルールの基準の日付（回の日付）', () => {
+    expect(repeatDescriptionDate(input({ repeat: 'monthly' }, '2026-10-15'), recurring)).toBe(
+      '2026-10-15',
+    );
+  });
+
+  it('別の日に移した例外の回は、開始日が移した先の日でも、回の日付（元の日付）がルールの基準の日', () => {
+    // 毎月 15 日の系列の 10-15 の回を、10-17 に移した例外の回を開いた。開始日は 10-17、回の日付は 10-15。
+    const moved = { ...recurring, startDate: '2026-10-17' };
+
+    expect(repeatDescriptionDate(input({ repeat: 'monthly' }, '2026-10-17'), moved)).toBe(
+      '2026-10-15',
+    );
+  });
+
+  it('すでに繰り返している予定で、ルールを変えたら、決められない（範囲によって基準の日が違う）', () => {
+    expect(repeatDescriptionDate(input({ repeat: 'yearly' }, '2026-10-15'), recurring)).toBeNull();
+  });
+
+  it('すでに繰り返している予定で、開始日を変えたら、決められない（範囲によって基準の日が違う）', () => {
+    expect(repeatDescriptionDate(input({ repeat: 'monthly' }, '2026-10-20'), recurring)).toBeNull();
+  });
+
+  it('決められないとき、毎月・毎年の説明は出さない。平日・休日の説明（日付を含まない）は出す', () => {
+    expect(describeRepeat('monthly', null)).toBeNull();
+    expect(describeRepeat('yearly', null)).toBeNull();
+    expect(describeRepeat('weekday', null)).toContain('記念日は休日ではありません');
+    expect(describeRepeat('holiday', null)).toContain('記念日は含みません');
+  });
+});
+
+describe('範囲を聞く段で出す、保存したあとの系列の説明', () => {
+  it('ずれない・基準が同じなら、ルールだけ。毎月は「毎月 N 日」', () => {
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'monthly' }, startDate: '2026-03-20' }, '2026-03-20'),
+    ).toBe('毎月 20 日');
+  });
+
+  it('フォームに出ている開始日と、最初の回が違うときは、最初の回を添える（例: 「すべて」は、系列の最初の回から）', () => {
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'monthly' }, startDate: '2026-01-05' }, '2026-03-09'),
+    ).toBe('毎月 5 日（最初の回は 1月5日（月））');
+  });
+
+  it('最初の回の年が、フォームの開始日と違うときは、年も付ける', () => {
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'monthly' }, startDate: '2025-12-05' }, '2026-03-09'),
+    ).toBe('毎月 5 日（最初の回は 2025年12月5日（金））');
+  });
+
+  it('毎月 29〜31 日と、毎年 2/29 は、飛ばす旨を添える。最初の回は、同じ括弧の中に続ける', () => {
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'monthly' }, startDate: '2026-10-31' }, '2026-11-20'),
+    ).toBe('毎月 31 日（その日がない月は飛ばします。最初の回は 10月31日（土））');
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'yearly' }, startDate: '2028-02-29' }, '2028-02-29'),
+    ).toBe('毎年 2 月 29 日（うるう年だけ）');
+  });
+
+  it('毎週は、曜日を昇順で。毎日・平日・休日は、種類の名前', () => {
+    expect(
+      describeSeriesAfter(
+        { rrule: { freq: 'weekly', days: [5, 3, 1] }, startDate: '2026-10-19' },
+        '2026-10-19',
+      ),
+    ).toBe('毎週 月・水・金');
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'daily' }, startDate: '2026-10-19' }, '2026-10-19'),
+    ).toBe('毎日');
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'weekday' }, startDate: '2026-10-26' }, '2026-10-24'),
+    ).toBe('平日（最初の回は 10月26日（月））');
+    expect(
+      describeSeriesAfter({ rrule: { freq: 'holiday' }, startDate: '2026-10-24' }, '2026-10-24'),
+    ).toBe('休日');
+  });
+
+  it('ルールをなくしたときは、繰り返さない予定になると言う', () => {
+    expect(describeSeriesAfter({ rrule: null, startDate: '2026-10-19' }, '2026-10-21')).toBe(
+      '繰り返さない予定になります',
+    );
   });
 });
 

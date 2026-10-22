@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { deepFreeze, makeEntry } from '../../../test/helpers/entries';
 import { addDays, dayOfWeek } from '../../shared/date';
 import { expandOccurrences } from '../../shared/recurrence';
-import type { Entry, EntryChanges, Rrule } from '../../shared/schema';
-import { decideScope, recheckScope, type ScopeAction, type ScopeDecision } from './scope';
+import type { Entry, EntryChanges, Rrule, Scope } from '../../shared/schema';
+import {
+  decideScope,
+  recheckScope,
+  seriesAfterChange,
+  type ScopeAction,
+  type ScopeDecision,
+} from './scope';
 
 // 変更・削除の範囲の、選べるものを決める（設計書 4.5・11.4）。
 // 決め方は、shared の changeEntry・deleteEntry を、範囲ごとに実際に当てること。ここでは、その結果が、
@@ -511,5 +517,67 @@ describe('範囲を選んで送るときの、もう一度の確認（ほかの�
         selected: 'this',
       }),
     ).toEqual({ kind: 'proceed' });
+  });
+});
+
+describe('範囲ごとの、保存したあとの系列（範囲を聞く段で、保存後の説明を出すのに使う）', () => {
+  function after(rows: readonly Entry[], date: string, changes: EntryChanges, scope: Scope) {
+    return seriesAfterChange({
+      rows: deepFreeze([...rows]),
+      occurrence: occurrenceOn(rows, date),
+      changes,
+      scope,
+    });
+  }
+
+  it('毎週（月）・開始 2026-01-05 の系列の 3/9 の回を毎月に変える: 「すべて」は、系列の開始日（1/5）の毎月 5 日。「これ以降すべて」は、その回の日付の毎月 9 日', () => {
+    const rows = [weekly([1], { startDate: '2026-01-05' })];
+    const changes = { rrule: { freq: 'monthly' } satisfies Rrule };
+
+    expect(after(rows, '2026-03-09', changes, 'all')).toEqual({
+      rrule: { freq: 'monthly' },
+      startDate: '2026-01-05',
+    });
+    expect(after(rows, '2026-03-09', changes, 'following')).toEqual({
+      rrule: { freq: 'monthly' },
+      startDate: '2026-03-09',
+    });
+    expect(after(rows, '2026-03-09', changes, 'this')).toBeNull();
+  });
+
+  it('毎月 15 日の系列の 3/15 の回の日付を 3/20 にする: 「これ以降すべて」は 3/20 の毎月 20 日。「すべて」は、系列の開始日に 5 日足した 1/20 の毎月 20 日', () => {
+    const rows = [daily({ rrule: { freq: 'monthly' }, startDate: '2026-01-15' })];
+    const changes = { startDate: '2026-03-20', endDate: '2026-03-20' };
+
+    expect(after(rows, '2026-03-15', changes, 'following')).toEqual({
+      rrule: { freq: 'monthly' },
+      startDate: '2026-03-20',
+    });
+    expect(after(rows, '2026-03-15', changes, 'all')).toEqual({
+      rrule: { freq: 'monthly' },
+      startDate: '2026-01-20',
+    });
+  });
+
+  it('開始日がルールに合わなければ、合う最初の日にずれた結果を返す（毎日の系列の水曜の回を、毎週の月曜・金曜にする「これ以降すべて」は、金曜）', () => {
+    const rows = [daily()];
+    const changes = { rrule: { freq: 'weekly', days: [1, 5] } satisfies Rrule };
+
+    expect(after(rows, WEDNESDAY, changes, 'following')).toEqual({
+      rrule: { freq: 'weekly', days: [1, 5] },
+      startDate: '2026-10-23',
+    });
+  });
+
+  it('ルールをなくすと、ルールは null（繰り返さない予定になる）', () => {
+    expect(after([daily()], WEDNESDAY, { rrule: null }, 'all')).toMatchObject({ rrule: null });
+  });
+
+  it('最初の回の「これ以降すべて」は、「すべて」と同じ結果（元の系列の行）', () => {
+    const changes = { rrule: { freq: 'weekly', days: [1] } satisfies Rrule };
+
+    expect(after([daily()], MONDAY, changes, 'following')).toEqual(
+      after([daily()], MONDAY, changes, 'all'),
+    );
   });
 });

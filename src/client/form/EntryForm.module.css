@@ -449,6 +449,10 @@
   font-size: 13px;
 }
 
+.scopeOutcome {
+  font-size: 13px;
+}
+
 .scopeButtons {
   display: flex;
   justify-content: flex-end;

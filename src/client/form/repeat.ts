@@ -1,7 +1,8 @@
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { isSameRrule, normalizeStart } from '../../shared/recurrence';
 import { inputDateSchema, type Entry, type Rrule } from '../../shared/schema';
-import { formatDayTitle, formatMonthDay } from '../dateFormat';
+import { WEEKDAY_LABELS, formatDayTitle, formatMonthDay } from '../dateFormat';
+import type { SeriesAfter } from './scope';
 
 // フォームの「繰り返し」の欄（設計書 11.4。要件 RP-1・RP-3・RP-5・RP-6）。画面に依存しない。
 // 欄の値と rrule の相互の変換、開始日から作る説明、保存したときに開始日がずれることの先出しを決める。
@@ -94,40 +95,64 @@ export function hasNoWeeklyDays({ repeat, repeatDays }: RepeatFields): boolean {
 }
 
 /**
- * 説明（describeRepeat）の基準にする日付。ふつうは開始日。
- * 開いた予定のルールを変えていないときは、そのルールの基準にする日付（回の日付。例外の回は、元の日付）にする。
- * 別の日に移した例外の回を開くと、開始日は移した先の日で、ルールの基準の日（毎月 15 日など）とは違うため。
+ * 日付を含む説明（毎月 N 日・毎年 M 月 D 日。describeRepeat）の、基準にする日付。決められないときは null。
+ * - 新しく作るとき、繰り返さない予定にルールを付けるとき: 開始日（設計書 4.4。基準は開始日）。
+ * - すでに繰り返している予定（original.recurring）で、ルールも開始日（その回の日付）も変えていないとき:
+ *   今のルールの基準の日付。回の日付を使う（別の日に移した例外の回は、開始日が移した先の日になるので、
+ *   元の日付）。ルールの基準の日（毎月 15 日など）と、開始日が違うため。
+ * - すでに繰り返している予定で、ルールか開始日を変えたとき: null。保存したあとの基準の日付は、範囲によって違う
+ *   （「すべて」は系列の開始日、「これ以降すべて」は開いた回の日付に、それぞれ日付の変更を足した日）ので、
+ *   範囲を選ぶまで決まらない。入力の段では出さず、範囲を聞く段で、範囲ごとに出す（scope.ts の seriesAfterChange）。
+ *   「最初の回は…」を、すでに繰り返している予定で出さないのと、同じ理由。
  */
-export function repeatBaseDate(
+export function repeatDescriptionDate(
   input: RepeatInput,
-  original?: { rrule: Rrule | null; occurrenceDate: string },
-): string {
-  const unchanged = original !== undefined && isSameRrule(rruleOf(input), original.rrule);
-  return unchanged && original.rrule !== null ? original.occurrenceDate : input.startDate;
+  original?: { recurring: boolean; rrule: Rrule | null; occurrenceDate: string; startDate: string },
+): string | null {
+  if (original?.recurring !== true) return input.startDate;
+  const unchanged =
+    isSameRrule(rruleOf(input), original.rrule) && input.startDate === original.startDate;
+  return unchanged ? original.occurrenceDate : null;
 }
 
 const WEEKDAY_DAYS_NOTE = '土曜・日曜・祝日・年末年始（12/29〜1/3）';
 
+/** 毎月・毎年の説明の、本文と添え書き。基準の日付（baseDate）が正しくなければ null。 */
+function dateRuleParts(
+  freq: 'monthly' | 'yearly',
+  baseDate: string,
+): { text: string; note: string | null } | null {
+  if (!isValidDate(baseDate)) return null;
+  const { month, day } = dateToYmd(baseDate);
+  if (freq === 'monthly') {
+    // 29〜31 日がない月がある（RP-2）。
+    return {
+      text: `毎月 ${String(day)} 日`,
+      note: day >= 29 ? 'その日がない月は飛ばします' : null,
+    };
+  }
+  return {
+    text: `毎年 ${String(month)} 月 ${String(day)} 日`,
+    // うるう年でない年は、2/29 がないので、飛ばす（設計書 Q9）。
+    note: month === 2 && day === 29 ? 'うるう年だけ' : null,
+  };
+}
+
+function withNotes(text: string, notes: readonly (string | null)[]): string {
+  const shown = notes.filter((note) => note !== null);
+  return shown.length === 0 ? text : `${text}（${shown.join('。')}）`;
+}
+
 /**
- * 繰り返しの説明。毎月・毎年は、基準の日付（baseDate）から作る（設計書 4.4。基準は開始日）。
- * 平日・休日は、判定の決まり（RP-5）を添える。毎日・毎週と、しない、日付が正しくないときは null。
+ * 繰り返しの説明。毎月・毎年は、基準の日付（baseDate。repeatDescriptionDate）から作る。
+ * 平日・休日は、判定の決まり（RP-5）を添える。毎日・毎週と、しない、基準の日付が決まらない・正しくないときは null。
  */
-export function describeRepeat(repeat: RepeatKind, baseDate: string): string | null {
+export function describeRepeat(repeat: RepeatKind, baseDate: string | null): string | null {
   switch (repeat) {
-    case 'monthly': {
-      if (!isValidDate(baseDate)) return null;
-      const { day } = dateToYmd(baseDate);
-      // 29〜31 日がない月がある（RP-2）。
-      return day >= 29
-        ? `毎月 ${String(day)} 日（その日がない月は飛ばします）`
-        : `毎月 ${String(day)} 日`;
-    }
+    case 'monthly':
     case 'yearly': {
-      if (!isValidDate(baseDate)) return null;
-      const { month, day } = dateToYmd(baseDate);
-      const text = `毎年 ${String(month)} 月 ${String(day)} 日`;
-      // うるう年でない年は、2/29 がないので、飛ばす（設計書 Q9）。
-      return month === 2 && day === 29 ? `${text}（うるう年だけ）` : text;
+      const parts = baseDate === null ? null : dateRuleParts(repeat, baseDate);
+      return parts === null ? null : withNotes(parts.text, [parts.note]);
     }
     case 'weekday':
       return `${WEEKDAY_DAYS_NOTE}以外の日です。記念日は休日ではありません`;
@@ -135,6 +160,40 @@ export function describeRepeat(repeat: RepeatKind, baseDate: string): string | n
       return `${WEEKDAY_DAYS_NOTE}の日です。記念日は含みません`;
     default:
       return null;
+  }
+}
+
+/** 年が、基準の日付と違うときだけ、年を付けた日付の表記。 */
+function labelDate(date: string, relativeTo: string): string {
+  return date.slice(0, 4) === relativeTo.slice(0, 4) ? formatMonthDay(date) : formatDayTitle(date);
+}
+
+/**
+ * 範囲を聞く段で、範囲ごとに出す、保存したあとの系列の説明（scope.ts の seriesAfterChange の結果から作る）。
+ * 例: 「毎月 5 日（最初の回は 1月5日（月））」。最初の回は、フォームに出ている開始日（shownStartDate）と違うときだけ付ける。
+ * 日付のずらし方・ルールに合う最初の日への動かし方は、画面で計算せず、結果の系列の行から読む。
+ */
+export function describeSeriesAfter(after: SeriesAfter, shownStartDate: string): string {
+  const { rrule, startDate } = after;
+  if (rrule === null) return '繰り返さない予定になります';
+  const first =
+    startDate === shownStartDate ? null : `最初の回は ${labelDate(startDate, shownStartDate)}`;
+  switch (rrule.freq) {
+    case 'monthly':
+    case 'yearly': {
+      const parts = dateRuleParts(rrule.freq, startDate);
+      return parts === null ? '' : withNotes(parts.text, [parts.note, first]);
+    }
+    case 'weekly': {
+      const days = [...rrule.days].sort((a, b) => a - b).map((day) => WEEKDAY_LABELS[day]);
+      return withNotes(`毎週 ${days.join('・')}`, [first]);
+    }
+    case 'daily':
+      return withNotes('毎日', [first]);
+    case 'weekday':
+      return withNotes('平日', [first]);
+    case 'holiday':
+      return withNotes('休日', [first]);
   }
 }
 
@@ -164,12 +223,10 @@ export function firstOccurrence(input: RepeatInput & { endDate: string }): First
 }
 
 /**
- * 「最初の回は 10月24日（水）になります」。開始日がずれるときだけ。ずれなければ null。
+ * 「最初の回は 10月21日（水）になります」。開始日がずれるときだけ。ずれなければ null。
  * 開始日と年が違う日にずれるときは、年も付ける。
  */
 export function describeFirstOccurrence(first: FirstOccurrence, startDate: string): string | null {
   if (first.kind !== 'found' || first.startDate === startDate) return null;
-  const sameYear = first.startDate.slice(0, 4) === startDate.slice(0, 4);
-  const label = sameYear ? formatMonthDay(first.startDate) : formatDayTitle(first.startDate);
-  return `最初の回は ${label}になります`;
+  return `最初の回は ${labelDate(first.startDate, startDate)}になります`;
 }

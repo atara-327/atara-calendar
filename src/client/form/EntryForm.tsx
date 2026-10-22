@@ -34,9 +34,21 @@ import {
   parseNotifyOffset,
 } from './notify';
 import { RepeatControls } from './RepeatControls';
-import { describeFirstOccurrence, firstOccurrence, repeatBaseDate, seriesRruleOf } from './repeat';
+import {
+  describeFirstOccurrence,
+  describeSeriesAfter,
+  firstOccurrence,
+  repeatDescriptionDate,
+  seriesRruleOf,
+} from './repeat';
 import { moveStart } from './schedule';
-import { decideScope, recheckScope, type ScopeAction, type ScopeDecision } from './scope';
+import {
+  decideScope,
+  recheckScope,
+  seriesAfterChange,
+  type ScopeAction,
+  type ScopeDecision,
+} from './scope';
 import { ScopeStep, type ScopeStepKind } from './ScopeStep';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
@@ -261,6 +273,8 @@ export function EntryForm({ target }: { target: FormTarget }) {
     scopes: readonly Scope[];
     selected: Scope;
     changes: EntryChanges | null;
+    /** 範囲ごとの、保存したあとの系列の説明（ルールか開始日を変えたときだけ。なければ、その範囲のキーがない）。 */
+    outcomes: Partial<Record<Scope, string>>;
   } | null>(null);
   // 範囲を聞く段から戻ったとき、フォーカスを返す先（段を押したボタン）。
   const returnFocus = useRef<ScopeStepKind | null>(null);
@@ -372,6 +386,31 @@ export function EntryForm({ target }: { target: FormTarget }) {
     return getSyncEngine().store.getState().view.entries.values();
   }
 
+  /**
+   * 範囲ごとの、保存したあとの系列の説明。ルールか開始日を変えていないとき（題名だけなど）は、保存したあとの系列が
+   * 変わらないので、出さない（範囲の名前の下の 1 行だけ）。
+   * 範囲によって、基準の日が違い（「すべて」は系列の開始日、「これ以降すべて」は開いた回の日付に、日付の変更を足した日）、
+   * 入力の段では、毎月 N 日などが決まらない。shared の関数を当てた結果から作る（画面にずらしの決まりを書き写さない）。
+   */
+  function outcomesOf(
+    scopes: readonly Scope[],
+    changes: EntryChanges,
+  ): Partial<Record<Scope, string>> {
+    if (target.mode !== 'edit') return {};
+    if (changes.rrule === undefined && changes.startDate === undefined) return {};
+    const outcomes: Partial<Record<Scope, string>> = {};
+    for (const scope of scopes) {
+      const after = seriesAfterChange({
+        rows: viewRows(),
+        occurrence: target.occurrence,
+        changes,
+        scope,
+      });
+      if (after !== null) outcomes[scope] = describeSeriesAfter(after, values.startDate);
+    }
+    return outcomes;
+  }
+
   function changeEntry(scope: Scope, changes: EntryChanges): void {
     if (target.mode !== 'edit') return;
     const { seriesId, occurrenceDate } = target.occurrence;
@@ -409,6 +448,7 @@ export function EntryForm({ target }: { target: FormTarget }) {
             scopes: decision.scopes,
             selected: decision.scopes[0],
             changes,
+            outcomes: outcomesOf(decision.scopes, changes),
           });
           return;
         default:
@@ -450,6 +490,7 @@ export function EntryForm({ target }: { target: FormTarget }) {
             scopes: decision.scopes,
             selected: decision.scopes[0],
             changes: null,
+            outcomes: {},
           });
           return;
         default:
@@ -569,6 +610,7 @@ export function EntryForm({ target }: { target: FormTarget }) {
             action={scopeStep.kind}
             scopes={scopeStep.scopes}
             selected={scopeStep.selected}
+            outcomes={scopeStep.outcomes}
             error={failure}
             onSelect={(selected) => {
               setScopeStep({ ...scopeStep, selected });
@@ -735,9 +777,9 @@ export function EntryForm({ target }: { target: FormTarget }) {
               <RepeatControls
                 id={`${ids}-repeat`}
                 values={values}
-                baseDate={repeatBaseDate(
+                baseDate={repeatDescriptionDate(
                   values,
-                  original && { rrule: originalRrule, occurrenceDate: original.occurrenceDate },
+                  original && { ...original, rrule: originalRrule },
                 )}
                 firstNote={firstNote}
                 describedBy={shown.repeat === undefined ? undefined : `${ids}-repeat-error`}

@@ -30,6 +30,7 @@ export function ScopeStep({
   action,
   scopes,
   selected,
+  outcomes,
   error,
   onSelect,
   onBack,
@@ -38,6 +39,8 @@ export function ScopeStep({
   /** 選べる範囲。この順に出す。 */
   scopes: readonly Scope[];
   selected: Scope;
+  /** 範囲ごとの、保存したあとの系列の説明（ルールか開始日を変えたときだけ。ない範囲は、キーがない）。 */
+  outcomes: Partial<Record<Scope, string>>;
   error: string | null;
   onSelect: (scope: Scope) => void;
   onBack: () => void;
@@ -66,6 +69,9 @@ export function ScopeStep({
             <span className={styles.scopeText}>
               <span className={styles.scopeLabel}>{OPTIONS[scope].label}</span>
               <span className={styles.scopeHint}>{OPTIONS[scope][action]}</span>
+              {outcomes[scope] !== undefined && (
+                <span className={styles.scopeOutcome}>{`保存後: ${outcomes[scope]}`}</span>
+              )}
             </span>
           </label>
         ))}
