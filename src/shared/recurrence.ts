@@ -389,8 +389,11 @@ function sortedDays(days: readonly number[]): number[] {
   return [...days].sort((a, b) => a - b);
 }
 
-/** 曜日の並びによらず、同じ曜日の組なら同じルールとみなす。曜日の重複は、スキーマが弾く前提で、ここでは考えない。 */
-function isSameRrule(a: Rrule | null, b: Rrule | null): boolean {
+/**
+ * 曜日の並びによらず、同じ曜日の組なら同じルールとみなす。曜日の重複は、スキーマが弾く前提で、ここでは考えない。
+ * 「ルールを変えたか」の判定は、変更・削除の処理と、画面のフォーム（changes に入れるか）で同じにするため、公開している。
+ */
+export function isSameRrule(a: Rrule | null, b: Rrule | null): boolean {
   if (a === null || b === null) return a === b;
   if (a.freq === 'weekly' && b.freq === 'weekly') {
     const left = sortedDays(a.days);
