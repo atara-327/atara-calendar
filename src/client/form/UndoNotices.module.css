@@ -1,0 +1,59 @@
+/*
+ * 画面の下の左に出す。右下は、( + ) ボタン。幅の狭い画面では、( + ) ボタンの幅（56px）と余白を空ける。
+ * 領域そのものは、クリックを通す（月表示のマスを隠さないため）。知らせの上だけ、押せる。
+ */
+.container {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .container {
+    right: 88px;
+  }
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 8px 8px 16px;
+  border-radius: 4px;
+  background-color: var(--color-grid);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 50%);
+  color: var(--color-text);
+  font-size: 14px;
+  pointer-events: auto;
+}
+
+.button {
+  flex: none;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-today);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: rgb(255 255 255 / 8%);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
