@@ -322,25 +322,83 @@ describe('変更: 選べる範囲は、変えた内容で絞る（設計書 4.5�
       });
     });
 
-    it('日付を 2200 年へずらす範囲は選べない。系列の開始日が、2199 年に収まる「すべて」は、選べる', () => {
-      // 毎週（2199-12-31 の曜日）。12-31 の回を、1 週間後の 2200-01-07 に動かす。
-      const day = dayOfWeek('2199-12-31');
-      const rows = [weekly([day], { startDate: '2199-12-17' })];
+    // 入力の範囲（1900〜2199 年）に収まる日付への変更で、結果の日付だけが 2200 年にずれる例。
+    // 毎週の曜日を別の曜日に変えて、日付を 2199-12-31 にする。2199-12-31 から、その曜日へずらすと、2200 年になる。
+    function otherDay(date: string): number {
+      return dayOfWeek(date) === 1 ? 2 : 1;
+    }
 
-      // 「この予定のみ」は、例外の行の日付が 2200 年になる。「これ以降すべて」は、新しい系列の開始日が 2200 年になる。
-      // 「すべて」は、系列の開始日を 1 週間後の 2199-12-24 にするだけで、2199 年に収まる。
-      expect(
-        decideChange(rows, '2199-12-31', { startDate: '2200-01-07', endDate: '2200-01-07' }),
-      ).toEqual({ kind: 'choose', scopes: ['all'] });
+    it('ルールを変えて、日付を 2199-12-31 にすると、新しい系列の開始日が 2200 年にずれる「これ以降すべて」は選べない。「すべて」は、選べる', () => {
+      // 毎週（2199-12-24 の曜日）。12-24 の回の日付を、1 週間後の 12-31 にして、曜日も変える。
+      const rows = [weekly([dayOfWeek('2199-12-24')], { startDate: '2199-12-10' })];
+      const changes = {
+        rrule: { freq: 'weekly', days: [otherDay('2199-12-24')] } satisfies Rrule,
+        startDate: '2199-12-31',
+        endDate: '2199-12-31',
+      };
+
+      // 「すべて」は、系列の開始日を、1 週間後の 2199-12-17 にして、曜日に合わせるだけで、2199 年に収まる。
+      expect(decideChange(rows, '2199-12-24', changes)).toEqual({
+        kind: 'choose',
+        scopes: ['all'],
+      });
     });
 
-    it('どの範囲も、日付が 2200 年にずれるなら、選べない（理由は汎用）', () => {
-      const day = dayOfWeek('2199-12-31');
-      const rows = [weekly([day], { startDate: '2199-12-31' })];
+    it('どの範囲も、最初の回が 2200 年にずれるなら、選べない。理由は汎用（ルールと日付の同時の変更ではない）', () => {
+      const rows = [weekly([dayOfWeek('2199-12-24')], { startDate: '2199-12-24' })];
+      const changes = {
+        rrule: { freq: 'weekly', days: [otherDay('2199-12-24')] } satisfies Rrule,
+        startDate: '2199-12-31',
+        endDate: '2199-12-31',
+      };
+
+      expect(decideChange(rows, '2199-12-24', changes)).toEqual({
+        kind: 'unavailable',
+        reason: 'other',
+      });
+    });
+  });
+
+  describe('どの範囲も選べない理由が、ルールと日付の同時の変更でないとき（汎用の文言）', () => {
+    it('日付を変えて、1 回の長さが変わり、時間が合わなくなるときは、日付を外すと通っても、汎用', () => {
+      // 毎日 22:00〜翌 06:00 のタイムブロックの、10/20 の回を、「この予定のみ」で 13:00〜15:00 にした例外の回を開く。
+      // その回で、毎週に変え、日付を 10/21 にする。日付を変えたので、1 回の長さが、その回の長さ（同じ日の 2 時間）になり、
+      // 系列の 22:00〜06:00 に当てると、終了が開始より前になる。日付を外すと通るが、原因は、ルールと日付の同時の変更ではない。
+      const series = daily({
+        id: 's1',
+        kind: 'block',
+        workspaceId: null,
+        title: '睡眠',
+        startTime: '22:00',
+        endTime: '06:00',
+        endDate: addDays(MONDAY, 1),
+        notifyEnabled: false,
+      });
+      const exception = makeEntry({
+        id: 'x1',
+        kind: 'block',
+        workspaceId: null,
+        title: '睡眠',
+        allDay: false,
+        startTime: '13:00',
+        endTime: '15:00',
+        seriesId: 's1',
+        originalDate: '2026-10-20',
+        startDate: '2026-10-20',
+        notifyEnabled: false,
+      });
 
       expect(
-        decideChange(rows, '2199-12-31', { startDate: '2200-01-07', endDate: '2200-01-07' }),
+        decideChange([series, exception], '2026-10-20', {
+          rrule: { freq: 'weekly', days: [3] },
+          startDate: '2026-10-21',
+          endDate: '2026-10-21',
+        }),
       ).toEqual({ kind: 'unavailable', reason: 'other' });
+      // 日付を外せば、通る（原因が、日付の変更にあることの確認）。
+      expect(
+        decideChange([series, exception], '2026-10-20', { rrule: { freq: 'weekly', days: [3] } }),
+      ).toEqual({ kind: 'choose', scopes: ['following', 'all'] });
     });
   });
 });

@@ -18,6 +18,14 @@ import type { Entry, EntryChanges, Scope } from '../../shared/schema';
 //
 // サーバーは、計算した行に、項目をまたぐ確認（entryProblem）も当てて、守られていなければ 400 にする
 // （worker/api/entryRules.ts）。ここでも同じ確認をして、日付が 1900〜2199 年の外にずれる範囲を、選べないものにする。
+//
+// 「サーバーで 4xx にならない」のは、次の前提のもとで成り立つ。
+// - changes が、入力のスキーマ（shared の entryChangesInputSchema）を通っている。ここでは確かめない。
+//   フォームが、保存の前に、validateForm（validate.ts）で確かめている。サーバーが入力の段階で 400 にする
+//   changes（例: 年が範囲の外の日付）は、ここでは範囲の判定に使わない。
+// - rows が最新である。ほかの端末の変更が、まだ受け取りで届いていなければ、判定とサーバーの結果は、食い違いうる
+//   （範囲を選んで送るときに、もう一度確かめる。recheckScope）。
+// 判定と、サーバーの手順の食い違いがないことは、scope.consistency.test.ts が、組み合わせを試して確かめている。
 
 const TRIAL_NEW_ID = 'trial-new-id';
 const TRIAL_EDITED_AT = 0;
@@ -40,7 +48,36 @@ export type ScopeDecision =
   /** 対象の予定・回が、もうない（開いている間に、ほかの端末で変更・削除された）。保存しない。 */
   | { kind: 'gone' };
 
-type Trial = 'accepted' | 'rejected' | 'gone';
+/**
+ * 範囲 1 つを、手元の行に当てた結果。拒まれた理由を分けるのは、どの範囲も選べないとき、ルールと日付を
+ * 同時に変えたためか（InvalidChangeError）、そうでないか（長さが合わない・年の範囲を出る）を見分けるため。
+ */
+type Trial = 'accepted' | 'gone' | 'invalidChange' | 'otherRejection';
+
+/** 範囲 1 つを当てて、書く行を返す。shared の例外（対象がない・受け付けられない・日付の計算が範囲を出る）は、そのまま投げる。 */
+function apply(
+  seriesRows: readonly Entry[],
+  target: { seriesId: string; occurrenceDate: string },
+  scope: Scope,
+  action: ScopeAction,
+): Entry[] {
+  return action.kind === 'change'
+    ? changeEntry({
+        entries: seriesRows,
+        target,
+        scope,
+        changes: action.changes,
+        newId: TRIAL_NEW_ID,
+        editedAt: TRIAL_EDITED_AT,
+      })
+    : deleteEntry({
+        entries: seriesRows,
+        target,
+        scope,
+        newId: TRIAL_NEW_ID,
+        editedAt: TRIAL_EDITED_AT,
+      });
+}
 
 function trial(
   seriesRows: readonly Entry[],
@@ -49,30 +86,15 @@ function trial(
   action: ScopeAction,
 ): Trial {
   try {
-    const written =
-      action.kind === 'change'
-        ? changeEntry({
-            entries: seriesRows,
-            target,
-            scope,
-            changes: action.changes,
-            newId: TRIAL_NEW_ID,
-            editedAt: TRIAL_EDITED_AT,
-          })
-        : deleteEntry({
-            entries: seriesRows,
-            target,
-            scope,
-            newId: TRIAL_NEW_ID,
-            editedAt: TRIAL_EDITED_AT,
-          });
+    const written = apply(seriesRows, target, scope, action);
     // 削除する行は、確かめない（worker/api/entryRules.ts と同じ。確かめると、決まりが厳しくなる前の行を削除できない）。
     const ok = written.every((row) => row.deletedAt !== null || entryProblem(row) === null);
-    return ok ? 'accepted' : 'rejected';
+    return ok ? 'accepted' : 'otherRejection';
   } catch (error) {
     if (error instanceof OccurrenceNotFoundError) return 'gone';
+    if (error instanceof InvalidChangeError) return 'invalidChange';
     // 日付の計算が、対応する年（1900〜2199 年）を出る。サーバーは、同じ RangeError を 400 にする（設計書 5.1）。
-    if (error instanceof InvalidChangeError || error instanceof RangeError) return 'rejected';
+    if (error instanceof RangeError) return 'otherRejection';
     throw error;
   }
 }
@@ -122,13 +144,19 @@ export function decideScope({
     .map(({ scope }) => scope);
   if (first !== undefined) return { kind: 'choose', scopes: [first, ...rest] };
 
-  // どの範囲も選べないのが、ルールと日付を同時に変えたためか。ルールも日付も変えていて、日付の変更を外すと、
-  // 選べる範囲があれば、そうである。理由を、ルールの種類（毎日・平日・休日）から決めないのは、画面に決まりを
-  // 書き写さないため。
+  // どの範囲も選べないのが、ルールと日付を同時に変えたためか。次の 3 つが、すべて当てはまるときだけ、そうとする。
+  // - ルールも日付も変えている。
+  // - 「この予定のみ」以外の範囲（これ以降すべて・すべて）が、どちらも InvalidChangeError で拒まれた
+  //   （「この予定のみ」は、ルールを変えると、いつも拒まれるので、見ない）。
+  // - 日付の変更を外すと、選べる範囲がある。
+  // 日付を外すと通るだけでは、足りない。日付を変えて、1 回の長さが変わり、項目をまたぐ確認に当たる場合なども、
+  // 日付を外すと通るので、別の理由（汎用の文言）を、ルールと日付の同時の変更のせいにしてしまう。
+  // 理由を、ルールの種類（毎日・平日・休日）から決めないのは、画面に決まりを書き写さないため。
   if (
     action.kind === 'change' &&
     action.changes.rrule !== undefined &&
-    action.changes.startDate !== undefined
+    action.changes.startDate !== undefined &&
+    results.every(({ scope, result }) => scope === 'this' || result === 'invalidChange')
   ) {
     const probe: ScopeAction = { kind: 'change', changes: withoutDates(action.changes) };
     if (SCOPE_ORDER.some((scope) => trial(seriesRows, target, scope, probe) === 'accepted')) {
