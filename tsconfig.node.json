@@ -10,6 +10,7 @@
     "checkJs": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -19,6 +20,7 @@
   "include": [
     "vite.config.ts",
     "vitest.config.ts",
+    "vite-plugins/**/*.ts",
     "eslint.config.js",
     "scripts/**/*.mjs",
     "src/shared/astronomia.d.ts"
