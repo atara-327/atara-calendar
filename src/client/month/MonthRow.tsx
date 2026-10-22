@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
 import { formatMonthDay } from '../dateFormat';
+import { EmojiText } from '../emoji/EmojiText';
 import { Link } from '../Link';
 import { dayPath } from '../route';
 import { cellBoundary } from './boundaries';
@@ -96,7 +97,7 @@ function BarChip({ item }: { item: BarItem }) {
         color: readableTextColor(event.color),
       }}
     >
-      {event.title}
+      <EmojiText text={event.title} />
     </div>
   );
 }
@@ -107,7 +108,9 @@ function TimedChip({ item }: { item: TimedItem }) {
     <div className={styles.timed} style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}>
       <span className={styles.dot} style={{ backgroundColor: event.color }} />
       {event.startTime !== null && <span className={styles.time}>{event.startTime}</span>}
-      <span className={styles.timedText}>{event.title}</span>
+      <span className={styles.timedText}>
+        <EmojiText text={event.title} />
+      </span>
     </div>
   );
 }
