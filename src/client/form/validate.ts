@@ -57,7 +57,7 @@ function tooLong(name: string, limit: number): string {
  * 元の終日の分と同じ数を打っても、範囲の確認を通さない。
  * 繰り返さない予定を、繰り返す予定にする（または新しく繰り返す予定を作る）ときは、開始日がルールに合う最初の日へ
  * ずれた後の日付が、対応する年の範囲に入っていることも確かめる（サーバーが、ずらした後の行を 400 にするため）。
- * すでに繰り返している予定（original.recurring）の範囲ごとの確認は、範囲を選ぶ前に、shared の関数を当てて行う。
+ * すでに繰り返している予定（original.recurring）の範囲ごとの確認は、範囲を選ぶ前に、shared の関数を当てて行う（scope.ts）。
  */
 export function validateForm(
   values: FormValues,
