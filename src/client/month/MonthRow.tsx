@@ -1,13 +1,13 @@
 import { memo } from 'react';
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
+import { readableTextColor } from '../color';
 import { formatMonthDay } from '../dateFormat';
 import { EmojiText } from '../emoji/EmojiText';
 import { openEditForm } from '../form/instance';
 import { Link } from '../Link';
 import { dayPath } from '../route';
 import { cellBoundary } from './boundaries';
-import { readableTextColor } from './color';
 import { eventAccessibleName } from './eventLabel';
 import { dayLabelParts } from './labels';
 import type { BarItem, MoreItem, TimedItem } from './layout';
