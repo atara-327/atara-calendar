@@ -35,9 +35,17 @@ const keySchema = z
 const packageSchema = z.object({ version: z.string().min(1) });
 // key → 画像の名前。
 const charsSchema = z.record(keySchema, z.string());
+// アイコンの一覧の一番上には、全アイコンに効く既定値（left・top・rotate・hFlip・vFlip）を置ける。
+// z.object は、知らないキーを黙って捨てるので、これらが来たら失敗させる（画像ごとの確認は、readSvgs にある）。
+const noDefault = z.never().optional();
 const iconSetSchema = z.object({
   width: z.literal(128),
   height: z.literal(128),
+  left: noDefault,
+  top: noDefault,
+  rotate: noDefault,
+  hFlip: noDefault,
+  vFlip: noDefault,
   icons: z.record(z.string(), z.looseObject({ body: z.string() })),
 });
 
