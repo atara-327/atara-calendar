@@ -8,6 +8,7 @@ import { Link } from '../Link';
 import { dayPath } from '../route';
 import { cellBoundary } from './boundaries';
 import { readableTextColor } from './color';
+import { eventAccessibleName } from './eventLabel';
 import { dayLabelParts } from './labels';
 import type { BarItem, MoreItem, TimedItem } from './layout';
 import styles from './MonthRow.module.css';
@@ -91,6 +92,7 @@ function BarChip({ item }: { item: BarItem }) {
   return (
     <button
       type="button"
+      aria-label={eventAccessibleName(event)}
       className={classNames(
         styles.bar,
         item.continuesBefore && styles.continuesBefore,
@@ -118,6 +120,7 @@ function TimedChip({ item }: { item: TimedItem }) {
   return (
     <button
       type="button"
+      aria-label={eventAccessibleName(event)}
       className={styles.timed}
       style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}
       onClick={() => {
