@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
-import { MONTH_PATH, parseRoute, type Route } from './route';
+import type { DateStr } from '../shared/date';
+import { MONTH_PATH, dayPath, parseRoute, type Route } from './route';
 
 // 画面の切り替え（URL）は、History API（pushState・popstate）で手書きする。
 // ルーターのライブラリを使わないのは、画面が月表示と日表示の 2 つだけで、依存とバンドルを増やすほどの
@@ -46,8 +47,24 @@ function replacePath(path: string): void {
 }
 
 /**
+ * 日表示で、別の日へ移る（‹ ›・スワイプ・［今日］）。履歴を積まずに、今の履歴を置き換える。今の日と同じなら、何もしない。
+ * 日ごとに積む（navigate）と、日表示を何日か動いたあと、［月表示］（goToMonth）もスマホの「戻る」も、
+ * 月表示ではなく、前の日に戻ってしまう。置き換えれば、月表示から日表示へ移ったときに積んだ履歴の 1 つのまま、
+ * 何日動いても、「戻る」が月表示に戻る。置き換えても履歴の印（history.state）は保つので、goToMonth は、
+ * 動いたあとも、この画面で積んだ履歴だと分かる。
+ * Why not 日ごとに積んで、戻るたびに前の日を見られるようにする: 日表示は、日をめくって見るもので、
+ * 「戻る」は、月表示へ戻るために使いたいため（日の移動は、‹ › で戻れる）。
+ */
+export function replaceDay(date: DateStr): void {
+  const path = dayPath(date);
+  if (path === window.location.pathname) return;
+  replacePath(path);
+}
+
+/**
  * 月表示へ戻る。この画面から移ってきたのなら「戻る」と同じ（履歴が増えず、スマホの「戻る」と食い違わない）。
  * アドレスを直接開いたときは、戻る先が画面の外なので、月表示へ移る。
+ * 日表示の中で日を動いても（replaceDay）、積んだ履歴は 1 つのままなので、動いた日数によらず月表示へ戻る。
  */
 export function goToMonth(): void {
   if (isInAppState(window.history.state)) window.history.back();
