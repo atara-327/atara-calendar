@@ -7,7 +7,6 @@ import {
   toggleRepeatDay,
   weeklyDays,
   type RepeatFields,
-  type RepeatKind,
 } from './repeat';
 
 // 繰り返しの欄の中身（設計書 11.4。要件 RP-1・RP-3・RP-6）。選択欄と、毎週の曜日のトグル（日〜土）と、説明。
@@ -49,7 +48,8 @@ export function RepeatControls({
         value={values.repeat}
         onChange={(event) => {
           // 曜日は、選んだままにする。別の種類を試して、毎週に戻したとき、選んだ曜日が消えないように。
-          onChange({ repeat: event.target.value as RepeatKind, repeatDays: values.repeatDays });
+          const next = REPEAT_OPTIONS.find(({ kind }) => kind === event.target.value);
+          if (next !== undefined) onChange({ repeat: next.kind, repeatDays: values.repeatDays });
         }}
         aria-invalid={invalid}
         aria-describedby={
@@ -72,6 +72,8 @@ export function RepeatControls({
               <input
                 type="checkbox"
                 name={`repeatDay${String(day)}`}
+                // 見える文字は 1 文字（日・月）。読み上げでは、曜日だと分かる名前にする。
+                aria-label={`${label}曜日`}
                 checked={days.includes(day)}
                 onChange={() => {
                   onChange(toggleRepeatDay(values, day));
