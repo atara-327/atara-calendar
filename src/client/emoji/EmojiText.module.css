@@ -1,9 +1,12 @@
 /*
  * 絵文字の画像を、文字の大きさ（em）に合わせる。width を auto にしないのは、読み込む前は幅が 0 になり、
  * 読み込めたとたんに、後ろの文字がずれるため（Noto の絵文字は、すべて正方形）。
+ * -webkit-touch-callout: none は、iPhone で画像を長押ししたときの、保存・コピーのメニューを出さない。
+ * 予定を押せるようにしたとき（#8）、長押しで画像のメニューが出ると、予定の操作の邪魔になるため。
  */
 .emoji {
   width: 1.2em;
   height: 1.2em;
   vertical-align: -0.2em;
+  -webkit-touch-callout: none;
 }
