@@ -81,9 +81,11 @@ function readSvgs(): Map<string, string> {
 }
 
 /**
- * Apache-2.0 は、配布物にライセンス全文を含めることが条件。パッケージにライセンスのファイルがないので、
- * 公式の全文（https://www.apache.org/licenses/LICENSE-2.0.txt）をリポジトリの third_party/ に置き、
- * 出どころを書いた見出しを付けて、画像と同じ場所に出す。
+ * Apache-2.0 は、配布物にライセンス全文を含めること（4(a)）と、変更したファイルに、変更した旨を示すこと（4(b)）が条件。
+ * パッケージにライセンスのファイルがないので、公式の全文（https://www.apache.org/licenses/LICENSE-2.0.txt）を
+ * リポジトリの third_party/ に置く。出どころ・元の著作権表示・変更した旨の見出しを付けて、画像と同じ場所に出す。
+ * 見出しの著作権表示は、noto-emoji の 2D/svg/LICENSE のとおり。直下の LICENSE は、フォント用の SIL OFL で、
+ * この画像には当たらない。
  */
 function readLicense(version: string): string {
   const text = readFileSync(
@@ -91,8 +93,13 @@ function readLicense(version: string): string {
     'utf8',
   );
   return [
-    'Noto Emoji images (Google LLC, https://github.com/googlefonts/noto-emoji)',
-    `Distributed as @iconify-json/noto ${version} (https://github.com/iconify/icon-sets).`,
+    'Noto Emoji images',
+    'Copyright 2013 Google, Inc. All Rights Reserved.',
+    'Source: https://github.com/googlefonts/noto-emoji/blob/main/2D/svg/LICENSE',
+    '',
+    'These files are not the originals. They were generated at build time from the Iconify JSON',
+    `(@iconify-json/noto ${version}, https://github.com/iconify/icon-sets) by wrapping each icon in an <svg> element.`,
+    '',
     'Licensed under the Apache License, Version 2.0. The full text follows.',
     '',
     text,
