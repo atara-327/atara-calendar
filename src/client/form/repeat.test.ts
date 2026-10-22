@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { makeEntry } from '../../../test/helpers/entries';
 import type { Rrule } from '../../shared/schema';
 import {
   REPEAT_OPTIONS,
@@ -8,6 +9,7 @@ import {
   hasNoWeeklyDays,
   repeatFieldsOf,
   rruleOf,
+  seriesRruleOf,
   toggleRepeatDay,
   weeklyDays,
   type RepeatFields,
@@ -104,6 +106,30 @@ describe('開いた予定の rrule から、欄の値を作る', () => {
     { freq: 'holiday' },
   ])('rrule（$freq）を欄の値にして、また rrule にすると、元に戻る', (rrule) => {
     expect(rruleOf({ ...repeatFieldsOf(rrule), startDate: MONDAY })).toEqual(rrule);
+  });
+});
+
+describe('開いた回の、系列のルール', () => {
+  const series = makeEntry({ id: 's1', rrule: { freq: 'weekly', days: [1] } });
+  const exception = makeEntry({ id: 'x1', seriesId: 's1', originalDate: '2026-10-19' });
+  const single = makeEntry({ id: 'e1' });
+  const entries = new Map([series, exception, single].map((row) => [row.id, row]));
+
+  it('系列の回は、系列の行のルール', () => {
+    expect(seriesRruleOf(entries, 's1')).toEqual({ freq: 'weekly', days: [1] });
+  });
+
+  it('例外の回は、seriesId で系列の行を引くので、系列のルール（例外の行はルールを持たない）', () => {
+    expect(exception.rrule).toBeNull();
+    expect(seriesRruleOf(entries, exception.seriesId ?? '')).toEqual({ freq: 'weekly', days: [1] });
+  });
+
+  it('繰り返さない予定は、null', () => {
+    expect(seriesRruleOf(entries, 'e1')).toBeNull();
+  });
+
+  it('行が見つからなければ、null（ほかの端末で消された）', () => {
+    expect(seriesRruleOf(entries, 'gone')).toBeNull();
   });
 });
 

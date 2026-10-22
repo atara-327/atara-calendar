@@ -1,6 +1,6 @@
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { normalizeStart } from '../../shared/recurrence';
-import { inputDateSchema, type Rrule } from '../../shared/schema';
+import { inputDateSchema, type Entry, type Rrule } from '../../shared/schema';
 import { formatDayTitle, formatMonthDay } from '../dateFormat';
 
 // フォームの「繰り返し」の欄（設計書 11.4。要件 RP-1・RP-3・RP-5・RP-6）。画面に依存しない。
@@ -70,6 +70,15 @@ export function repeatFieldsOf(rrule: Rrule | null): RepeatFields {
   if (rrule === null) return NO_REPEAT;
   if (rrule.freq === 'weekly') return { repeat: 'weekly', repeatDays: sorted(rrule.days) };
   return { repeat: rrule.freq, repeatDays: null };
+}
+
+/**
+ * 開いた回の、系列の rrule。回（Occurrence）はルールを持たないので、行から seriesId で系列の行を引く。
+ * 例外の回も、系列のルールを返す（例外の行はルールを持たない）。繰り返さない予定は、自分の行のルール（null）。
+ * 行が見つからなければ null（開いている間に、ほかの端末で消された。範囲を決めるとき、scope.ts が見つける）。
+ */
+export function seriesRruleOf(entries: ReadonlyMap<string, Entry>, seriesId: string): Rrule | null {
+  return entries.get(seriesId)?.rrule ?? null;
 }
 
 /** 曜日のトグルを 1 つ切り替える。選んでいなかった状態（null）からは、開始日の曜日を起点にする。 */

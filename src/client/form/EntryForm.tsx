@@ -7,7 +7,7 @@ import {
   type SubmitEvent,
   type ReactNode,
 } from 'react';
-import { INPUT_LIMITS, type Workspace } from '../../shared/schema';
+import { INPUT_LIMITS, type Rrule, type Workspace } from '../../shared/schema';
 import { MAX_YEAR, MIN_YEAR } from '../../shared/solarTerms';
 import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from '../sync/instance';
@@ -26,6 +26,7 @@ import {
   describeAllDayNotify,
   parseNotifyOffset,
 } from './notify';
+import { seriesRruleOf } from './repeat';
 import { moveStart } from './schedule';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
@@ -60,8 +61,12 @@ function selectViewWorkspaces(state: SyncState): SyncState['view']['workspaces']
   return state.view.workspaces;
 }
 
-function initialValues(target: FormTarget, choices: readonly Workspace[]): FormValues {
-  if (target.mode === 'edit') return editValues(target.occurrence, target.openedAt);
+function initialValues(
+  target: FormTarget,
+  choices: readonly Workspace[],
+  originalRrule: Rrule | null,
+): FormValues {
+  if (target.mode === 'edit') return editValues(target.occurrence, target.openedAt, originalRrule);
   return createValues({
     kind: target.kind,
     nowMs: target.openedAt,
@@ -227,7 +232,13 @@ export function EntryForm({ target }: { target: FormTarget }) {
   const workspaces = useSyncState(selectViewWorkspaces);
   const choices = useMemo(() => selectableWorkspaces(workspaces.values()), [workspaces]);
 
-  const [values, setValues] = useState(() => initialValues(target, choices));
+  // 開いた回の、系列のルール。開いたときの値で固定する（開いた回 target.occurrence と同じ。changes に入れるかの比べる先）。
+  const [originalRrule] = useState(() =>
+    target.mode === 'edit'
+      ? seriesRruleOf(getSyncEngine().store.getState().view.entries, target.occurrence.seriesId)
+      : null,
+  );
+  const [values, setValues] = useState(() => initialValues(target, choices, originalRrule));
   // 保存を押したあとに、確認の誤りを、すべて出す。押す前は、開始・終了と、通知の分の誤り（入力の途中で、すぐ分かる）だけ出す。
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -281,7 +292,7 @@ export function EntryForm({ target }: { target: FormTarget }) {
           saveLastWorkspaceId(draft.workspaceId);
         }
       } else {
-        const changes = toChanges(values, target.occurrence);
+        const changes = toChanges(values, target.occurrence, originalRrule);
         // 何も変えていないなら、何も送らない。送ると、行の編集時刻と rev だけが進み、他の端末が受け取り直す。
         if (Object.keys(changes).length > 0) {
           const accepted = engine.changeEntry(

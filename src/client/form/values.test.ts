@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { makeOccurrence } from '../../../test/helpers/entries';
+import { makeEntry, makeOccurrence } from '../../../test/helpers/entries';
+import { expandOccurrences } from '../../shared/recurrence';
+import { seriesRruleOf } from './repeat';
 import { createValues, defaultNotify, editValues, setAllDay, setKind } from './values';
 
 // 日本時間 2026-10-22（木）の 14:20（UTC 05:20）。
@@ -30,6 +32,8 @@ describe('新しく作るときの初期値', () => {
       endDate: '2026-10-22',
       endTime: '16:00',
       workspaceId: 'w1',
+      repeat: 'none',
+      repeatDays: null,
       notifyEnabled: true,
       notifyOffsetText: '10',
       location: '',
@@ -65,7 +69,7 @@ describe('開いた回の入力値', () => {
       notifyOffsetMin: 30,
     });
 
-    expect(editValues(occurrence, AT_1420)).toEqual({
+    expect(editValues(occurrence, AT_1420, null)).toEqual({
       kind: 'event',
       title: '歯医者',
       allDay: false,
@@ -74,6 +78,8 @@ describe('開いた回の入力値', () => {
       endDate: '2026-10-19',
       endTime: '16:00',
       workspaceId: 'w1',
+      repeat: 'none',
+      repeatDays: null,
       notifyEnabled: true,
       notifyOffsetText: '30',
       location: '',
@@ -89,7 +95,7 @@ describe('開いた回の入力値', () => {
       memo: '保険証',
     });
 
-    expect(editValues(occurrence, AT_1420)).toMatchObject({
+    expect(editValues(occurrence, AT_1420, null)).toMatchObject({
       location: '渋谷',
       url: 'https://example.com',
       memo: '保険証',
@@ -97,7 +103,7 @@ describe('開いた回の入力値', () => {
   });
 
   it('終日の予定の時刻の欄は、時間指定に切り替えたときの値として、今日の次の正時から 1 時間を入れる', () => {
-    const values = editValues(makeOccurrence({ allDay: true }), AT_1420);
+    const values = editValues(makeOccurrence({ allDay: true }), AT_1420, null);
 
     expect(values).toMatchObject({ allDay: true, startTime: '15:00', endTime: '16:00' });
   });
@@ -105,7 +111,7 @@ describe('開いた回の入力値', () => {
   it('API から入れた、当日の朝 6 時でない終日の予定は、その値のまま開く（黙って書き換えない）', () => {
     const occurrence = makeOccurrence({ allDay: true, notifyOffsetMin: -480 });
 
-    expect(editValues(occurrence, AT_1420)).toMatchObject({
+    expect(editValues(occurrence, AT_1420, null)).toMatchObject({
       allDay: true,
       notifyOffsetText: '-480',
     });
@@ -121,11 +127,55 @@ describe('開いた回の入力値', () => {
       notifyEnabled: false,
     });
 
-    expect(editValues(occurrence, AT_1420)).toMatchObject({
+    expect(editValues(occurrence, AT_1420, null)).toMatchObject({
       kind: 'block',
       workspaceId: null,
       notifyEnabled: false,
     });
+  });
+});
+
+describe('開いた回の、繰り返しの欄（設計書 11.4）', () => {
+  it('系列のルールが入る。毎週は、曜日が昇順で入る', () => {
+    const occurrence = makeOccurrence({
+      rrule: { freq: 'weekly', days: [5, 3] },
+      startDate: '2026-10-21',
+    });
+
+    expect(editValues(occurrence, AT_1420, { freq: 'weekly', days: [5, 3] })).toMatchObject({
+      repeat: 'weekly',
+      repeatDays: [3, 5],
+    });
+    expect(editValues(occurrence, AT_1420, { freq: 'monthly' })).toMatchObject({
+      repeat: 'monthly',
+    });
+  });
+
+  it('繰り返さない予定は、「しない」', () => {
+    expect(editValues(makeOccurrence(), AT_1420, null)).toMatchObject({
+      repeat: 'none',
+      repeatDays: null,
+    });
+  });
+
+  it('例外の回（別の日に移した回）も、系列のルールが入る（例外の行はルールを持たない）', () => {
+    const series = makeEntry({ id: 's1', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+    const exception = makeEntry({
+      id: 'x1',
+      seriesId: 's1',
+      originalDate: '2026-10-21',
+      startDate: '2026-10-23',
+      title: '移した回',
+    });
+    const [occurrence] = expandOccurrences([series, exception], '2026-10-23', '2026-10-23').filter(
+      ({ isException }) => isException,
+    );
+    if (occurrence === undefined) throw new Error('回がありません');
+    const entries = new Map([series, exception].map((row) => [row.id, row]));
+
+    const values = editValues(occurrence, AT_1420, seriesRruleOf(entries, occurrence.seriesId));
+
+    expect(values).toMatchObject({ title: '移した回', startDate: '2026-10-23', repeat: 'daily' });
   });
 });
 
