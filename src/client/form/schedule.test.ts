@@ -169,6 +169,99 @@ describe('開始を変えたら、長さを保ったまま終了も動く', () =
   });
 });
 
+describe('開始の日付を、キーボードで打つ途中', () => {
+  // Chrome の日付入力は、年を打つあいだ、`0002-10-25`→`0020-10-25`→`0202-10-25`→`2027-10-25` と変わる。
+  // 途中の値は、範囲（1900〜2199 年）の外で、正しくない。
+  const typing = (schedule: Schedule, dates: string[]): Schedule =>
+    dates.reduce((current, startDate) => moveStart(current, { startDate }), schedule);
+
+  it('年を打つ途中の、正しくない開始のあいだ、終了は動かないが、打ち終わると、長さを保って動く', () => {
+    const typed = typing(timed(), ['0002-10-25', '0020-10-25', '0202-10-25']);
+    expect(typed).toMatchObject({ endDate: '2026-10-22', endTime: '16:00' });
+
+    expect(moveStart(typed, { startDate: '2027-10-25' })).toMatchObject({
+      startDate: '2027-10-25',
+      endDate: '2027-10-25',
+      endTime: '16:00',
+    });
+  });
+
+  it('打ち終わったあとの終了は、途中を挟まずに、一度に変えたときと同じ', () => {
+    const viaTyping = typing(timed(), ['0002-10-25', '0020-10-25', '0202-10-25', '2027-10-25']);
+
+    expect(viaTyping).toMatchObject(moveStart(timed(), { startDate: '2027-10-25' }));
+  });
+
+  it('途中で、日付が空になっても（月や日の欄を消したとき）、打ち終わると、終了が動く', () => {
+    const typed = typing(timed(), ['', '2026-10-25']);
+
+    expect(typed).toMatchObject({ startDate: '2026-10-25', endDate: '2026-10-25' });
+  });
+
+  it('複数日の長さも、打ち終わったとき、保って動く', () => {
+    const schedule = timed({ startDate: '2026-10-20', endDate: '2026-10-22' });
+
+    expect(typing(schedule, ['0002-10-25', '2027-10-25'])).toMatchObject({
+      startDate: '2027-10-25',
+      endDate: '2027-10-27',
+    });
+  });
+
+  it('終日も、打ち終わったとき、日数を保って動く', () => {
+    const schedule = allDay({ startDate: '2026-10-20', endDate: '2026-10-22' });
+
+    expect(typing(schedule, ['0002-10-25', '2027-10-25'])).toMatchObject({
+      startDate: '2027-10-25',
+      endDate: '2027-10-27',
+    });
+  });
+
+  it('正しくないあいだに、開始の時刻を変えても、打ち終わったとき、その時刻の分も含めて動く', () => {
+    const typed = moveStart(moveStart(timed(), { startDate: '0002-10-25' }), {
+      startTime: '17:00',
+    });
+
+    expect(moveStart(typed, { startDate: '2026-10-25' })).toMatchObject({
+      startDate: '2026-10-25',
+      startTime: '17:00',
+      endDate: '2026-10-25',
+      endTime: '18:00',
+    });
+  });
+
+  it('正しくないあいだに、終了を利用者が直していたら、その直しを尊重して、終了を動かさない', () => {
+    const typed = moveStart(timed(), { startDate: '0002-10-25' });
+    const edited = { ...typed, endDate: '2026-10-30' };
+
+    expect(moveStart(edited, { startDate: '2026-10-25' })).toMatchObject({
+      startDate: '2026-10-25',
+      endDate: '2026-10-30',
+    });
+  });
+
+  it('打ち終わったあとの、次の変更は、新しい開始と終了から動かす（古い覚えを使わない）', () => {
+    const typed = typing(timed(), ['0002-10-25', '2026-10-25']);
+
+    expect(moveStart(typed, { startDate: '2026-10-26' })).toMatchObject({
+      startDate: '2026-10-26',
+      endDate: '2026-10-26',
+    });
+  });
+
+  it('正しくないあいだに、終日と時間指定を切り替えたら、覚えを捨てる（分の数え方が違うため）', () => {
+    const typed = moveStart(timed(), { startDate: '0002-10-25' });
+
+    expect(toAllDay(typed).anchor).toBeUndefined();
+    expect(toTimed({ ...typed, allDay: true }).anchor).toBeUndefined();
+  });
+
+  it('もとから正しくない開始（覚えがない）は、これまでどおり、終了を動かさない', () => {
+    expect(moveStart(timed({ startDate: '' }), { startDate: '2026-10-25' })).toMatchObject({
+      endDate: '2026-10-22',
+    });
+  });
+});
+
 describe('終日の切り替え', () => {
   it('時間指定から終日にしても、日付はそのまま（1 日だけなら 1 日のまま）', () => {
     expect(toAllDay(timed())).toMatchObject({

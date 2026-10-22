@@ -21,6 +21,17 @@ export interface Schedule {
   startTime: string;
   endDate: string;
   endTime: string;
+  /**
+   * 開始が、入力の途中で正しくなくなる直前の、開始と終了（moveStart が使う）。開始が正しいあいだは、持たない。
+   * 持つのは、開始が正しくなったとき、終了を、直前に正しかった開始からの差で動かすため。
+   */
+  anchor?: ScheduleAnchor;
+}
+
+/** 「1970-01-01 の 0:00 から何分目か」で表した、開始と終了。 */
+export interface ScheduleAnchor {
+  start: number;
+  end: number;
 }
 
 export interface ScheduleErrors {
@@ -78,23 +89,38 @@ export function defaultSchedule(nowMs: number): Schedule {
 
 /**
  * 開始（日付か時刻）を変える。終了も、開始が動いた分だけ動かして、長さを保つ（設計書 11.4）。
- * 終了が開始より前になっている（エラーの）ときも、同じ分だけ動かす。開始か終了の日付が正しくない
- * （入力の途中など）ときは、動かす分が決まらないので、終了は変えない。
- * 終日は、日数だけを動かす。
+ * 終了が開始より前になっている（エラーの）ときも、同じ分だけ動かす。終日は、日数だけを動かす。
+ *
+ * 開始の日付を、キーボードで打つと、途中の値が正しくない（Chrome は、年を打つあいだ、
+ * `0002-10-25`→`0020-…`→`0202-…`→`2027-10-25` と変わる。範囲の外や、空になる）。正しくない開始のあいだは、
+ * 終了を動かさず、直前に正しかった開始と終了（anchor）を覚えておく。開始が再び正しくなったら、
+ * その開始からの差で、終了を動かす。覚えておかないと、打ち終わったとき、終了が元の日のままで、
+ * 「終了は開始より後に」の誤りが出る。
+ * 正しくなかったあいだに、終了を、利用者が直していたら（終了が、覚えた終了と違う）、その直しを尊重して、動かさない。
  */
 export function moveStart<T extends Schedule>(
   schedule: T,
   patch: Partial<Pick<Schedule, 'startDate' | 'startTime'>>,
 ): T {
   const next = { ...schedule, ...patch };
-  const before = absoluteMinutes(schedule.startDate, schedule.startTime, schedule.allDay);
+  const currentStart = absoluteMinutes(schedule.startDate, schedule.startTime, schedule.allDay);
+  const currentEnd = absoluteMinutes(schedule.endDate, schedule.endTime, schedule.allDay);
+
+  let base: ScheduleAnchor | null = null;
+  if (currentStart !== null && currentEnd !== null) {
+    base = { start: currentStart, end: currentEnd };
+  } else if (schedule.anchor !== undefined && currentEnd === schedule.anchor.end) {
+    base = schedule.anchor;
+  }
+  if (base === null) return { ...next, anchor: undefined };
+
   const after = absoluteMinutes(next.startDate, next.startTime, next.allDay);
-  const end = absoluteMinutes(schedule.endDate, schedule.endTime, schedule.allDay);
-  if (before === null || after === null || end === null) return next;
-  const moved = fromAbsoluteMinutes(end + after - before);
+  if (after === null) return { ...next, anchor: base };
+
+  const moved = fromAbsoluteMinutes(base.end + after - base.start);
   return schedule.allDay
-    ? { ...next, endDate: moved.date }
-    : { ...next, endDate: moved.date, endTime: moved.time };
+    ? { ...next, endDate: moved.date, anchor: undefined }
+    : { ...next, endDate: moved.date, endTime: moved.time, anchor: undefined };
 }
 
 /**
@@ -102,12 +128,14 @@ export function moveStart<T extends Schedule>(
  * 終了が翌日の 0:00（23:00〜翌 0:00 など）のままだと、終日の終了日は「その日を含む」ので、2 日間になってしまう。
  */
 export function toAllDay<T extends Schedule>(schedule: T): T {
+  // anchor は、終日と時間指定で、分の数え方が違う（moveStart）ので、切り替えたら捨てる。
   if (dayOf(schedule.startDate) === null || dayOf(schedule.endDate) === null) {
-    return { ...schedule, allDay: true };
+    return { ...schedule, allDay: true, anchor: undefined };
   }
   return {
     ...schedule,
     allDay: true,
+    anchor: undefined,
     endDate: lastCoveredDate({
       allDay: false,
       startDate: schedule.startDate,
@@ -122,7 +150,7 @@ export function toAllDay<T extends Schedule>(schedule: T): T {
  * （終日のとき、時刻の欄は見えないので、終了が開始より前のまま、エラーで出さないため）。
  */
 export function toTimed<T extends Schedule>(schedule: T): T {
-  const timed = { ...schedule, allDay: false };
+  const timed = { ...schedule, allDay: false, anchor: undefined };
   const start = absoluteMinutes(timed.startDate, timed.startTime, false);
   const end = absoluteMinutes(timed.endDate, timed.endTime, false);
   if (start === null || end === null || end > start) return timed;
