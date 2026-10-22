@@ -4,8 +4,8 @@ import { createDevice, type Device } from '../../../test/helpers/device';
 import { readAllRows } from '../../../test/helpers/rows';
 import { addDays } from '../../shared/date';
 import { occurrencesInPeriod } from '../../shared/period';
-import { createEntry, type Occurrence } from '../../shared/recurrence';
-import type { Scope } from '../../shared/schema';
+import { changeEntry, createEntry, type Occurrence } from '../../shared/recurrence';
+import type { EntryChanges, Scope } from '../../shared/schema';
 import { liveWorkspaceIds } from '../../shared/workspace';
 import { applyWrite } from '../../worker/db/store';
 import { WeekViewCache } from '../month/weekViewCache';
@@ -50,6 +50,16 @@ const AT_1420 = Date.UTC(2026, 9, 22, 5, 20);
 const WORKSPACE = 'default-workspace';
 // 2026-10-19 は月曜。
 const MONDAY = '2026-10-19';
+
+function isApplied(status: number, body: unknown): boolean {
+  return (
+    status === 200 &&
+    typeof body === 'object' &&
+    body !== null &&
+    'applied' in body &&
+    body.applied === true
+  );
+}
 
 async function startedDevice(): Promise<Device> {
   const device = createDevice({ db: testDatabase.db });
@@ -129,9 +139,17 @@ function startTimes(device: Device, from: string, to: string): Record<string, st
   );
 }
 
-/** 送信と受け取りが終わったあと、サーバーが 4xx で断っていなくて、サーバーの全行が、エンジンの view と一致する。 */
+/**
+ * 送信と受け取りが終わったあと、送った書き込みが、すべて書かれていて（200 の applied: true。4xx にも、200 の「捨てた」にも
+ * なっていない）、サーバーの全行が、エンジンの view と一致する。
+ * 行の一致だけでは、「捨てた」を見逃す。捨てられた依頼の結果は、受け取りのあと、view からも消えるので、
+ * 一致して見えるため。
+ */
 async function expectServerMatchesView(device: Device): Promise<void> {
   await device.engine.settled();
+  expect(
+    device.network.writeResponses.filter(({ status, body }) => !isApplied(status, body)),
+  ).toEqual([]);
   expect(device.state().discarded.count).toBe(0);
   expect(device.state().queue).toEqual([]);
   const server = await readAllRows(testDatabase.db);
@@ -185,6 +203,29 @@ async function sendDeletes(device: Device): Promise<void> {
   device.clock.advance(DELETE_UNDO_MS);
   await device.engine.settled();
 }
+
+describe('書き込みの応答の確認（このファイルのテストが、捨てられた依頼を見逃さないことの確認）', () => {
+  it('対象の回がない依頼は、200 の applied: false で捨てられる。そのとき、行は、view と一致して見える', async () => {
+    const device = await startedDevice();
+    const entryId = await create(device, newValues({ repeat: 'weekly', repeatDays: [1, 3, 5] }));
+
+    // 10/20 は火曜で、この系列の回ではない。「この予定のみ」の変更は、対象がないので、サーバーが捨てる。
+    device.engine.changeEntry(
+      { seriesId: entryId, occurrenceDate: '2026-10-20', scope: 'this' },
+      { title: '存在しない回' },
+    );
+    await device.engine.settled();
+
+    const last = device.network.writeResponses.at(-1);
+    expect(last).toMatchObject({ status: 200, body: { applied: false } });
+    expect(isApplied(last?.status ?? 0, last?.body)).toBe(false);
+    // 4xx ではないので、「保存できなかった変更」にも数えられない。行も一致して見える。
+    expect(device.state().discarded.count).toBe(0);
+    expect(Object.fromEntries(device.state().view.entries)).toEqual(
+      Object.fromEntries((await readAllRows(testDatabase.db)).entries),
+    );
+  });
+});
 
 describe('繰り返しの予定を作る（RP-1・RP-6）', () => {
   it('毎週（水・金）を、月曜の開始日で作ると、最初の回は水曜になり、水・金に回が出る', async () => {
@@ -663,12 +704,30 @@ describe('繰り返しの予定を削除する（範囲。設計書 4.5）', () 
 describe('フォームが選べるとした範囲は、サーバーに断られず、サーバーの行と、エンジンの view が一致する', () => {
   const SERIES_ID = 'series-1';
 
-  const SERIES: readonly { name: string; values: Partial<FormValues>; dates: string[] }[] = [
-    { name: '毎日', values: { repeat: 'daily' }, dates: ['2026-10-19', '2026-10-22'] },
+  const SERIES: readonly {
+    name: string;
+    values: Partial<FormValues>;
+    dates: string[];
+    /** 10/21 の回を、「この予定のみ」で変えた例外の行を、先に作っておく（別の日・時刻に移した回。系列の状態）。 */
+    exception?: EntryChanges;
+  }[] = [
+    { name: '毎日', values: { repeat: 'daily' }, dates: ['2026-10-22'] },
     {
       name: '毎週（月・水・金）',
       values: { repeat: 'weekly', repeatDays: [1, 3, 5] },
       dates: ['2026-10-19', '2026-10-23'],
+    },
+    {
+      name: '毎週（月・水・金）で、10/21 の回を、10/22 の 17:00 に移した例外がある',
+      values: { repeat: 'weekly', repeatDays: [1, 3, 5] },
+      // 開く回は、例外の回（回の日付は、元の日付の 10/21）と、そのあとの回。
+      dates: ['2026-10-21', '2026-10-23'],
+      exception: {
+        startDate: '2026-10-22',
+        endDate: '2026-10-22',
+        startTime: '17:00',
+        endTime: '18:00',
+      },
     },
     { name: '毎月', values: { repeat: 'monthly' }, dates: ['2026-11-19'] },
     { name: '平日', values: { repeat: 'weekday' }, dates: ['2026-10-22'] },
@@ -700,26 +759,41 @@ describe('フォームが選べるとした範囲は、サーバーに断られ�
     },
   ];
 
-  /** 系列だけがある状態から、端末を起動して、開く回を用意する。 */
-  async function openedDevice(series: Partial<FormValues>, date: string) {
+  /** 系列（と、あれば例外の行）だけがある状態から、端末を起動して、開く回を用意する。 */
+  async function openedDevice(
+    series: Partial<FormValues>,
+    date: string,
+    exception: EntryChanges | undefined,
+  ) {
     await testDatabase.db.prepare('DELETE FROM entries').run();
     const values = newValues(series);
     expect(validateForm(values)).toEqual({});
-    const entries = createEntry({
+    const seriesRows = createEntry({
       draft: toDraft(values),
       newId: SERIES_ID,
       editedAt: Date.now() - 60_000,
     });
-    await applyWrite(testDatabase.db, { entries });
+    await applyWrite(testDatabase.db, { entries: seriesRows });
+    if (exception !== undefined) {
+      const exceptionRows = changeEntry({
+        entries: seriesRows,
+        target: { seriesId: SERIES_ID, occurrenceDate: '2026-10-21' },
+        scope: 'this',
+        changes: exception,
+        newId: 'exception-1',
+        editedAt: Date.now() - 30_000,
+      });
+      await applyWrite(testDatabase.db, { entries: exceptionRows });
+    }
     const device = await startedDevice();
     return { device, occurrence: occurrenceOn(device, SERIES_ID, date) };
   }
 
-  describe.each(SERIES)('変更: $name', ({ values, dates }) => {
+  describe.each(SERIES)('変更: $name', ({ values, dates, exception }) => {
     it.each(dates)(
       '%s の回を開いて、変える内容ごとに、選べる範囲をすべて試す',
       async (date) => {
-        const probe = await openedDevice(values, date);
+        const probe = await openedDevice(values, date, exception);
         const trials: string[] = [];
         for (const { name, edit } of EDITS) {
           const edited = edit(opened(probe.device, probe.occurrence));
@@ -739,7 +813,7 @@ describe('フォームが選べるとした範囲は、サーバーに断られ�
             continue;
           }
           for (const scope of decision.scopes) {
-            const { device, occurrence } = await openedDevice(values, date);
+            const { device, occurrence } = await openedDevice(values, date, exception);
             save(device, occurrence, edit(opened(device, occurrence)), scope);
             await expectServerMatchesView(device);
             trials.push(`${name}: ${scope}`);
@@ -754,12 +828,12 @@ describe('フォームが選べるとした範囲は、サーバーに断られ�
     );
   });
 
-  describe.each(SERIES)('削除: $name', ({ values, dates }) => {
+  describe.each(SERIES)('削除: $name', ({ values, dates, exception }) => {
     it.each(dates)(
       '%s の回を開いて、3 つの範囲のどれで削除しても、サーバーに断られない',
       async (date) => {
         for (const scope of ['this', 'following', 'all'] as const) {
-          const { device, occurrence } = await openedDevice(values, date);
+          const { device, occurrence } = await openedDevice(values, date, exception);
           remove(device, occurrence, scope);
           await sendDeletes(device);
           await expectServerMatchesView(device);
