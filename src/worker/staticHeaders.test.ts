@@ -8,7 +8,7 @@ function parseHeadersFile(text: string): Map<string, Map<string, string>> {
   const rules = new Map<string, Map<string, string>>();
   let current: Map<string, string> | undefined;
   for (const line of text.split('\n')) {
-    if (line.trim() === '') continue;
+    if (line.trim() === '' || line.startsWith('#')) continue;
     if (/^\s/.test(line)) {
       const index = line.indexOf(':');
       current?.set(line.slice(0, index).trim().toLowerCase(), line.slice(index + 1).trim());
@@ -37,8 +37,8 @@ describe('画面（静的ファイル）のセキュリティヘッダー（NF-2
   const rules = parseHeadersFile(read('public/_headers'));
   const all = rules.get('/*');
 
-  it('すべてのパス（/*）に、ヘッダーを付ける', () => {
-    expect([...rules.keys()]).toEqual(['/*']);
+  it('すべてのパス（/*）に、ヘッダーを付ける。そのほかに決めたパスは、絵文字の画像（/emoji/*）だけ', () => {
+    expect([...rules.keys()]).toEqual(['/*', '/emoji/*']);
   });
 
   it('X-Content-Type-Options: nosniff と Referrer-Policy: no-referrer を付ける', () => {
@@ -68,6 +68,14 @@ describe('画面（静的ファイル）のセキュリティヘッダー（NF-2
 
     expect(csp.get('img-src')).toBe("'self'");
     expect(all?.get('content-security-policy')).not.toContain('data:');
+  });
+});
+
+describe('絵文字の画像（NF-7。public/_headers）', () => {
+  const emoji = parseHeadersFile(read('public/_headers')).get('/emoji/*');
+
+  it('1 年間、変わらないものとして、ブラウザに覚えさせる（URL にパッケージの版が入っているため）', () => {
+    expect(emoji?.get('cache-control')).toBe('public, max-age=31536000, immutable');
   });
 });
 

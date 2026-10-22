@@ -2,3 +2,8 @@
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
+
+# 絵文字の画像。URL にパッケージの版が入っていて、中身が変わらないので、長く覚えさせる。
+# 一度読み込んだ画像を、電波がない間も出せるようにするため（設計書 11.1）。
+/emoji/*
+  Cache-Control: public, max-age=31536000, immutable
