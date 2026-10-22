@@ -48,6 +48,8 @@ export function splitEmoji(
   if (text === '') return [];
   // 絵文字として表示される文字が 1 つもなければ、書記素に分けない（ほとんどの題名がこれ。月表示は、1 画面に数十の題名を描く）。
   // 分けるかどうかの判定が、まとまりごとの判定（下）と同じ正規表現なので、見逃しはない。
+  // 別の正規表現（\p{Extended_Pictographic} だけなど）で先に絞らないのは、キーキャップ（1️⃣。数字と U+20E3 だけで、
+  // Extended_Pictographic を含まない）や、地域を表す 1 文字（U+1F1E6〜1F1FF）にも画像があり、見逃すため。
   if (segmenter === null || !DISPLAYED_AS_EMOJI.test(text)) return [{ kind: 'text', text }];
 
   const segments: EmojiSegment[] = [];
