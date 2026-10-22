@@ -219,6 +219,77 @@
   width: 5.5em;
 }
 
+/*
+ * 繰り返しの欄の、毎週の曜日（日〜土）のトグル。チェックボックスを、丸いボタンの見た目にする。
+ * 7 つが 1 行に収まるよう、幅を分け合い、最大 40px にする（スマホの幅でも、折り返さない）。
+ */
+.days {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.day {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 40px;
+}
+
+.day input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.day span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-grid);
+  border-radius: 50%;
+  font-size: 14px;
+}
+
+.day input:checked + span {
+  border-color: var(--color-today);
+  background-color: var(--color-today);
+  color: var(--color-bg);
+  font-weight: 700;
+}
+
+.day input:focus-visible + span {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+/* 繰り返しの説明と、最初の回の知らせ。 */
+.hints {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hint,
+.firstNote {
+  margin: 0;
+  font-size: 13px;
+}
+
+.hint {
+  color: var(--color-observance);
+}
+
 /* 通知のタイミング。ON のときは、そのまま。OFF のときは、薄く出す（編集はできる）。 */
 .timing {
   display: inline-flex;

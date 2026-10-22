@@ -26,7 +26,8 @@ import {
   describeAllDayNotify,
   parseNotifyOffset,
 } from './notify';
-import { seriesRruleOf } from './repeat';
+import { RepeatControls } from './RepeatControls';
+import { describeFirstOccurrence, firstOccurrence, repeatBaseDate, seriesRruleOf } from './repeat';
 import { moveStart } from './schedule';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
@@ -82,6 +83,7 @@ function firstErrorField(errors: FormErrors): string | null {
     ['endDate', 'endDate'],
     ['range', 'endDate'],
     ['workspace', 'workspace'],
+    ['repeat', 'repeat'],
     ['notify', 'notify'],
     ['location', 'location'],
     ['url', 'url'],
@@ -251,10 +253,20 @@ export function EntryForm({ target }: { target: FormTarget }) {
         startDate: errors.startDate,
         endDate: errors.endDate,
         range: errors.range,
+        // 毎週の曜日を外したときと、開始日から最初の回を求められないとき。入力の途中で、すぐ分かる。
+        repeat: errors.repeat,
         notify: errors.notify,
       };
 
   const formError = failure ?? shown.form ?? null;
+
+  // 保存したとき、開始日がルールに合う最初の日へずれることを、保存の前に知らせる（設計書 4.4）。すでに繰り返している
+  // 予定のルールを変えるときは、出さない。範囲によって、ずれる先の日が違い（「すべて」は、系列の最初の回から数える）、
+  // 開いた回の開始日から求めた日を出すと、間違った日を言うことがあるため。
+  const firstNote =
+    original?.recurring === true
+      ? null
+      : describeFirstOccurrence(firstOccurrence(values), values.startDate);
 
   // 繰り返しの予定の変更は、まだできない。行き止まりにならないよう、中身は見せて、保存と削除を出さない。
   const readOnly = target.mode === 'edit' && target.occurrence.recurring;
@@ -550,6 +562,28 @@ export function EntryForm({ target }: { target: FormTarget }) {
                 </select>
               </Field>
             )}
+
+            <Field
+              label="繰り返し"
+              htmlFor={`${ids}-repeat`}
+              error={shown.repeat}
+              errorId={`${ids}-repeat-error`}
+            >
+              <RepeatControls
+                id={`${ids}-repeat`}
+                values={values}
+                baseDate={repeatBaseDate(
+                  values,
+                  original && { rrule: originalRrule, occurrenceDate: original.occurrenceDate },
+                )}
+                firstNote={firstNote}
+                describedBy={shown.repeat === undefined ? undefined : `${ids}-repeat-error`}
+                invalid={shown.repeat !== undefined}
+                onChange={(patch) => {
+                  update(patch);
+                }}
+              />
+            </Field>
 
             <Field label="通知" error={shown.notify} errorId={`${ids}-notify-error`}>
               <label className={styles.check}>

@@ -7,6 +7,7 @@ import {
   describeRepeat,
   firstOccurrence,
   hasNoWeeklyDays,
+  repeatBaseDate,
   repeatFieldsOf,
   rruleOf,
   seriesRruleOf,
@@ -208,6 +209,30 @@ describe('繰り返しの説明（設計書 4.4・Q9・RP-2・RP-5）', () => {
     expect(describeRepeat('weekly', MONDAY)).toBeNull();
     expect(describeRepeat('monthly', '')).toBeNull();
     expect(describeRepeat('yearly', '0002-02-29')).toBeNull();
+  });
+});
+
+describe('説明の基準にする日付', () => {
+  const monthly: Rrule = { freq: 'monthly' };
+  const original = { rrule: monthly, occurrenceDate: '2026-10-15' };
+
+  it('新しく作るときは、開始日', () => {
+    expect(repeatBaseDate(input({ repeat: 'monthly' }, '2026-10-22'))).toBe('2026-10-22');
+  });
+
+  it('開いた予定のルールを変えていなければ、回の日付（別の日に移した例外の回でも、ルールの基準の日）', () => {
+    // 毎月 15 日の系列の、10-15 の回を、10-17 に移した例外の回を開いた。開始日は 10-17。
+    expect(repeatBaseDate(input({ repeat: 'monthly' }, '2026-10-17'), original)).toBe('2026-10-15');
+  });
+
+  it('開いた予定のルールを変えたら、新しいルールの基準は、開始日', () => {
+    expect(repeatBaseDate(input({ repeat: 'yearly' }, '2026-10-17'), original)).toBe('2026-10-17');
+  });
+
+  it('繰り返さない予定にルールを付けるときは、開始日', () => {
+    const single = { rrule: null, occurrenceDate: '2026-10-15' };
+
+    expect(repeatBaseDate(input({ repeat: 'monthly' }, '2026-10-17'), single)).toBe('2026-10-17');
   });
 });
 

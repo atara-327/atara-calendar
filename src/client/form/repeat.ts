@@ -1,5 +1,5 @@
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
-import { normalizeStart } from '../../shared/recurrence';
+import { isSameRrule, normalizeStart } from '../../shared/recurrence';
 import { inputDateSchema, type Entry, type Rrule } from '../../shared/schema';
 import { formatDayTitle, formatMonthDay } from '../dateFormat';
 
@@ -91,6 +91,19 @@ export function toggleRepeatDay(input: RepeatInput, day: number): RepeatFields {
 /** 毎週で、曜日が 1 つも選ばれていない（保存できない誤り）。選んでいない（null）状態は、開始日の曜日なので誤りではない。 */
 export function hasNoWeeklyDays({ repeat, repeatDays }: RepeatFields): boolean {
   return repeat === 'weekly' && repeatDays !== null && repeatDays.length === 0;
+}
+
+/**
+ * 説明（describeRepeat）の基準にする日付。ふつうは開始日。
+ * 開いた予定のルールを変えていないときは、そのルールの基準にする日付（回の日付。例外の回は、元の日付）にする。
+ * 別の日に移した例外の回を開くと、開始日は移した先の日で、ルールの基準の日（毎月 15 日など）とは違うため。
+ */
+export function repeatBaseDate(
+  input: RepeatInput,
+  original?: { rrule: Rrule | null; occurrenceDate: string },
+): string {
+  const unchanged = original !== undefined && isSameRrule(rruleOf(input), original.rrule);
+  return unchanged && original.rrule !== null ? original.occurrenceDate : input.startDate;
 }
 
 const WEEKDAY_DAYS_NOTE = '土曜・日曜・祝日・年末年始（12/29〜1/3）';
