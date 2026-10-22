@@ -6,7 +6,12 @@ export type EmojiSegment =
 // \p{Emoji} にしないのは、「#」「1」「©」「™」のような、ふつうは文字として表示される記号も含むため。
 // 「会議 #1」の「#」と「1」が、画像になってはいけない。
 // U+FE0F（絵文字の表示を求める印）と U+20E3（キーキャップ）は、これらの記号を絵文字として表示させるときに付く。
-const DISPLAYED_AS_EMOJI = /\p{Emoji_Presentation}|\u{FE0F}|\u{20E3}/u;
+// 最後の (?=\p{Extended_Pictographic})\P{Emoji} は、エンジンの Unicode のデータが、まだ知らない符号位置
+// （絵文字用に予約されている）。データの古いブラウザは、新しい絵文字（U+1FAEA など）が \p{Emoji_Presentation} に
+// 当たらず、文字のまま残るため。割り当て済みの、絵文字でない絵（麻雀牌など）にも当たるが、
+// 画像のある key だけを画像にするので、誤検出にはならない。
+const DISPLAYED_AS_EMOJI =
+  /\p{Emoji_Presentation}|\u{FE0F}|\u{20E3}|(?=\p{Extended_Pictographic})\P{Emoji}/u;
 
 // Intl.Segmenter は、Firefox 114〜124 にない（Vite の既定のビルド対象に、Firefox 114 が入っている）。
 // 画面の読み込みで、ないものを使って例外を投げると、アプリ全体が真っ白になる。

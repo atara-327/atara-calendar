@@ -119,6 +119,18 @@ describe('文字列の中の絵文字を見つける', () => {
     ]);
   });
 
+  // Unicode 17 で加わった絵文字。Unicode 16 までのデータを持つエンジン（古いブラウザ）では、まだ割り当てがなく、
+  // \p{Emoji_Presentation} に当たらない（予約の符号位置）。新しいエンジンでは、割り当て済みで、同じく絵文字になる。
+  it.each(['\u{1FAEA}', '\u{1F6D8}'])(
+    'エンジンの Unicode のデータが古くて、まだ知らない新しい絵文字（%s）も、画像があれば絵文字にする',
+    (emoji) => {
+      const key = emojiKey(emoji);
+
+      expect(splitEmoji(emoji, images(key))).toEqual([{ kind: 'emoji', text: emoji, key }]);
+      expect(splitEmoji(emoji, images())).toEqual([{ kind: 'text', text: emoji }]);
+    },
+  );
+
   it('Intl.Segmenter がないブラウザでは、絵文字を画像にせず、文字のまま返す（画面を止めない）', () => {
     expect(splitEmoji('🎂誕生日', images('1f382'), null)).toEqual([
       { kind: 'text', text: '🎂誕生日' },
