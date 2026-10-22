@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scopeUnavailableMessage, unavailableMessage } from './messages';
+import { scopeChangedMessage, scopeUnavailableMessage, unavailableMessage } from './messages';
 
 describe('保存・削除を受け付けられなかったときの理由', () => {
   it('別のタブで開いたため止めているときは、ページを開き直すよう伝える', () => {
@@ -36,5 +36,14 @@ describe('範囲を決められなかったときの理由', () => {
     expect(scopeUnavailableMessage({ kind: 'unavailable', reason: 'other' })).toBe(
       'この組み合わせの変更は保存できません',
     );
+  });
+});
+
+describe('範囲を選んで送るときに、選んだ範囲がもう選べなかったときの理由', () => {
+  it('ほかの端末の変更で選べなくなったことと、範囲を選び直すことを伝える。保存か削除かが入る', () => {
+    expect(scopeChangedMessage('保存')).toBe(
+      'ほかの端末の変更で、選んだ範囲では保存できなくなりました。もう一度保存して、範囲を選び直してください',
+    );
+    expect(scopeChangedMessage('削除')).toContain('削除できなくなりました');
   });
 });

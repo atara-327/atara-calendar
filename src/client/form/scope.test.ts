@@ -3,7 +3,7 @@ import { deepFreeze, makeEntry } from '../../../test/helpers/entries';
 import { addDays, dayOfWeek } from '../../shared/date';
 import { expandOccurrences } from '../../shared/recurrence';
 import type { Entry, EntryChanges, Rrule } from '../../shared/schema';
-import { decideScope, type ScopeAction, type ScopeDecision } from './scope';
+import { decideScope, recheckScope, type ScopeAction, type ScopeDecision } from './scope';
 
 // 変更・削除の範囲の、選べるものを決める（設計書 4.5・11.4）。
 // 決め方は、shared の changeEntry・deleteEntry を、範囲ごとに実際に当てること。ここでは、その結果が、
@@ -446,5 +446,70 @@ describe('ほかの系列の行は、見ない', () => {
     expect(decideChange([other, otherException, daily()], WEDNESDAY, { title: '変更' })).toEqual(
       ALL_SCOPES,
     );
+  });
+});
+
+describe('範囲を選んで送るときの、もう一度の確認（ほかの端末の変更が、範囲を聞く段の間に届いたとき）', () => {
+  const dateChange = { startDate: '2026-10-22', endDate: '2026-10-22' };
+  const occurrence = { seriesId: 's1', occurrenceDate: WEDNESDAY, recurring: true };
+  const change: ScopeAction = { kind: 'change', changes: dateChange };
+
+  it('何も変わっていなければ、選んだ範囲を送ってよい', () => {
+    const rows = [weekly([3])];
+
+    expect(recheckScope({ rows, occurrence, action: change, selected: 'all' })).toEqual({
+      kind: 'proceed',
+    });
+  });
+
+  it('ほかの端末が、毎週を毎日に変えて、日付を動かす「すべて」が選べなくなったら、範囲を選び直す', () => {
+    // 範囲の段を出したときは、毎週で、3 つとも選べた。その後、毎日に変わった（毎日は、日付をずらせない）。
+    expect(decideScope({ rows: [weekly([3])], occurrence, action: change })).toEqual(ALL_SCOPES);
+    const rows = [daily()];
+
+    expect(recheckScope({ rows, occurrence, action: change, selected: 'all' })).toEqual({
+      kind: 'changed',
+    });
+    expect(recheckScope({ rows, occurrence, action: change, selected: 'this' })).toEqual({
+      kind: 'proceed',
+    });
+  });
+
+  it('ほかの端末が、系列を削除したら、対象がないとして、保存しない', () => {
+    expect(
+      recheckScope({
+        rows: [weekly([3], { deletedAt: 5000 })],
+        occurrence,
+        action: change,
+        selected: 'this',
+      }),
+    ).toEqual({ kind: 'rejected', decision: { kind: 'gone' } });
+  });
+
+  it('削除も、同じく確かめる（系列が削除されていたら、対象がない）', () => {
+    expect(
+      recheckScope({
+        rows: [daily({ deletedAt: 5000 })],
+        occurrence,
+        action: { kind: 'delete' },
+        selected: 'all',
+      }),
+    ).toEqual({ kind: 'rejected', decision: { kind: 'gone' } });
+    expect(
+      recheckScope({ rows: [daily()], occurrence, action: { kind: 'delete' }, selected: 'all' }),
+    ).toEqual({ kind: 'proceed' });
+  });
+
+  it('ほかの端末が、ルールを変えたあとに、変えていないルールを含む変更は、「この予定のみ」が選べなくなる', () => {
+    // 系列を、毎週（水）から毎週（水・金）にされた。こちらは、毎週（水）のままの値で、題名だけを変える。
+    // ルールは changes に入れていない（変えていない）ので、「この予定のみ」は、そのまま選べる。
+    expect(
+      recheckScope({
+        rows: [weekly([3, 5])],
+        occurrence,
+        action: { kind: 'change', changes: { title: '変更' } },
+        selected: 'this',
+      }),
+    ).toEqual({ kind: 'proceed' });
   });
 });

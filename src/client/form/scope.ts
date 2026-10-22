@@ -165,3 +165,32 @@ export function decideScope({
   }
   return { kind: 'unavailable', reason: 'other' };
 }
+
+/** 範囲を選んで送るときの、もう一度の確認の結果。 */
+export type ScopeRecheck =
+  /** 選んだ範囲は、まだ選べる。送ってよい。 */
+  | { kind: 'proceed' }
+  /** 対象がもうない・どの範囲も選べなくなった。保存しない。 */
+  | { kind: 'rejected'; decision: Extract<ScopeDecision, { kind: 'gone' | 'unavailable' }> }
+  /** ほかの範囲は選べるが、選んだ範囲は、もう選べない。範囲を選び直す。 */
+  | { kind: 'changed' };
+
+/**
+ * 範囲を選んで送るとき、同じ変更・削除に、もう一度 decideScope を当て、選んだ範囲が、まだ選べるかを確かめる。
+ * Why: 範囲を聞く段を開いている間に、ほかの端末の変更が、受け取りで届くことがある。選べる範囲が変わったのに
+ * そのまま送ると、サーバーが 200 で「捨てた」にするか、400 にする（400 なら、保存した変更が画面から消える。設計書 6.2）。
+ */
+export function recheckScope({
+  selected,
+  ...decision
+}: Parameters<typeof decideScope>[0] & { selected: Scope }): ScopeRecheck {
+  const result = decideScope(decision);
+  switch (result.kind) {
+    case 'choose':
+      return result.scopes.includes(selected) ? { kind: 'proceed' } : { kind: 'changed' };
+    case 'single':
+      return { kind: 'proceed' };
+    default:
+      return { kind: 'rejected', decision: result };
+  }
+}

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {
   INPUT_LIMITS,
+  type Entry,
   type EntryChanges,
   type Rrule,
   type Scope,
@@ -25,7 +26,7 @@ import { CloseIcon } from './icons';
 import { closeEntryForm } from './instance';
 import { loadLastWorkspaceId, saveLastWorkspaceId } from './lastWorkspace';
 import { mapSearchUrl, openableUrl } from './links';
-import { scopeUnavailableMessage, unavailableMessage } from './messages';
+import { scopeChangedMessage, scopeUnavailableMessage, unavailableMessage } from './messages';
 import {
   DEFAULT_ALL_DAY_NOTIFY_MIN,
   TIMED_NOTIFY_RANGE,
@@ -35,7 +36,7 @@ import {
 import { RepeatControls } from './RepeatControls';
 import { describeFirstOccurrence, firstOccurrence, repeatBaseDate, seriesRruleOf } from './repeat';
 import { moveStart } from './schedule';
-import { decideScope, type ScopeDecision } from './scope';
+import { decideScope, recheckScope, type ScopeAction, type ScopeDecision } from './scope';
 import { ScopeStep, type ScopeStepKind } from './ScopeStep';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
@@ -348,9 +349,27 @@ export function EntryForm({ target }: { target: FormTarget }) {
     closeEntryForm();
   }
 
+  /**
+   * 想定外の例外（確認とサーバーの決まりの食い違い・shared の関数の例外など）を、ログに残して、入力を残したまま知らせる。
+   * 握りつぶして閉じると、保存したつもりで、保存されない。
+   */
+  function guard(action: '保存' | '削除', run: () => void): void {
+    try {
+      run();
+    } catch (error) {
+      console.error(`予定を${action}できませんでした`, error);
+      setFailure(`${action}できませんでした。入力内容を確かめてください`);
+    }
+  }
+
   /** 範囲を決められなかったとき（もうない・どの範囲も選べない）の理由を出す。 */
   function reject(decision: Extract<ScopeDecision, { kind: 'gone' | 'unavailable' }>): void {
     setFailure(scopeUnavailableMessage(decision));
+  }
+
+  /** 同期のエンジンの view の今の行（削除済みを含む全行）。範囲を決めるのに使う（scope.ts）。 */
+  function viewRows(): Iterable<Entry> {
+    return getSyncEngine().store.getState().view.entries.values();
   }
 
   function changeEntry(scope: Scope, changes: EntryChanges): void {
@@ -364,35 +383,38 @@ export function EntryForm({ target }: { target: FormTarget }) {
 
   function saveEdit(): void {
     if (target.mode !== 'edit') return;
-    const changes = toChanges(values, target.occurrence, originalRrule);
-    // 何も変えていないなら、何も送らない（範囲も聞かない）。送ると、行の編集時刻と rev だけが進み、他の端末が受け取り直す。
-    if (Object.keys(changes).length === 0) {
-      closeEntryForm();
-      return;
-    }
-    // 選べる範囲は、変えた内容を、手元の行に当てて決める（設計書 11.4。scope.ts）。
-    const decision = decideScope({
-      rows: getSyncEngine().store.getState().view.entries.values(),
-      occurrence: target.occurrence,
-      action: { kind: 'change', changes },
+    const { occurrence } = target;
+    guard('保存', () => {
+      const changes = toChanges(values, occurrence, originalRrule);
+      // 何も変えていないなら、何も送らない（範囲も聞かない）。送ると、行の編集時刻と rev だけが進み、他の端末が受け取り直す。
+      if (Object.keys(changes).length === 0) {
+        closeEntryForm();
+        return;
+      }
+      // 選べる範囲は、変えた内容を、手元の行に当てて決める（設計書 11.4。scope.ts）。
+      const decision = decideScope({
+        rows: viewRows(),
+        occurrence,
+        action: { kind: 'change', changes },
+      });
+      switch (decision.kind) {
+        case 'single':
+          // 繰り返さない予定は、範囲を使わない（設計書 5.1）。型に合わせて、予定全体を表す 'all' にする。
+          changeEntry('all', changes);
+          return;
+        case 'choose':
+          // 選べる範囲が 1 つだけでも、聞く（何が起きるかを、利用者が確かめられるように）。
+          setScopeStep({
+            kind: 'save',
+            scopes: decision.scopes,
+            selected: decision.scopes[0],
+            changes,
+          });
+          return;
+        default:
+          reject(decision);
+      }
     });
-    switch (decision.kind) {
-      case 'single':
-        // 繰り返さない予定は、範囲を使わない（設計書 5.1）。型に合わせて、予定全体を表す 'all' にする。
-        changeEntry('all', changes);
-        return;
-      case 'choose':
-        // 選べる範囲が 1 つだけでも、聞く（何が起きるかを、利用者が確かめられるように）。
-        setScopeStep({
-          kind: 'save',
-          scopes: decision.scopes,
-          selected: decision.scopes[0],
-          changes,
-        });
-        return;
-      default:
-        reject(decision);
-    }
   }
 
   function save(): void {
@@ -414,35 +436,64 @@ export function EntryForm({ target }: { target: FormTarget }) {
 
   function remove(): void {
     if (target.mode !== 'edit') return;
+    const { occurrence } = target;
     setFailure(null);
-    const decision = decideScope({
-      rows: getSyncEngine().store.getState().view.entries.values(),
-      occurrence: target.occurrence,
-      action: { kind: 'delete' },
+    guard('削除', () => {
+      const decision = decideScope({ rows: viewRows(), occurrence, action: { kind: 'delete' } });
+      switch (decision.kind) {
+        case 'single':
+          deleteEntry('all');
+          return;
+        case 'choose':
+          setScopeStep({
+            kind: 'delete',
+            scopes: decision.scopes,
+            selected: decision.scopes[0],
+            changes: null,
+          });
+          return;
+        default:
+          reject(decision);
+      }
     });
-    switch (decision.kind) {
-      case 'single':
-        deleteEntry('all');
-        return;
-      case 'choose':
-        setScopeStep({
-          kind: 'delete',
-          scopes: decision.scopes,
-          selected: decision.scopes[0],
-          changes: null,
-        });
-        return;
-      default:
-        reject(decision);
-    }
   }
 
-  /** 範囲を決めたあとの、保存・削除。 */
+  /**
+   * 範囲を決めたあとの、保存・削除。送る前に、同じ変更・削除に、もう一度、選べる範囲を決める（scope.ts の recheckScope）。
+   * 範囲を聞く段を開いている間に、ほかの端末の変更が届いて、選んだ範囲が、もう選べない（または、対象がもうない）ことが
+   * あるため。そのまま送ると、サーバーが 200 で「捨てた」にするか、400 にする（400 なら、保存した変更が画面から消える。
+   * 設計書 6.2）。選べなくなっていたら、理由を出して、入力の段に戻る。
+   */
   function applyScope(): void {
-    if (scopeStep === null) return;
+    if (scopeStep === null || target.mode !== 'edit') return;
+    const step = scopeStep;
+    const { occurrence } = target;
+    const verb = step.kind === 'delete' ? '削除' : '保存';
     setFailure(null);
-    if (scopeStep.kind === 'delete') deleteEntry(scopeStep.selected);
-    else if (scopeStep.changes !== null) changeEntry(scopeStep.selected, scopeStep.changes);
+    guard(verb, () => {
+      const action: ScopeAction | null =
+        step.kind === 'delete'
+          ? { kind: 'delete' }
+          : step.changes === null
+            ? null
+            : { kind: 'change', changes: step.changes };
+      if (action === null) return;
+      const recheck = recheckScope({
+        rows: viewRows(),
+        occurrence,
+        action,
+        selected: step.selected,
+      });
+      if (recheck.kind !== 'proceed') {
+        returnFocus.current = step.kind;
+        setScopeStep(null);
+        if (recheck.kind === 'rejected') reject(recheck.decision);
+        else setFailure(scopeChangedMessage(verb));
+        return;
+      }
+      if (action.kind === 'delete') deleteEntry(step.selected);
+      else changeEntry(step.selected, action.changes);
+    });
   }
 
   function backToForm(): void {
