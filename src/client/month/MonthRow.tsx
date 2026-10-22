@@ -3,10 +3,12 @@ import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
 import { formatMonthDay } from '../dateFormat';
 import { EmojiText } from '../emoji/EmojiText';
+import { openEditForm } from '../form/instance';
 import { Link } from '../Link';
 import { dayPath } from '../route';
 import { cellBoundary } from './boundaries';
 import { readableTextColor } from './color';
+import { eventAccessibleName } from './eventLabel';
 import { dayLabelParts } from './labels';
 import type { BarItem, MoreItem, TimedItem } from './layout';
 import styles from './MonthRow.module.css';
@@ -81,10 +83,16 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
   );
 }
 
+// 予定は、押すとフォームが開く（設計書 11.2）。<button> にするのは、キーボードの Tab・Enter でも開けるため。
+// 横棒の題名の省略（…）を、<button> の中身に直接かけず、中の span にかけるのは、
+// <button> の text-overflow が、ブラウザによって効かないため。
+
 function BarChip({ item }: { item: BarItem }) {
   const { event } = item;
   return (
-    <div
+    <button
+      type="button"
+      aria-label={eventAccessibleName(event)}
       className={classNames(
         styles.bar,
         item.continuesBefore && styles.continuesBefore,
@@ -96,22 +104,35 @@ function BarChip({ item }: { item: BarItem }) {
         backgroundColor: event.color,
         color: readableTextColor(event.color),
       }}
+      onClick={() => {
+        openEditForm(event.occurrence);
+      }}
     >
-      <EmojiText text={event.title} />
-    </div>
+      <span className={styles.barText}>
+        <EmojiText text={event.title} />
+      </span>
+    </button>
   );
 }
 
 function TimedChip({ item }: { item: TimedItem }) {
   const { event } = item;
   return (
-    <div className={styles.timed} style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}>
+    <button
+      type="button"
+      aria-label={eventAccessibleName(event)}
+      className={styles.timed}
+      style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}
+      onClick={() => {
+        openEditForm(event.occurrence);
+      }}
+    >
       <span className={styles.dot} style={{ backgroundColor: event.color }} />
       {event.startTime !== null && <span className={styles.time}>{event.startTime}</span>}
       <span className={styles.timedText}>
         <EmojiText text={event.title} />
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -139,8 +160,8 @@ interface MonthRowProps {
 /**
  * 1 週間の行。同じ view・slots・today なら、描き直さない（スクロールで、行が出入りするときに、残る行を描き直さないため）。
  * 日付のマスは、リンクの全面（日付・空いているところ → 日表示。MV-8）。予定は、その上に重ねる。
- * 予定の層は、空いているところのクリックを下のマスに通す（pointer-events）。予定そのものは、今は何もしない
- * （フォームは実装 #8）。
+ * 予定の層は、空いているところのクリックを下のマスに通す（pointer-events）。予定そのものを押すと、
+ * その回のフォームが開く（フォームの履歴を積むので、スマホの「戻る」で閉じる。設計書 11.4）。
  */
 export const MonthRow = memo(function MonthRow({ view, slots, today }: MonthRowProps) {
   return (

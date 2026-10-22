@@ -59,6 +59,26 @@ describe('週に描く予定', () => {
     });
   });
 
+  it('予定は、押したときに開くフォームのために、元の回（どの予定の、どの日の回か）を持つ', () => {
+    const cache = cacheOf([
+      { id: 'e1', title: '歯医者', startDate: '2026-10-21', endDate: '2026-10-21' },
+    ]);
+
+    const [item] = cache.get(week('2026-10-21')).items;
+
+    expect(item).toMatchObject({
+      event: {
+        occurrence: {
+          entryId: 'e1',
+          seriesId: 'e1',
+          occurrenceDate: '2026-10-21',
+          title: '歯医者',
+          recurring: false,
+        },
+      },
+    });
+  });
+
   it('日付をまたぐ時間指定の予定（23:00〜翌 1:00）は、横棒で、2 日にまたがる', () => {
     const cache = cacheOf([
       {

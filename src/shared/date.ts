@@ -139,6 +139,13 @@ export function utcMsToJstDate(utcMs: number): DateStr {
   return daysToDate(Math.floor((utcMs + JST_OFFSET_MS) / MS_PER_DAY));
 }
 
+/** UTC のミリ秒を、日本時間のその日の 0:00 からの分（0〜1439）にする。 */
+export function utcMsToJstMinuteOfDay(utcMs: number): number {
+  // % は負の数で負を返すので、1970 年より前でも 0 以上に収める。
+  const msOfDay = (((utcMs + JST_OFFSET_MS) % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY;
+  return Math.floor(msOfDay / 60_000);
+}
+
 /** 日本時間の「今日」。端末のタイムゾーンは見ない。 */
 export function todayJst(nowMs: number = Date.now()): DateStr {
   return utcMsToJstDate(nowMs);

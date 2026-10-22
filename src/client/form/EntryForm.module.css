@@ -1,0 +1,332 @@
+/*
+ * 予定・タイムブロックのフォーム（設計書 11.4）。<dialog>（showModal）の中身。
+ * 幅の広い画面（PC）は、画面の中央のダイアログ。幅の狭い画面（約 640px 以下。月表示と同じ境目）は、
+ * 画面の下から出るシート。CSP の下なので、HTML の style 属性や <style> 要素は使わない。値が実行時に決まるもの
+ * （ワークスペースの色）だけ、React の style プロパティ（CSSOM。CSP の対象外）で与える（設計書 11.2 の
+ * 「CSP の下での書き方」と同じ）。
+ */
+
+.dialog {
+  box-sizing: border-box;
+  width: min(480px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 32px));
+  padding: 0;
+  border: 1px solid var(--color-grid);
+  border-radius: 12px;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 60%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dialog::backdrop {
+  background-color: rgb(0 0 0 / 60%);
+}
+
+@media (max-width: 640px) {
+  .dialog {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: none;
+    max-height: 92dvh;
+    margin: 0;
+    border-right: none;
+    border-bottom: none;
+    border-left: none;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+  .dialog[open] {
+    animation: slide-up 160ms ease-out;
+  }
+}
+
+.form {
+  margin: 0;
+}
+
+/* ✕ と保存。中身をスクロールしても、見えるようにする。 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--color-bg);
+}
+
+.closeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.closeButton:hover {
+  background-color: var(--color-grid);
+}
+
+.saveButton {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 20px;
+  background-color: var(--color-today);
+  color: var(--color-bg);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.saveButton:hover {
+  filter: brightness(1.1);
+}
+
+.closeButton:focus-visible,
+.saveButton:focus-visible,
+.deleteButton:focus-visible,
+.input:focus-visible,
+.select:focus-visible,
+.link:focus-visible,
+.check input:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+/* 繰り返しの予定を、変更できない形で開いたとき、欄をまとめて無効にする。fieldset の既定の枠・余白を外す。 */
+.fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/*
+ * 左に項目名、右に入力欄。行（.row）は display: contents にして、項目名の列を、全部の行でそろえる。
+ * 全幅の部品（.wide）は、2 列をまたぐ。
+ */
+.body {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 4px 16px 20px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.row {
+  display: contents;
+}
+
+/* 入力欄（高さ 40px）の文字の高さに、項目名の高さをそろえる。 */
+.label {
+  padding-top: 10px;
+  color: var(--color-observance);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.cell {
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/*
+ * 入力欄の文字は 16px。iPhone の Safari は、16px 未満の入力欄にフォーカスすると、画面を拡大してしまう。
+ */
+.input,
+.select {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-grid);
+  border-radius: 6px;
+  background-color: rgb(255 255 255 / 6%);
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.input[aria-invalid='true'],
+.select[aria-invalid='true'] {
+  border-color: var(--color-holiday);
+}
+
+.grow {
+  flex: 1 1 8em;
+  min-width: 0;
+}
+
+.date {
+  flex: 1 1 9.5em;
+  min-width: 0;
+}
+
+.memo {
+  display: block;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.minutes {
+  width: 5.5em;
+}
+
+/* 通知のタイミング。ON のときは、そのまま。OFF のときは、薄く出す（編集はできる）。 */
+.timing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dimmed {
+  opacity: 0.55;
+}
+
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.link {
+  flex: none;
+  color: var(--color-today);
+  font-size: 14px;
+}
+
+.error {
+  margin: 4px 0 0;
+  color: var(--color-holiday);
+  font-size: 13px;
+}
+
+.wide.error {
+  margin: 0;
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-observance);
+  background-color: var(--color-grid);
+  font-size: 14px;
+}
+
+/* 予定・タイムブロックの切り替え（ラジオボタンを、つながったボタンの見た目にする）。 */
+.segment {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--color-grid);
+  border-radius: 8px;
+}
+
+.segmentOption {
+  position: relative;
+  flex: 1;
+  text-align: center;
+}
+
+.segmentOption input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmentOption span {
+  display: block;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.segmentOption input:checked + span {
+  background-color: var(--color-grid);
+  font-weight: 700;
+}
+
+.segmentOption input:focus-visible + span {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.deleteButton {
+  padding: 8px 20px;
+  border: 1px solid var(--color-holiday);
+  border-radius: 6px;
+  background: none;
+  color: var(--color-holiday);
+  font: inherit;
+  cursor: pointer;
+}
+
+.deleteButton:hover {
+  background-color: rgb(242 139 130 / 12%);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

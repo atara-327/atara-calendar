@@ -164,11 +164,45 @@
   white-space: nowrap;
 }
 
+/*
+ * 予定は <button>。ブラウザの既定の見た目（枠・背景・文字の色・中央寄せ）を外して、div のときと同じ見た目にする。
+ * 背景と文字の色は、ワークスペースの色なので、style 属性（CSSOM）で与える。
+ */
+.bar,
+.timed {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bar:focus-visible,
+.timed:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: -2px;
+}
+
+.bar:hover {
+  filter: brightness(1.15);
+}
+
+.timed:hover {
+  background-color: var(--color-grid);
+}
+
 .bar {
   padding: 0 4px;
+  border-radius: 4px;
+}
+
+.barText {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-radius: 4px;
 }
 
 .continuesBefore {
@@ -189,6 +223,7 @@
   gap: 4px;
   padding: 0 2px;
   overflow: hidden;
+  border-radius: 4px;
 }
 
 .dot {

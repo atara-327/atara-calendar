@@ -6,6 +6,7 @@ import './global.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { getFormController } from './form/instance';
 import { getSyncEngine } from './sync/instance';
 
 const root = document.getElementById('root');
@@ -20,6 +21,10 @@ void getSyncEngine()
   .catch((error: unknown) => {
     console.error('同期を始められませんでした', error);
   });
+
+// フォームの履歴の見張りも、画面の描画とは別に、1 回だけ始める。再読み込みのあとに残った、フォームの履歴の印を、
+// 最初に直すため（設計書 11.4）。
+getFormController().start();
 
 createRoot(root).render(
   <StrictMode>

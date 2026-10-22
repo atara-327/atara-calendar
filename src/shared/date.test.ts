@@ -10,6 +10,7 @@ import {
   nthWeekday,
   todayJst,
   utcMsToJstDate,
+  utcMsToJstMinuteOfDay,
   ymdToDate,
 } from './date';
 
@@ -212,6 +213,26 @@ describe('utcMsToJstDate', () => {
   it('1970年より前のミリ秒でも日付が正しく切り替わる', () => {
     expect(utcMsToJstDate(-9 * 3_600_000)).toBe('1970-01-01');
     expect(utcMsToJstDate(-9 * 3_600_000 - 1)).toBe('1969-12-31');
+  });
+});
+
+describe('utcMsToJstMinuteOfDay', () => {
+  it('日本時間のその日の 0:00 からの分を返す（UTC 05:20 は日本時間 14:20）', () => {
+    expect(utcMsToJstMinuteOfDay(Date.UTC(2026, 9, 22, 5, 20))).toBe(14 * 60 + 20);
+  });
+
+  it('UTC 15:00 は日本時間の翌日 0:00（0 分）で、その 1 分前は 23:59（1439 分）', () => {
+    expect(utcMsToJstMinuteOfDay(Date.UTC(2026, 9, 19, 15, 0, 0, 0))).toBe(0);
+    expect(utcMsToJstMinuteOfDay(Date.UTC(2026, 9, 19, 14, 59, 59, 999))).toBe(24 * 60 - 1);
+  });
+
+  it('分の端数（秒・ミリ秒）は切り捨てる', () => {
+    expect(utcMsToJstMinuteOfDay(Date.UTC(2026, 9, 22, 5, 20, 59, 999))).toBe(14 * 60 + 20);
+  });
+
+  it('1970年より前のミリ秒でも 0〜1439 に収まる', () => {
+    expect(utcMsToJstMinuteOfDay(-9 * 3_600_000)).toBe(0);
+    expect(utcMsToJstMinuteOfDay(-9 * 3_600_000 - 60_000)).toBe(24 * 60 - 1);
   });
 });
 

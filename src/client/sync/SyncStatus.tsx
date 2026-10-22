@@ -63,7 +63,10 @@ export function SyncOverview() {
   return null;
 }
 
-/** 画面の下に出す知らせ。 */
+/**
+ * 画面の下に出す知らせ。置き場所（画面の下の、左寄せの 1 つの列。右は ( + ) ボタンのために空ける）は、
+ * 使う側（BottomNotices）が決める。元に戻すの知らせ（form/UndoNotices）と、同じ列に並べるため。
+ */
 export function SyncNotices() {
   const discarded = useSyncState((state) => state.discarded);
   const authRequired = useSyncState((state) => state.authRequired);
@@ -71,7 +74,7 @@ export function SyncNotices() {
   const storageFailed = useSyncState((state) => state.storageFailed);
 
   return (
-    <div className={styles.notices}>
+    <>
       {discarded.count > 0 && (
         <p className={styles.notice} role="alert">
           <span>
@@ -114,6 +117,6 @@ export function SyncNotices() {
           この端末では、未送信の変更を保存できません（タブを閉じると失われます）
         </p>
       )}
-    </div>
+    </>
   );
 }
