@@ -81,7 +81,7 @@ function occurrenceOf(device: Device, entryId: string): Occurrence {
 }
 
 function change(device: Device, occurrence: Occurrence, values: FormValues) {
-  const changes = toChanges(values, occurrence);
+  const changes = toChanges(values, occurrence, null);
   const accepted = device.engine.changeEntry(
     { seriesId: occurrence.seriesId, occurrenceDate: occurrence.occurrenceDate, scope: 'all' },
     changes,
@@ -214,7 +214,7 @@ describe('開いた予定を変更する', () => {
     const occurrence = occurrenceOf(device, entryId);
 
     const changes = change(device, occurrence, {
-      ...editValues(occurrence, AT_1420),
+      ...editValues(occurrence, AT_1420, null),
       title: '歯医者（予約済み）',
     });
     await device.engine.settled();
@@ -239,7 +239,7 @@ describe('開いた予定を変更する', () => {
     const { device, entryId } = await deviceWithEvent();
     const occurrence = occurrenceOf(device, entryId);
 
-    const values = moveStart(editValues(occurrence, AT_1420), { startTime: '17:30' });
+    const values = moveStart(editValues(occurrence, AT_1420, null), { startTime: '17:30' });
     const changes = change(device, occurrence, values);
     await device.engine.settled();
 
@@ -254,7 +254,7 @@ describe('開いた予定を変更する', () => {
     const { device, entryId } = await deviceWithEvent();
     const occurrence = occurrenceOf(device, entryId);
 
-    const values = moveStart(editValues(occurrence, AT_1420), { startDate: '2026-10-27' });
+    const values = moveStart(editValues(occurrence, AT_1420, null), { startDate: '2026-10-27' });
     change(device, occurrence, values);
     await device.engine.settled();
 
@@ -271,7 +271,7 @@ describe('開いた予定を変更する', () => {
     const occurrence = occurrenceOf(device, entryId);
 
     const values = {
-      ...moveStart(editValues(occurrence, AT_1420), { startDate: '2026-10-27' }),
+      ...moveStart(editValues(occurrence, AT_1420, null), { startDate: '2026-10-27' }),
       endDate: '2026-10-29',
     };
     change(device, occurrence, values);
@@ -289,7 +289,7 @@ describe('開いた予定を変更する', () => {
     await device.engine.settled();
     const occurrence = occurrenceOf(device, entryId);
 
-    change(device, occurrence, { ...editValues(occurrence, AT_1420), workspaceId: 'work' });
+    change(device, occurrence, { ...editValues(occurrence, AT_1420, null), workspaceId: 'work' });
     await device.engine.settled();
 
     expect((await readAllRows(testDatabase.db)).entries.get(entryId)?.workspaceId).toBe('work');
@@ -299,7 +299,7 @@ describe('開いた予定を変更する', () => {
     const { device, entryId } = await deviceWithEvent();
     const occurrence = occurrenceOf(device, entryId);
 
-    const values = setAllDay(editValues(occurrence, AT_1420), true);
+    const values = setAllDay(editValues(occurrence, AT_1420, null), true);
     expect(validateForm(values)).toEqual({});
     change(device, occurrence, values);
     await device.engine.settled();
@@ -318,7 +318,7 @@ describe('開いた予定を変更する', () => {
     const occurrence = occurrenceOf(device, entryId);
 
     const changes = change(device, occurrence, {
-      ...editValues(occurrence, AT_1420),
+      ...editValues(occurrence, AT_1420, null),
       location: '',
     });
     await device.engine.settled();
@@ -338,7 +338,7 @@ describe('開いた予定を変更する', () => {
     const occurrence = occurrenceOf(device, entryId);
 
     const changes = change(device, occurrence, {
-      ...editValues(occurrence, AT_1420),
+      ...editValues(occurrence, AT_1420, null),
       title: '誕生日（祝）',
     });
     await device.engine.settled();
@@ -364,7 +364,7 @@ describe('終日の予定を時間指定に変える（通知の分は、意味�
     const { device, entryId } = await deviceWithAllDay(-360);
     const occurrence = occurrenceOf(device, entryId);
     const values = {
-      ...setAllDay(editValues(occurrence, AT_1420), false),
+      ...setAllDay(editValues(occurrence, AT_1420, null), false),
       notifyOffsetText: '-360',
     };
 
@@ -375,7 +375,7 @@ describe('終日の予定を時間指定に変える（通知の分は、意味�
     const { device, entryId } = await deviceWithAllDay(5);
     const occurrence = occurrenceOf(device, entryId);
     const values = {
-      ...setAllDay(editValues(occurrence, AT_1420), false),
+      ...setAllDay(editValues(occurrence, AT_1420, null), false),
       notifyOffsetText: '5',
     };
     expect(validateForm(values, occurrence)).toEqual({});
@@ -401,7 +401,7 @@ describe('終日の予定を時間指定に変える（通知の分は、意味�
   it('時間指定に変えて、通知の分を直さなければ、初期値（10 分前）になり、サーバーの行も、10 分前の時間指定になる', async () => {
     const { device, entryId } = await deviceWithAllDay(-360);
     const occurrence = occurrenceOf(device, entryId);
-    const values = setAllDay(editValues(occurrence, AT_1420), false);
+    const values = setAllDay(editValues(occurrence, AT_1420, null), false);
     expect(validateForm(values, occurrence)).toEqual({});
 
     change(device, occurrence, values);

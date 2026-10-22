@@ -1,6 +1,7 @@
 import type { Occurrence } from '../../shared/recurrence';
-import type { Entry } from '../../shared/schema';
+import type { Entry, Rrule } from '../../shared/schema';
 import { DEFAULT_ALL_DAY_NOTIFY_MIN, DEFAULT_TIMED_NOTIFY_MIN } from './notify';
+import { NO_REPEAT, repeatFieldsOf, type RepeatFields } from './repeat';
 import { defaultSchedule, toAllDay, toTimed, type Schedule } from './schedule';
 
 // フォームの入力値（設計書 11.4）。開いたときの初期値と、種類・終日を切り替えたときの変わり方を決める。
@@ -12,7 +13,7 @@ export type EntryKind = Entry['kind'];
  * 入力欄の値。文字の欄は、空文字で「空」を表す（保存するときに null にする。build.ts）。
  * workspaceId は、種類がタイムブロックのときも持つ（予定に切り替えたときの値）。保存するときに null にする。
  */
-export interface FormValues extends Schedule {
+export interface FormValues extends Schedule, RepeatFields {
   kind: EntryKind;
   title: string;
   workspaceId: string | null;
@@ -63,6 +64,7 @@ export function createValues({
     title: '',
     ...schedule,
     workspaceId,
+    ...NO_REPEAT,
     ...defaultNotify(kind, schedule.allDay),
     location: '',
     url: '',
@@ -73,8 +75,10 @@ export function createValues({
 /**
  * 開いた回の内容を、入力値にする。終日の予定の時刻の欄は、時間指定に切り替えたときの値として、
  * 新しく作るときと同じ初期値（今日の次の正時から 1 時間）を入れる。
+ * 繰り返しの欄には、系列の行のルール（rrule）を出す。回（Occurrence）はルールを持たないので、呼び出し側が、
+ * 同期のエンジンの行から seriesId で系列の行を引いて渡す。例外の回も、系列のルール（例外の行はルールを持たない）。
  */
-export function editValues(occurrence: Occurrence, nowMs: number): FormValues {
+export function editValues(occurrence: Occurrence, nowMs: number, rrule: Rrule | null): FormValues {
   const fallback = defaultSchedule(nowMs);
   return {
     kind: occurrence.kind,
@@ -85,6 +89,7 @@ export function editValues(occurrence: Occurrence, nowMs: number): FormValues {
     endDate: occurrence.endDate,
     endTime: occurrence.endTime ?? fallback.endTime,
     workspaceId: occurrence.workspaceId,
+    ...repeatFieldsOf(rrule),
     notifyEnabled: occurrence.notifyEnabled,
     notifyOffsetText: String(occurrence.notifyOffsetMin),
     location: occurrence.location ?? '',

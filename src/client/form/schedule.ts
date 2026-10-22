@@ -158,7 +158,7 @@ export function toTimed<T extends Schedule>(schedule: T): T {
   return { ...timed, endDate: moved.date, endTime: moved.time };
 }
 
-const DATE_RANGE_HINT = '1900〜2199 年';
+export const DATE_RANGE_HINT = '1900〜2199 年';
 
 /**
  * 開始・終了のエラー（日本語）。なければ空のオブジェクト。

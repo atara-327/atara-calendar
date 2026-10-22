@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeOccurrence } from '../../../test/helpers/entries';
-import { entryDraftInputSchema } from '../../shared/schema';
+import type { Occurrence } from '../../shared/recurrence';
+import { entryDraftInputSchema, type Rrule } from '../../shared/schema';
 import { toChanges, toDraft } from './build';
 import { createValues, editValues, setAllDay, type FormValues } from './values';
 
@@ -101,8 +102,44 @@ describe('新しく作るときの下書き', () => {
     expect(entryDraftInputSchema.safeParse(draft).success).toBe(false);
   });
 
-  it('繰り返しのルールは付けない（フォームにまだない）', () => {
+  it('繰り返さないなら、rrule は null', () => {
     expect(toDraft(newEvent()).rrule).toBeNull();
+  });
+
+  describe('繰り返し（RP-1・RP-6）', () => {
+    it.each<[Exclude<FormValues['repeat'], 'none' | 'weekly'>]>([
+      ['daily'],
+      ['monthly'],
+      ['yearly'],
+      ['weekday'],
+      ['holiday'],
+    ])('%s: 種類だけの rrule が入り、サーバーの入力の検証を通る', (repeat) => {
+      const draft = toDraft(newEvent({ repeat }));
+
+      expect(draft.rrule).toEqual({ freq: repeat });
+      expect(entryDraftInputSchema.safeParse(draft).success).toBe(true);
+    });
+
+    it('毎週: 選んだ曜日が、昇順で入る', () => {
+      const draft = toDraft(newEvent({ repeat: 'weekly', repeatDays: [5, 1, 3] }));
+
+      expect(draft.rrule).toEqual({ freq: 'weekly', days: [1, 3, 5] });
+      expect(entryDraftInputSchema.safeParse(draft).success).toBe(true);
+    });
+
+    it('毎週で、曜日を選んでいなければ、開始日（木曜）の曜日が入る', () => {
+      expect(toDraft(newEvent({ repeat: 'weekly' })).rrule).toEqual({
+        freq: 'weekly',
+        days: [4],
+      });
+    });
+
+    it('タイムブロックにも、ルールが付く（RP-6）', () => {
+      const draft = toDraft(newEvent({ kind: 'block', repeat: 'weekday' }));
+
+      expect(draft).toMatchObject({ kind: 'block', workspaceId: null, rrule: { freq: 'weekday' } });
+      expect(entryDraftInputSchema.safeParse(draft).success).toBe(true);
+    });
   });
 });
 
@@ -121,50 +158,50 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     });
 
   function edit(overrides: Partial<FormValues>): FormValues {
-    return { ...editValues(original(), AT_1420), ...overrides };
+    return { ...editValues(original(), AT_1420, null), ...overrides };
   }
 
   it('何も変えていなければ、空（キーがない = 変えていない）', () => {
-    expect(toChanges(edit({}), original())).toEqual({});
+    expect(toChanges(edit({}), original(), null)).toEqual({});
   });
 
   it('タイトルだけ変えたら、タイトルだけが入る', () => {
-    expect(toChanges(edit({ title: '歯医者（予約済み）' }), original())).toEqual({
+    expect(toChanges(edit({ title: '歯医者（予約済み）' }), original(), null)).toEqual({
       title: '歯医者（予約済み）',
     });
   });
 
   it('時刻だけ変えたら、変えた時刻だけが入る', () => {
-    expect(toChanges(edit({ endTime: '17:00' }), original())).toEqual({ endTime: '17:00' });
+    expect(toChanges(edit({ endTime: '17:00' }), original(), null)).toEqual({ endTime: '17:00' });
   });
 
   it('開始の時刻と終了の時刻を、一緒に動かしたら、両方が入る', () => {
-    expect(toChanges(edit({ startTime: '16:00', endTime: '17:00' }), original())).toEqual({
+    expect(toChanges(edit({ startTime: '16:00', endTime: '17:00' }), original(), null)).toEqual({
       startTime: '16:00',
       endTime: '17:00',
     });
   });
 
   it('開始の日付を変えたら、終了の日付も入る（同じ長さのままでも）。開始だけ渡して、サーバーに終了をずらさせない', () => {
-    expect(toChanges(edit({ startDate: '2026-10-25', endDate: '2026-10-25' }), original())).toEqual(
-      { startDate: '2026-10-25', endDate: '2026-10-25' },
-    );
+    expect(
+      toChanges(edit({ startDate: '2026-10-25', endDate: '2026-10-25' }), original(), null),
+    ).toEqual({ startDate: '2026-10-25', endDate: '2026-10-25' });
   });
 
   it('開始の日付を変えて、終了を別の長さに直したときも、直した終了の日付が入る', () => {
-    expect(toChanges(edit({ startDate: '2026-10-25', endDate: '2026-10-27' }), original())).toEqual(
-      { startDate: '2026-10-25', endDate: '2026-10-27' },
-    );
+    expect(
+      toChanges(edit({ startDate: '2026-10-25', endDate: '2026-10-27' }), original(), null),
+    ).toEqual({ startDate: '2026-10-25', endDate: '2026-10-27' });
   });
 
   it('終了の日付だけ変えたら、終了の日付だけが入る', () => {
-    expect(toChanges(edit({ endDate: '2026-10-23' }), original())).toEqual({
+    expect(toChanges(edit({ endDate: '2026-10-23' }), original(), null)).toEqual({
       endDate: '2026-10-23',
     });
   });
 
   it('時間指定を終日にしたら、終日と、時刻の null が入る（時刻は消える）', () => {
-    expect(toChanges(setAllDay(edit({}), true), original())).toEqual({
+    expect(toChanges(setAllDay(edit({}), true), original(), null)).toEqual({
       allDay: true,
       startTime: null,
       endTime: null,
@@ -174,9 +211,9 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
 
   it('終日を時間指定にしたら、終日でなくなることと、時刻が入る', () => {
     const allDayOriginal = makeOccurrence({ allDay: true, notifyOffsetMin: -360 });
-    const values = setAllDay(editValues(allDayOriginal, AT_1420), false);
+    const values = setAllDay(editValues(allDayOriginal, AT_1420, null), false);
 
-    expect(toChanges(values, allDayOriginal)).toEqual({
+    expect(toChanges(values, allDayOriginal, null)).toEqual({
       allDay: false,
       startTime: '15:00',
       endTime: '16:00',
@@ -185,27 +222,27 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
   });
 
   it('通知のタイミングの文字は、整数にして入れる', () => {
-    expect(toChanges(edit({ notifyOffsetText: '45' }), original())).toEqual({
+    expect(toChanges(edit({ notifyOffsetText: '45' }), original(), null)).toEqual({
       notifyOffsetMin: 45,
     });
   });
 
   it('API から入れた、当日の朝 6 時でない終日の予定は、ほかの項目だけを変えても、通知のタイミングを書き換えない', () => {
     const allDayOriginal = makeOccurrence({ allDay: true, notifyOffsetMin: -480 });
-    const values = { ...editValues(allDayOriginal, AT_1420), title: '誕生日' };
+    const values = { ...editValues(allDayOriginal, AT_1420, null), title: '誕生日' };
 
-    expect(toChanges(values, allDayOriginal)).toEqual({ title: '誕生日' });
+    expect(toChanges(values, allDayOriginal, null)).toEqual({ title: '誕生日' });
   });
 
   it('終日を切り替えたときは、通知の分も、元と同じ数でも入る（分の意味が違うため）', () => {
     // 終日の 5（前日 23:55）を、時間指定の 5（開始の 5 分前）にする。数は同じだが、意味が変わる。
     const allDayOriginal = makeOccurrence({ allDay: true, notifyOffsetMin: 5 });
     const values = {
-      ...setAllDay(editValues(allDayOriginal, AT_1420), false),
+      ...setAllDay(editValues(allDayOriginal, AT_1420, null), false),
       notifyOffsetText: '5',
     };
 
-    expect(toChanges(values, allDayOriginal)).toEqual({
+    expect(toChanges(values, allDayOriginal, null)).toEqual({
       allDay: false,
       startTime: '15:00',
       endTime: '16:00',
@@ -221,7 +258,9 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
       notifyOffsetMin: -360,
     });
 
-    expect(toChanges(setAllDay(editValues(timedOriginal, AT_1420), true), timedOriginal)).toEqual({
+    expect(
+      toChanges(setAllDay(editValues(timedOriginal, AT_1420, null), true), timedOriginal, null),
+    ).toEqual({
       allDay: true,
       startTime: null,
       endTime: null,
@@ -231,7 +270,11 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
 
   it('場所・URL・メモを入力したら入り、空にしたら null（空にした）になる', () => {
     expect(
-      toChanges(edit({ location: '渋谷', url: 'https://example.com', memo: 'メモ' }), original()),
+      toChanges(
+        edit({ location: '渋谷', url: 'https://example.com', memo: 'メモ' }),
+        original(),
+        null,
+      ),
     ).toEqual({
       location: '渋谷',
       url: 'https://example.com',
@@ -240,7 +283,11 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
 
     const filled = makeOccurrence({ location: '渋谷', url: 'https://example.com', memo: 'メモ' });
     expect(
-      toChanges({ ...editValues(filled, AT_1420), location: '', url: '', memo: '' }, filled),
+      toChanges(
+        { ...editValues(filled, AT_1420, null), location: '', url: '', memo: '' },
+        filled,
+        null,
+      ),
     ).toEqual({ location: null, url: null, memo: null });
   });
 
@@ -248,9 +295,13 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     // サーバーの入力の検証は、場所・メモの空文字を通す。URL は通さないが、読み込みの確認は構造だけなので、行にはありうる。
     const emptyStrings = makeOccurrence({ location: '', url: '', memo: '' });
 
-    expect(toChanges(editValues(emptyStrings, AT_1420), emptyStrings)).toEqual({});
+    expect(toChanges(editValues(emptyStrings, AT_1420, null), emptyStrings, null)).toEqual({});
     expect(
-      toChanges({ ...editValues(emptyStrings, AT_1420), title: '題名だけ' }, emptyStrings),
+      toChanges(
+        { ...editValues(emptyStrings, AT_1420, null), title: '題名だけ' },
+        emptyStrings,
+        null,
+      ),
     ).toEqual({ title: '題名だけ' });
   });
 
@@ -258,12 +309,18 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     const emptyStrings = makeOccurrence({ location: '' });
 
     expect(
-      toChanges({ ...editValues(emptyStrings, AT_1420), location: '渋谷' }, emptyStrings),
+      toChanges(
+        { ...editValues(emptyStrings, AT_1420, null), location: '渋谷' },
+        emptyStrings,
+        null,
+      ),
     ).toEqual({ location: '渋谷' });
     const filled = makeOccurrence({ location: '渋谷' });
-    expect(toChanges({ ...editValues(filled, AT_1420), location: '' }, filled)).toEqual({
-      location: null,
-    });
+    expect(toChanges({ ...editValues(filled, AT_1420, null), location: '' }, filled, null)).toEqual(
+      {
+        location: null,
+      },
+    );
   });
 
   it('何も変えずに保存したときは、何も送らない（開いた回が、どんな値でも、changes が空）', () => {
@@ -275,20 +332,22 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     ];
 
     for (const occurrence of occurrences) {
-      expect(toChanges(editValues(occurrence, AT_1420), occurrence)).toEqual({});
+      expect(toChanges(editValues(occurrence, AT_1420, null), occurrence, null)).toEqual({});
     }
   });
 
   it('場所が空のままなら、変えていないことになる（元が null で、入力欄が空文字）', () => {
-    expect(toChanges(edit({ location: '' }), original())).toEqual({});
+    expect(toChanges(edit({ location: '' }), original(), null)).toEqual({});
   });
 
   it('ワークスペースを変えたら、ワークスペースだけが入る', () => {
-    expect(toChanges(edit({ workspaceId: 'w2' }), original())).toEqual({ workspaceId: 'w2' });
+    expect(toChanges(edit({ workspaceId: 'w2' }), original(), null)).toEqual({ workspaceId: 'w2' });
   });
 
   it('通知の ON/OFF とタイミングを変えたら、それが入る', () => {
-    expect(toChanges(edit({ notifyEnabled: false, notifyOffsetText: '60' }), original())).toEqual({
+    expect(
+      toChanges(edit({ notifyEnabled: false, notifyOffsetText: '60' }), original(), null),
+    ).toEqual({
       notifyEnabled: false,
       notifyOffsetMin: 60,
     });
@@ -304,15 +363,81 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
       notifyEnabled: false,
     });
 
-    expect(toChanges({ ...editValues(block, AT_1420), title: '仕事' }, block)).toEqual({
+    expect(toChanges({ ...editValues(block, AT_1420, null), title: '仕事' }, block, null)).toEqual({
       title: '仕事',
     });
   });
 
   it('kind と繰り返しのルールは、入らない（作成後に変えられない・フォームにまだない）', () => {
-    const changes = toChanges(edit({ title: '別の題名', endTime: '17:00' }), original());
+    const changes = toChanges(edit({ title: '別の題名', endTime: '17:00' }), original(), null);
 
     expect(changes).not.toHaveProperty('kind');
     expect(changes).not.toHaveProperty('rrule');
+  });
+});
+
+describe('変更の中身: 繰り返しのルール（設計書 4.5）', () => {
+  const weeklyOriginal = (): Occurrence =>
+    makeOccurrence({
+      allDay: false,
+      startDate: '2026-10-21',
+      startTime: '15:00',
+      endTime: '16:00',
+      rrule: { freq: 'weekly', days: [3, 5] },
+    });
+  const weeklyRrule: Rrule = { freq: 'weekly', days: [3, 5] };
+
+  it('ルールを変えていなければ、rrule は入らない（開いた回が、どんな値でも）', () => {
+    const occurrence = weeklyOriginal();
+
+    expect(
+      toChanges(editValues(occurrence, AT_1420, weeklyRrule), occurrence, weeklyRrule),
+    ).toEqual({});
+  });
+
+  it('曜日の並びだけが違うルールは、変えたことにしない（rrule は入らない）', () => {
+    const occurrence = weeklyOriginal();
+    const unordered: Rrule = { freq: 'weekly', days: [5, 3] };
+
+    expect(toChanges(editValues(occurrence, AT_1420, unordered), occurrence, weeklyRrule)).toEqual(
+      {},
+    );
+  });
+
+  it('系列のルールと別の曜日にしたら、新しいルールが入る（昇順）', () => {
+    const occurrence = weeklyOriginal();
+    const values = { ...editValues(occurrence, AT_1420, weeklyRrule), repeatDays: [6, 1] };
+
+    expect(toChanges(values, occurrence, weeklyRrule)).toEqual({
+      rrule: { freq: 'weekly', days: [1, 6] },
+    });
+  });
+
+  it('毎週を毎日に変えたら、新しいルールが入る', () => {
+    const occurrence = weeklyOriginal();
+    const values = { ...editValues(occurrence, AT_1420, weeklyRrule), repeat: 'daily' as const };
+
+    expect(toChanges(values, occurrence, weeklyRrule)).toEqual({ rrule: { freq: 'daily' } });
+  });
+
+  it('繰り返さない予定に、ルールを付けたら、rrule が入る', () => {
+    const occurrence = makeOccurrence({ allDay: false, startTime: '15:00', endTime: '16:00' });
+    const values = { ...editValues(occurrence, AT_1420, null), repeat: 'monthly' as const };
+
+    expect(toChanges(values, occurrence, null)).toEqual({ rrule: { freq: 'monthly' } });
+  });
+
+  it('ルールをなくしたら、null（ルールをなくした）が入る', () => {
+    const occurrence = weeklyOriginal();
+    const values = { ...editValues(occurrence, AT_1420, weeklyRrule), repeat: 'none' as const };
+
+    expect(toChanges(values, occurrence, weeklyRrule)).toEqual({ rrule: null });
+  });
+
+  it('ほかの項目だけ変えたときは、ルールを入れない（開いてから送るまでに、別の端末が変えたルールを、上書きしない）', () => {
+    const occurrence = weeklyOriginal();
+    const values = { ...editValues(occurrence, AT_1420, weeklyRrule), title: '英会話' };
+
+    expect(toChanges(values, occurrence, weeklyRrule)).toEqual({ title: '英会話' });
   });
 });

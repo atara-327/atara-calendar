@@ -83,6 +83,12 @@ export function fakeResponse(status: number, body: unknown = null, type = 'basic
 export class WorkerNetwork {
   online = true;
   readonly calls: RecordedCall[] = [];
+  /**
+   * Worker が返した、書き込み（PUT・PATCH・DELETE）の応答。依頼が、書かれたか（200 の applied: true）、
+   * 200 で捨てられたか（applied: false）、4xx にされたかを、テストが確かめる。端末は、捨てられた依頼も、
+   * 4xx 以外は知らせない（設計書 6.2）ので、行を見比べるだけでは、捨てられたことに気づけない。
+   */
+  readonly writeResponses: { status: number; body: unknown }[] = [];
   /** 同時に実行中だった書き込み・読み込みの最大数。「同時に 1 つだけ」を確かめるため。 */
   maxConcurrentWrites = 0;
   maxConcurrentReads = 0;
@@ -136,6 +142,15 @@ export class WorkerNetwork {
         },
         env,
       );
+      if (!isRead) {
+        this.writeResponses.push({
+          status: response.status,
+          body: await response
+            .clone()
+            .json()
+            .catch(() => null),
+        });
+      }
       if (!isRead && this.lostResponses > 0) {
         this.lostResponses -= 1;
         throw new TypeError('Failed to fetch');

@@ -102,20 +102,14 @@
 .closeButton:focus-visible,
 .saveButton:focus-visible,
 .deleteButton:focus-visible,
+.backButton:focus-visible,
+.deleteSubmit:focus-visible,
 .input:focus-visible,
 .select:focus-visible,
 .link:focus-visible,
 .check input:focus-visible {
   outline: 2px solid var(--color-today);
   outline-offset: 1px;
-}
-
-/* 繰り返しの予定を、変更できない形で開いたとき、欄をまとめて無効にする。fieldset の既定の枠・余白を外す。 */
-.fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
 }
 
 /*
@@ -219,6 +213,77 @@
   width: 5.5em;
 }
 
+/*
+ * 繰り返しの欄の、毎週の曜日（日〜土）のトグル。チェックボックスを、丸いボタンの見た目にする。
+ * 7 つが 1 行に収まるよう、幅を分け合い、最大 40px にする（スマホの幅でも、折り返さない）。
+ */
+.days {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.day {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 40px;
+}
+
+.day input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.day span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-grid);
+  border-radius: 50%;
+  font-size: 14px;
+}
+
+.day input:checked + span {
+  border-color: var(--color-today);
+  background-color: var(--color-today);
+  color: var(--color-bg);
+  font-weight: 700;
+}
+
+.day input:focus-visible + span {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+/* 繰り返しの説明と、最初の回の知らせ。 */
+.hints {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hint,
+.firstNote {
+  margin: 0;
+  font-size: 13px;
+}
+
+.hint {
+  color: var(--color-observance);
+}
+
 /* 通知のタイミング。ON のときは、そのまま。OFF のときは、薄く出す（編集はできる）。 */
 .timing {
   display: inline-flex;
@@ -251,14 +316,6 @@
 
 .wide.error {
   margin: 0;
-}
-
-.notice {
-  margin: 0;
-  padding: 8px 12px;
-  border-left: 3px solid var(--color-observance);
-  background-color: var(--color-grid);
-  font-size: 14px;
 }
 
 /* 予定・タイムブロックの切り替え（ラジオボタンを、つながったボタンの見た目にする）。 */
@@ -320,6 +377,115 @@
 
 .deleteButton:hover {
   background-color: rgb(242 139 130 / 12%);
+}
+
+/*
+ * 変更・削除の範囲を聞く段（ScopeStep）。入力の段と差し替えて出す。
+ * 範囲のラジオボタンは、1 つが、行全体（タップしやすい高さ）。
+ */
+.scopeStep {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 16px 20px;
+}
+
+.scopeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.scopeLegend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-weight: 700;
+}
+
+.scopeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-grid);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scopeOption:has(input:checked) {
+  border-color: var(--color-today);
+  background-color: rgb(138 180 248 / 12%);
+}
+
+.scopeOption:has(input:focus-visible) {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+.scopeOption input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+
+.scopeText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scopeLabel {
+  font-weight: 700;
+}
+
+.scopeHint {
+  color: var(--color-observance);
+  font-size: 13px;
+}
+
+.scopeOutcome {
+  font-size: 13px;
+}
+
+.scopeButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.backButton {
+  padding: 8px 24px;
+  border: 1px solid var(--color-grid);
+  border-radius: 20px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.backButton:hover {
+  background-color: var(--color-grid);
+}
+
+.deleteSubmit {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 20px;
+  background-color: var(--color-holiday);
+  color: var(--color-bg);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deleteSubmit:hover {
+  filter: brightness(1.1);
 }
 
 .visuallyHidden {

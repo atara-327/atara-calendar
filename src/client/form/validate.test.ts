@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { dayOfWeek } from '../../shared/date';
 import { createValues, setAllDay, type FormValues } from './values';
 import { validateForm } from './validate';
 
@@ -101,7 +102,7 @@ describe('保存の前の確認', () => {
 
   describe('API から入った、開始より後の通知（時間指定で、通知の分が負の値）', () => {
     // 時間指定の予定の通知は、画面では 0〜10080 だけ。API は、終日のために、-1440 から通す。
-    const original = { notifyOffsetMin: -30, allDay: false };
+    const original = { notifyOffsetMin: -30, allDay: false, recurring: false };
 
     it('開いたときの値から変えていなければ、題名だけ直して保存できる（変えていない項目は送らない）', () => {
       expect(validateForm(valid({ notifyOffsetText: '-30' }), original)).toEqual({});
@@ -122,7 +123,7 @@ describe('保存の前の確認', () => {
 
     it('終日だった予定を時間指定にしたら、元の分と同じ負の値でも誤り（終日と時間指定では、同じ数でも意味が違う）', () => {
       // 終日の -360 は「当日の朝 6 時」、時間指定の -360 は「開始の 6 時間後」。
-      const allDayOriginal = { notifyOffsetMin: -360, allDay: true };
+      const allDayOriginal = { notifyOffsetMin: -360, allDay: true, recurring: false };
       const toTimed = setAllDay(setAllDay(valid(), true), false);
 
       expect(
@@ -137,7 +138,7 @@ describe('保存の前の確認', () => {
     });
 
     it('終日だった予定を時間指定にして、0〜10080 の分を入れたら通る（元と同じ数でも）', () => {
-      const allDayOriginal = { notifyOffsetMin: 5, allDay: true };
+      const allDayOriginal = { notifyOffsetMin: 5, allDay: true, recurring: false };
       const toTimed = setAllDay(setAllDay(valid(), true), false);
 
       expect(validateForm({ ...toTimed, notifyOffsetText: '5' }, allDayOriginal)).toEqual({});
@@ -145,7 +146,7 @@ describe('保存の前の確認', () => {
     });
 
     it('時間指定だった予定を終日にしたら、通知の分は確かめない（固定の値で、入力欄がない）', () => {
-      const timedOriginal = { notifyOffsetMin: -30, allDay: false };
+      const timedOriginal = { notifyOffsetMin: -30, allDay: false, recurring: false };
 
       expect(validateForm(setAllDay(valid(), true), timedOriginal)).toEqual({});
     });
@@ -212,6 +213,103 @@ describe('保存の前の確認', () => {
 
       expect(validateForm(valid({ url: url(2048) }))).toEqual({});
       expect(validateForm(valid({ url: url(2049) })).url).toBeDefined();
+    });
+  });
+
+  describe('繰り返し', () => {
+    it('どのルールも、正しい入力なら、誤りがない（タイムブロックも。RP-6）', () => {
+      for (const repeat of [
+        'daily',
+        'weekly',
+        'monthly',
+        'yearly',
+        'weekday',
+        'holiday',
+      ] as const) {
+        expect(validateForm(valid({ repeat }))).toEqual({});
+        expect(validateForm(valid({ kind: 'block', workspaceId: null, repeat }))).toEqual({});
+      }
+    });
+
+    it('毎週で、曜日が 1 つも選ばれていなければ、繰り返しの誤り', () => {
+      const errors = validateForm(valid({ repeat: 'weekly', repeatDays: [] }));
+
+      expect(errors.repeat).toBe('繰り返す曜日を 1 つ以上選んでください');
+      expect(Object.keys(errors)).toEqual(['repeat']);
+    });
+
+    it('毎週で、曜日を選んでいなければ（開始日の曜日になる）、誤りではない', () => {
+      expect(validateForm(valid({ repeat: 'weekly', repeatDays: null }))).toEqual({});
+    });
+
+    it('毎週で曜日を選んでいなくても、開始日が空のとき（日付を打っている途中）は、開始日の誤りだけを出す', () => {
+      const errors = validateForm(valid({ repeat: 'weekly', repeatDays: null, startDate: '' }));
+
+      expect(Object.keys(errors)).toEqual(['startDate']);
+    });
+
+    it('曜日を選んでいない状態でも、ほかのルールなら、誤りではない（曜日は使わない）', () => {
+      expect(validateForm(valid({ repeat: 'daily', repeatDays: [] }))).toEqual({});
+    });
+
+    it('開始日がルールに合わなくても、ずれた後の日付が範囲内なら、誤りではない（毎週の水・金を月曜から）', () => {
+      const values = valid({
+        repeat: 'weekly',
+        repeatDays: [3, 5],
+        startDate: '2026-10-19',
+        endDate: '2026-10-19',
+      });
+
+      expect(validateForm(values)).toEqual({});
+    });
+
+    it('開始日から、ルールに合う最初の日が、2199 年の外にずれるときは、繰り返しの誤り（サーバーが 400 にする）', () => {
+      // 2199-12-31（木）から毎週の月曜は、2200-01-03 へずれる。
+      const weekly = valid({
+        repeat: 'weekly',
+        repeatDays: [1],
+        startDate: '2199-12-31',
+        startTime: '10:00',
+        endDate: '2199-12-31',
+        endTime: '11:00',
+      });
+      // 年末年始の平日は、ずらす途中で、日付の計算が対応外の年になる。
+      const weekday = valid({
+        repeat: 'weekday',
+        startDate: '2199-12-31',
+        startTime: '10:00',
+        endDate: '2199-12-31',
+        endTime: '11:00',
+      });
+
+      expect(validateForm(weekly).repeat).toMatch(/1900〜2199 年の外/);
+      expect(validateForm(weekday).repeat).toMatch(/1900〜2199 年の外/);
+    });
+
+    it('2199 年の中なら、同じルールでも誤りではない（2199-12-28 の毎週の月曜は、そのまま）', () => {
+      const values = valid({
+        repeat: 'weekly',
+        repeatDays: [dayOfWeek('2199-12-28')],
+        startDate: '2199-12-28',
+        startTime: '10:00',
+        endDate: '2199-12-28',
+        endTime: '11:00',
+      });
+
+      expect(validateForm(values)).toEqual({});
+    });
+
+    it('すでに繰り返している予定は、ここでは確かめない（範囲ごとの確認は、範囲を選ぶ前に行う）', () => {
+      const values = valid({
+        repeat: 'weekday',
+        startDate: '2199-12-31',
+        startTime: '10:00',
+        endDate: '2199-12-31',
+        endTime: '11:00',
+      });
+      const original = { notifyOffsetMin: 10, allDay: false, recurring: true };
+
+      expect(validateForm(values, original)).toEqual({});
     });
   });
 

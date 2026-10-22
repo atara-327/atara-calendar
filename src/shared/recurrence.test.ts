@@ -3,6 +3,7 @@ import { addDays, dateToDays, daysToDate } from './date';
 import {
   expandOccurrences,
   isOccurrenceDate,
+  isSameRrule,
   lastCoveredDate,
   normalizeStart,
   type Occurrence,
@@ -323,6 +324,27 @@ describe('4.4: 開始日の正規化', () => {
         { startDate: '2026-10-19', endDate: '2026-10-19' },
       ),
     ).toThrow(RangeError);
+  });
+});
+
+describe('ルールを変えたかの判定（4.5）', () => {
+  it('曜日の並びだけが違う毎週は、同じルール', () => {
+    expect(isSameRrule({ freq: 'weekly', days: [5, 3] }, { freq: 'weekly', days: [3, 5] })).toBe(
+      true,
+    );
+  });
+
+  it('曜日の組が違う毎週は、違うルール', () => {
+    expect(isSameRrule({ freq: 'weekly', days: [3] }, { freq: 'weekly', days: [3, 5] })).toBe(
+      false,
+    );
+  });
+
+  it('種類が違えば違うルール。ルールなし（null）は、ルールなしとだけ同じ', () => {
+    expect(isSameRrule({ freq: 'daily' }, { freq: 'weekday' })).toBe(false);
+    expect(isSameRrule(null, null)).toBe(true);
+    expect(isSameRrule(null, { freq: 'daily' })).toBe(false);
+    expect(isSameRrule({ freq: 'daily' }, null)).toBe(false);
   });
 });
 

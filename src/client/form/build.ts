@@ -1,6 +1,7 @@
-import type { Occurrence } from '../../shared/recurrence';
-import type { EntryChanges, EntryDraft } from '../../shared/schema';
+import { isSameRrule, type Occurrence } from '../../shared/recurrence';
+import type { EntryChanges, EntryDraft, Rrule } from '../../shared/schema';
 import { parseNotifyOffset } from './notify';
+import { rruleOf } from './repeat';
 import type { FormValues } from './values';
 
 // 入力値（FormValues）から、保存する本文を作る（設計書 4.5。画面に依存しない）。
@@ -37,8 +38,7 @@ export function toDraft(values: FormValues): EntryDraft {
     location: orNull(values.location),
     url: orNull(values.url),
     memo: orNull(values.memo),
-    // 繰り返しの設定は、フォームにまだない（実装 #8 の後半）。
-    rrule: null,
+    rrule: rruleOf(values),
     notifyEnabled: values.notifyEnabled,
     // 整数でない文字は、確認（validate.ts）が止めている。ここで NaN にしておけば、確認を通さずに作っても、
     // サーバーの入力の検証（整数）で止まり、0 などの別の値で、黙って保存されない。
@@ -52,9 +52,17 @@ export function toDraft(values: FormValues): EntryDraft {
  * 終了日は、開始日を変えたときも入れる。開始日だけを渡すと、サーバーが、終了日を同じ日数だけずらして、
  * 1 回の長さを保つ（4.5）。フォームで終了を、開始から別の長さに直していたときに、その直しを失わないため。
  * 通知の分は、終日を切り替えたときも入れる（数が同じでも。意味が違うため）。
- * kind と繰り返しのルールは入れない（kind は作成後に変えられない。ルールはフォームにまだない）。
+ * 繰り返しのルールは、系列のルール（originalRrule。回はルールを持たないので、呼び出し側が渡す）と値が違うときだけ入れる。
+ * 曜日の並びだけの違いは、変えたことにしない（shared の isSameRrule。サーバーの「この予定のみ」の判定と同じ）。
+ * 変えていないルールを、毎回入れない。サーバーは、変えていないルールが一緒に渡されても受け付けるが、
+ * 送ると、開いてから送るまでの間に、別の端末がルールを変えていたとき、開いたときのルールで上書きしてしまう。
+ * kind は入れない（作成後に変えられない）。
  */
-export function toChanges(values: FormValues, original: Occurrence): EntryChanges {
+export function toChanges(
+  values: FormValues,
+  original: Occurrence,
+  originalRrule: Rrule | null,
+): EntryChanges {
   const draft = toDraft(values);
   const changes: EntryChanges = {};
   if (draft.title !== original.title) changes.title = draft.title;
@@ -65,6 +73,7 @@ export function toChanges(values: FormValues, original: Occurrence): EntryChange
   if (draft.startTime !== original.startTime) changes.startTime = draft.startTime;
   if (startDateChanged || draft.endDate !== original.endDate) changes.endDate = draft.endDate;
   if (draft.endTime !== original.endTime) changes.endTime = draft.endTime;
+  if (!isSameRrule(draft.rrule, originalRrule)) changes.rrule = draft.rrule;
   if (isTextChanged(original.location, values.location)) changes.location = draft.location;
   if (isTextChanged(original.url, values.url)) changes.url = draft.url;
   if (isTextChanged(original.memo, values.memo)) changes.memo = draft.memo;
