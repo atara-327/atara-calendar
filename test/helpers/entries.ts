@@ -1,3 +1,4 @@
+import { expandOccurrences, type Occurrence } from '../../src/shared/recurrence';
 import type { Entry, EntryDraft } from '../../src/shared/schema';
 
 /**
@@ -29,6 +30,17 @@ export function makeEntry(overrides: Partial<Entry> & Pick<Entry, 'id'>): Entry 
     deletedAt: null,
     ...overrides,
   };
+}
+
+/**
+ * テスト用の、展開した 1 回（makeEntry の行を、その期間で展開したもの）。繰り返さない行なら、その予定そのもの。
+ * 画面の「開いた回」（フォームの編集）のテストに使う。
+ */
+export function makeOccurrence(overrides: Partial<Entry> = {}): Occurrence {
+  const entry = makeEntry({ id: 'e1', ...overrides });
+  const [occurrence] = expandOccurrences([entry], entry.startDate, entry.endDate);
+  if (occurrence === undefined) throw new Error('回が展開されませんでした');
+  return occurrence;
 }
 
 /** テスト用の、新しく作るときの下書き。何も渡さないと、時間指定の 1 回きりの予定になる。 */
