@@ -119,6 +119,14 @@ describe('文字列の中の絵文字を見つける', () => {
     ]);
   });
 
+  it('Intl.Segmenter がないブラウザでは、絵文字を画像にせず、文字のまま返す（画面を止めない）', () => {
+    expect(splitEmoji('🎂誕生日', images('1f382'), null)).toEqual([
+      { kind: 'text', text: '🎂誕生日' },
+    ]);
+    expect(splitEmoji('歯医者', images('1f382'), null)).toEqual([{ kind: 'text', text: '歯医者' }]);
+    expect(splitEmoji('', images('1f382'), null)).toEqual([]);
+  });
+
   it('日本語だけの文字列は、そのまま 1 つの文字にする', () => {
     expect(splitEmoji('歯医者の予約', images('1f600'))).toEqual([
       { kind: 'text', text: '歯医者の予約' },
