@@ -183,6 +183,7 @@ export class WeekViewCache {
       startDate: occurrence.startDate,
       lastDate: lastCoveredDate(occurrence),
       startTime: occurrence.startTime,
+      occurrence,
     };
   }
 

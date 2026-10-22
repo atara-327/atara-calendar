@@ -1,4 +1,5 @@
 import { dateToDays, type DateStr } from '../../shared/date';
+import type { Occurrence } from '../../shared/recurrence';
 
 // 1 週間の行（7 マス）に、予定をどう並べるか（MV-6・MV-9。設計書 11.2）。画面に依存しない計算だけを置く。
 
@@ -17,6 +18,8 @@ export interface MonthEvent {
   lastDate: DateStr;
   /** 'HH:MM'。終日なら null。 */
   startTime: string | null;
+  /** 押したときに開くフォームが、その回の内容を知るため。並べ方（このファイルの計算）は使わない。 */
+  occurrence: Occurrence;
 }
 
 /** 横棒（複数日の予定と、終日の予定）。列は 0（日曜）〜6（土曜）で、endCol を含む。 */

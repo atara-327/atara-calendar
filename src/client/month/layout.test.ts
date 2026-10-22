@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { makeOccurrence } from '../../../test/helpers/entries';
 import { layoutWeek, type BarItem, type MonthEvent, type MoreItem, type TimedItem } from './layout';
 
 // 2026-10-18（日）〜 10-24（土）の週。列は 0（日）〜 6（土）。10-19 が月曜（列 1）。
 const WEEK = '2026-10-18';
 const SLOTS = 4;
+// 並べ方は、押したときに開く回（occurrence）を使わない。どの予定も、同じ回を持たせる。
+const OCCURRENCE = makeOccurrence();
 
 function timed(key: string, date: string, time: string): MonthEvent {
   return {
@@ -14,11 +17,21 @@ function timed(key: string, date: string, time: string): MonthEvent {
     startDate: date,
     lastDate: date,
     startTime: time,
+    occurrence: OCCURRENCE,
   };
 }
 
 function allDay(key: string, startDate: string, lastDate = startDate): MonthEvent {
-  return { key, title: key, color: '#039BE5', allDay: true, startDate, lastDate, startTime: null };
+  return {
+    key,
+    title: key,
+    color: '#039BE5',
+    allDay: true,
+    startDate,
+    lastDate,
+    startTime: null,
+    occurrence: OCCURRENCE,
+  };
 }
 
 function bars(items: ReturnType<typeof layoutWeek>): BarItem[] {
