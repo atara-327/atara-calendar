@@ -61,6 +61,23 @@ export function initialTopMinute({
   return firstItemStart ?? FALLBACK_TOP_MINUTE;
 }
 
+/** 最初の位置を置いたときの、日付と、最初の読み込みが終わっていたか。 */
+export interface PlacedState {
+  date: DateStr;
+  ready: boolean;
+}
+
+/**
+ * 最初の位置を、置く（決め直す）か。previous は、前に置いたときの状態で、まだ置いていなければ null。
+ * 置くのは、最初の描画と、日付が変わったとき（‹ ›・スワイプ・［今日］）と、同じ日のまま、最初の読み込みが
+ * 終わったとき（`/day/...` を直接開くと、読み込みの前は、データがないので、決まりどおりの位置を決められない）。
+ * 同じ日のまま、同期でデータが変わっても、置かない。見ている位置が、勝手に動いてしまうため。
+ */
+export function shouldPlace(previous: PlacedState | null, current: PlacedState): boolean {
+  if (previous === null || previous.date !== current.date) return true;
+  return !previous.ready && current.ready;
+}
+
 /**
  * 空いているところをタップしたときの、開始の時刻。タイムラインの上端からの距離（px）を、
  * 15 分単位に切り下げる。23:30 をタップしたら、23:30（1 時間の項目は、翌日の 0:30 まで。TB-6）。

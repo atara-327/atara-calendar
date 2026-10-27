@@ -23,7 +23,14 @@ import { dayItemsOf, dayNamesOf } from './dayItems';
 import styles from './DayView.module.css';
 import { layoutDay } from './layout';
 import { createSwipeTracker } from './swipe';
-import { PX_PER_MINUTE, addButtonStart, initialTopMinute, tapStartTime } from './timelineGeometry';
+import {
+  PX_PER_MINUTE,
+  addButtonStart,
+  initialTopMinute,
+  shouldPlace,
+  tapStartTime,
+  type PlacedState,
+} from './timelineGeometry';
 import { Timeline } from './Timeline';
 
 function selectReady(state: SyncState): boolean {
@@ -69,7 +76,7 @@ export function DayView({ date }: { date: DateStr }) {
   const hasNext = isDateInSupportedYears(nextDate);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const placedRef = useRef<{ date: DateStr; ready: boolean } | null>(null);
+  const placedRef = useRef<PlacedState | null>(null);
 
   // タイムラインの最初の項目の開始（上部の欄のものは数えない）。
   const firstItemStart = items.timeline.reduce<number | null>(
@@ -82,14 +89,13 @@ export function DayView({ date }: { date: DateStr }) {
   // 終わったときの 1 回だけ。読み込みの前は、データがないので、今日なら今の 1 時間前、他の日なら 8:00 に置き、
   // 読み込みが終わったとき、最初の項目の位置に置き直す。
   // 同じ日のまま、データが変わっても（同期）、動かさない。見ている位置が、勝手に動いてしまうため。
+  // 置くかどうかの判定は shouldPlace（timelineGeometry.ts）。
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     if (scroller === null) return;
-    const placed = placedRef.current;
-    const dateChanged = placed?.date !== date;
-    const becameReady = placed !== null && !dateChanged && ready && !placed.ready;
-    if (!dateChanged && !becameReady) return;
-    placedRef.current = { date, ready };
+    const current = { date, ready };
+    if (!shouldPlace(placedRef.current, current)) return;
+    placedRef.current = current;
     scroller.scrollTop = topPixelsFor(date, firstItemStart);
     // firstItemStart を依存に入れるのは、読み込みが終わったとき、その値で置き直すため
     // （上の判定で、同じ日のデータの変化では、何もしない）。

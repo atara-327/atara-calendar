@@ -6,6 +6,7 @@ import {
   addButtonStart,
   initialTopMinute,
   minutesToTime,
+  shouldPlace,
   tapStartTime,
 } from './timelineGeometry';
 
@@ -131,5 +132,48 @@ describe('( + ) ボタンの開始（日表示。設計書 11.3）', () => {
 
   it('時刻は、UTC ではなく日本時間で決める（UTC ではまだ 10-26 の 15:30 でも、日本時間は 0:30）', () => {
     expect(addButtonStart('2026-10-27', Date.UTC(2026, 9, 26, 15, 30)).time).toBe('01:00');
+  });
+});
+
+describe('最初の位置を、置く（決め直す）か', () => {
+  it('最初の描画では、置く（読み込みの前でも）', () => {
+    expect(shouldPlace(null, { date: '2026-11-03', ready: false })).toBe(true);
+    expect(shouldPlace(null, { date: '2026-11-03', ready: true })).toBe(true);
+  });
+
+  it('日付が変わったら、置く（‹ ›・スワイプ・［今日］）', () => {
+    expect(
+      shouldPlace({ date: '2026-11-03', ready: true }, { date: '2026-11-04', ready: true }),
+    ).toBe(true);
+  });
+
+  it('読み込みの前に日付が変わっても、置く', () => {
+    expect(
+      shouldPlace({ date: '2026-11-03', ready: false }, { date: '2026-11-04', ready: false }),
+    ).toBe(true);
+  });
+
+  it('同じ日のまま、最初の読み込みが終わったら（ready が false から true）、置く', () => {
+    expect(
+      shouldPlace({ date: '2026-11-03', ready: false }, { date: '2026-11-03', ready: true }),
+    ).toBe(true);
+  });
+
+  it('同じ日で、読み込みが終わったままなら（同期でデータが変わっただけ）、置かない', () => {
+    expect(
+      shouldPlace({ date: '2026-11-03', ready: true }, { date: '2026-11-03', ready: true }),
+    ).toBe(false);
+  });
+
+  it('同じ日で、まだ読み込みが終わっていないなら、置かない', () => {
+    expect(
+      shouldPlace({ date: '2026-11-03', ready: false }, { date: '2026-11-03', ready: false }),
+    ).toBe(false);
+  });
+
+  it('同じ日で、読み込みが終わった状態から、終わっていない状態に戻っても、置かない', () => {
+    expect(
+      shouldPlace({ date: '2026-11-03', ready: true }, { date: '2026-11-03', ready: false }),
+    ).toBe(false);
   });
 });
