@@ -170,7 +170,9 @@ export function DayView({ date }: { date: DateStr }) {
         }}
         onToday={goToToday}
       />
-      <BannerList items={items.banner} />
+      {/* key を日付にして、日を動いたら、作り直す。上部の欄のスクロール位置を、先頭に戻すため。
+          両方の日に欄があると、同じ DOM が使い回され、前の日のスクロール位置が残る。 */}
+      <BannerList key={date} items={items.banner} />
       <div className={styles.body}>
         <div ref={scrollerRef} className={styles.scroller} {...swipeHandlers}>
           <Timeline
