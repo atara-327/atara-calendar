@@ -2,7 +2,7 @@ import type { Entry } from '../../shared/schema';
 import type { StoredEntry } from '../db/rows';
 import { nextNotifyTimes } from './nextNotifyAt';
 
-// 保存したときに、どの行の next_notify_at を、いくつに更新するかを決める（設計書 9.1）。
+// 保存したときに、どの行の next_notify_at を、いくつに更新するかを決める（設計書 9.2）。
 // DB には触れない。読み込んだ今の行と、書く行から、書いたあとの状態を作って、計算を当てるだけ。
 
 /** next_notify_at を、nextNotifyAt にする行。editedAt は、更新の条件（store.ts の UPDATE）に使う。 */

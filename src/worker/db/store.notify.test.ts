@@ -73,7 +73,7 @@ function write(entries: Entry[]) {
   return applyWrite(db(), { entries }, { nowMs: NOW });
 }
 
-describe('next_notify_at（保存したときに、次に通知する時刻を計算して入れる。設計書 9.1）', () => {
+describe('next_notify_at（保存したときに、次に通知する時刻を計算して入れる。設計書 9.2）', () => {
   describe('書いた行の値', () => {
     it('NT-2: 時間指定の予定を書くと、開始の 10 分前が入る', async () => {
       await write([timed({ id: 'a' })]);
@@ -255,7 +255,7 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
     });
   });
 
-  describe('同じ batch で書く（設計書 9.1）', () => {
+  describe('同じ batch で書く（設計書 9.2）', () => {
     /** next_notify_at の UPDATE だけを、必ず失敗する文にする db。 */
     function failingNotifyUpdate(): Database {
       return {

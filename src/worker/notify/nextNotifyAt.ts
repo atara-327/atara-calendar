@@ -10,7 +10,7 @@ import {
 import { expandOccurrences, lastCoveredDate } from '../../shared/recurrence';
 import { INPUT_LIMITS, type Entry } from '../../shared/schema';
 
-// 次に通知する時刻（next_notify_at）の計算（設計書 9章）。純粋な関数だけで、DB には触れない。
+// 次に通知する時刻（next_notify_at）の計算（設計書 9.2）。純粋な関数だけで、DB には触れない。
 // 保存（db/store.ts）が、保存したときに呼ぶ。定期実行（実装 11b）も、通知を送った回の次を探すのに使う。
 
 const MS_PER_MINUTE = 60_000;
@@ -47,7 +47,7 @@ const LOOKBACK_DAYS = Math.ceil(-INPUT_LIMITS.notifyOffsetMin.min / MINUTES_PER_
 // 毎日の系列を、いきなり 9 年ぶん展開すると、CPU 時間（無料プランは 1 回 10ms。付録 A.2）を使うため。
 const FIRST_WINDOW_DAYS = 62;
 const NEXT_WINDOW_DAYS = 365;
-// 2/29 の毎年は、次の回が最大 8 年先になる（2096 年の次のうるう年は 2104 年。設計書 9.1）ので、9 年まで探す。
+// 2/29 の毎年は、次の回が最大 8 年先になる（2096 年の次のうるう年は 2104 年。設計書 9.2）ので、9 年まで探す。
 const SEARCH_YEARS = 9;
 
 /** 同じ月日の n 年後。その年にない日（2/29）は、月末にする。探す範囲の終わりを決めるだけなので、1 日のずれは気にしない。 */

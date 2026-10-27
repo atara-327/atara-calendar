@@ -6,7 +6,7 @@ import { readNextNotifyAt } from '../../../test/helpers/rows';
 import { jst } from '../../../test/helpers/time';
 import type { EntryDraft, Scope } from '../../shared/schema';
 
-// 保存したとき（PUT・PATCH・DELETE）に、next_notify_at が入ることを、API から確かめる（設計書 9.1）。
+// 保存したとき（PUT・PATCH・DELETE）に、next_notify_at が入ることを、API から確かめる（設計書 9.2）。
 // 計算そのものは nextNotifyAt.test.ts、書き込みの仕組みは db/store.notify.test.ts で確かめている。
 // ここでは、API が書く行（recurrence.ts・workspace.ts の結果）に、値が付くことを確かめる。
 
