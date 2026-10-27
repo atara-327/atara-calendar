@@ -11,7 +11,7 @@
   padding: 8px 8px 4px;
 }
 
-/* 1 行目。［月表示］・前の日・日付・次の日・［今日］。［今日］は右端（margin-left: auto）。 */
+/* 1 行目。≡・［月表示］・前の日・日付・次の日・［今日］。［今日］は右端（margin-left: auto）。 */
 .titleRow {
   display: flex;
   align-items: center;
@@ -28,7 +28,17 @@
   white-space: nowrap;
 }
 
-/* 幅 360px のスマホでは、「2026年10月19日（月）」が収まらないので、少し小さくする。 */
+/*
+ * 幅の狭い画面（約 640px 以下。月表示の MV-9 と同じ境目）では、年を省く（「10月19日（火）」）。
+ * ≡ が増えて、スマホの幅（412px）に、年まで収まらないため。display: none なので、読み上げからも外れる。
+ */
+@media (max-width: 640px) {
+  .titleYear {
+    display: none;
+  }
+}
+
+/* 幅 360px のスマホでは、年を省いても、17px の「10月19日（月）」は収まらないので、少し小さくする。 */
 @media (max-width: 380px) {
   .title {
     font-size: 15px;
