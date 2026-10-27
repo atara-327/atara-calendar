@@ -297,6 +297,23 @@ describe('送ったら、次の回の時刻に進める', () => {
     expect(await readNextNotifyAt(db())).toEqual({ s: jst('2026-10-28', '14:50') });
   });
 
+  it('先に next_notify_at を進めてから、送る（送る時点で、DB の値は、もう次の回になっている）', async () => {
+    await save([dailySeries()]);
+    const discord = fakeDiscord((call) =>
+      call === 1 ? new Response(null, { status: 500 }) : new Response(null, { status: 204 }),
+    );
+    const seenWhenSending: (number | null | undefined)[] = [];
+    const fetchFn: DiscordFetch = async (url, init) => {
+      seenWhenSending.push((await readNextNotifyAt(db()))['s']);
+      return discord.fetchFn(url, init);
+    };
+
+    await sendDueNotifications(envOf(), NOTIFY_AT, { fetchFn, sleep: discord.sleep });
+
+    // 1 回目の送信も、失敗した再送も、値は、すでに明日の回。
+    expect(seenWhenSending).toEqual([jst('2026-10-28', '14:50'), jst('2026-10-28', '14:50')]);
+  });
+
   it('送った次の分の実行では、同じ回を、もう送らない', async () => {
     await save([dailySeries()]);
     await run(NOTIFY_AT);
