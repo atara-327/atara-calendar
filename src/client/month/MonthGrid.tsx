@@ -1,12 +1,12 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLayoutEffect, useMemo, useState } from 'react';
 import type { DateStr } from '../../shared/date';
+import { createViewSelector } from '../stableRows';
 import { useSyncState } from '../sync/instance';
 import styles from './MonthView.module.css';
 import { MonthRow } from './MonthRow';
 import { loadScrollRows, saveScrollRows } from './scrollMemory';
 import { slotsFor } from './sizing';
-import { createViewSelector } from './stableRows';
 import { WeekViewCache } from './weekViewCache';
 import { WEEK_COUNT, scrollRowsForToday, weekOfRow } from './weeks';
 

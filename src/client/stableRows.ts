@@ -1,5 +1,5 @@
-import type { RowSet } from '../sync/replay';
-import type { SyncState } from '../sync/state';
+import type { RowSet } from './sync/replay';
+import type { SyncState } from './sync/state';
 
 function sameRowsInMap<T>(a: ReadonlyMap<string, T>, b: ReadonlyMap<string, T>): boolean {
   if (a.size !== b.size) return false;
