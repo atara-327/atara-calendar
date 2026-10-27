@@ -1,16 +1,13 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { Occurrence } from '../../shared/recurrence';
+import { createHistoryMark, type HistoryEnv, type HistoryPort } from '../historyMark';
 import type { StartPoint } from './schedule';
 import type { EntryKind } from './values';
 
-// フォームを開いている間の状態と、ブラウザの履歴の出し入れ（設計書 11.4）。
-// 開いたら履歴を 1 つ積み、スマホの「戻る」でフォームを閉じる。✕・保存・削除で閉じたときも、積んだ履歴を戻す。
-// Why: 積まないと、フォームを開いたまま「戻る」を押したとき、月表示から出てしまう（設計書 2章の
-// 「スマホの戻る操作がそのまま使える」）。閉じるときに戻さないと、フォームを開閉するたびに履歴が残り、
-// 「戻る」を何度も押すことになる。
-// URL は変えない。Why not: フォームの入力の途中を URL にしても、開き直したときに復元できず、
-// 共有もしないので、履歴に印（state）を付けるだけで足りる。ブラウザの機能は、env から受け取る
-// （navigation.ts と違い、履歴の出し入れの順番が間違えやすく、テストで確かめるため）。
+// フォームを開いている間の状態（設計書 11.4）。開いたら履歴を 1 つ積み、スマホの「戻る」でフォームを閉じる。
+// 履歴の出し入れは、サイドメニューと共通の部品（historyMark.ts）に、印の名前 'form' を渡して行う。
+
+export type { HistoryPort };
 
 export type FormTarget =
   /** start は、開始の初期値。なければ、今日の次の正時（日表示が、見ている日と、タップした時刻を渡す）。 */
@@ -24,19 +21,7 @@ export interface FormState {
   session: number;
 }
 
-/** window.history のうち、使うもの。 */
-export interface HistoryPort {
-  readonly state: unknown;
-  /** URL は渡さない（今の URL のまま、履歴だけを積む）。 */
-  pushState(state: unknown, unused: string): void;
-  back(): void;
-}
-
-export interface FormControllerEnv {
-  history: HistoryPort;
-  /** popstate（戻る・進む）を受け取る。戻り値は、購読をやめる関数。 */
-  onPopState(listener: () => void): () => void;
-}
+export type FormControllerEnv = HistoryEnv;
 
 export interface FormController {
   readonly store: StoreApi<FormState>;
@@ -48,20 +33,14 @@ export interface FormController {
   start(): () => void;
 }
 
-/** この画面が積んだ履歴の印（navigation.ts の IN_APP_STATE と同じ inApp）に、フォームの印を足したもの。 */
-const FORM_HISTORY_STATE = { inApp: true, form: true };
-
-function isFormHistoryState(state: unknown): boolean {
-  return typeof state === 'object' && state !== null && 'form' in state && state.form === true;
-}
-
 export function createFormController(env: FormControllerEnv): FormController {
   const store = createStore<FormState>(() => ({ target: null, session: 0 }));
+  const mark = createHistoryMark(env, 'form');
 
   function open(target: FormTarget): void {
     // 二重に開くと、履歴を 2 つ積んでしまい、閉じても 1 つ残る。
     if (store.getState().target !== null) return;
-    env.history.pushState(FORM_HISTORY_STATE, '');
+    mark.push();
     store.setState((state) => ({ target, session: state.session + 1 }));
   }
 
@@ -69,29 +48,16 @@ export function createFormController(env: FormControllerEnv): FormController {
     if (store.getState().target === null) return;
     // 先に閉じてから、履歴を戻す。履歴を戻す popstate が、あとから届いても、もう閉じている。
     store.setState({ target: null });
-    // 今の履歴が、フォームの履歴でないときは、戻さない。戻すと、フォームの前の画面（や、アプリの外）へ出てしまう。
-    if (isFormHistoryState(env.history.state)) env.history.back();
-  }
-
-  /**
-   * 履歴と、フォームの状態の食い違いを直す。
-   * - フォームの履歴から出た（「戻る」）のに、フォームが開いている → 閉じる。
-   * - フォームの履歴にいるのに、フォームが開いていない → 履歴を 1 つ戻す。ページの再読み込みや、
-   *   裏のタブが破棄されて開き直されたあと（履歴の印だけが残る）と、「進む」でフォームの履歴に入ったとき。
-   *   戻さないと、「戻る」を押しても、何も変わらない 1 回が、余計にできる。
-   */
-  function settle(): void {
-    if (!isFormHistoryState(env.history.state)) {
-      if (store.getState().target !== null) store.setState({ target: null });
-    } else if (store.getState().target === null) {
-      env.history.back();
-    }
+    mark.release();
   }
 
   function start(): () => void {
-    const stop = env.onPopState(settle);
-    settle();
-    return stop;
+    return mark.watch({
+      isOpen: () => store.getState().target !== null,
+      close: () => {
+        store.setState({ target: null });
+      },
+    });
   }
 
   return { store, open, close, start };
