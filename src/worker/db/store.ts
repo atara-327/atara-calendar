@@ -197,6 +197,69 @@ export async function readLiveData(db: Database): Promise<LiveData> {
   };
 }
 
+/** 通知の時刻が来た行。familyId は、系列の id（例外の行なら元の系列の id、そうでなければ自分の id）。 */
+export interface DueEntry {
+  id: string;
+  familyId: string;
+  nextNotifyAt: number;
+}
+
+/**
+ * 通知の時刻が来た行を、時刻の順に limit 件。部分索引 entries_notify（設計書 4.2）を使う。
+ * 索引の条件（next_notify_at IS NOT NULL AND deleted_at IS NULL）を、そのまま WHERE に書くのは、
+ * 部分索引を使えるのが、WHERE が索引の条件を含むときだけのため。ORDER BY に id を足さないのは、
+ * 同じ時刻の行が多いとき（毎朝 6 時の終日の予定など）に、索引だけで limit 件を取れなくなるため。
+ */
+export const SELECT_DUE_ENTRIES_SQL = [
+  'SELECT id, COALESCE(series_id, id) AS family_id, next_notify_at FROM entries',
+  'WHERE next_notify_at IS NOT NULL AND next_notify_at <= ?1 AND deleted_at IS NULL',
+  'ORDER BY next_notify_at LIMIT ?2',
+].join(' ');
+
+const dueRowSchema = z.object({
+  id: z.string(),
+  family_id: z.string(),
+  next_notify_at: z.number().int(),
+});
+
+/** 定期実行（cron.ts）が、通知の時刻が来た行を探す。 */
+export async function readDueEntries(
+  db: Database,
+  nowMs: number,
+  limit: number,
+): Promise<DueEntry[]> {
+  const { results } = await db.prepare(SELECT_DUE_ENTRIES_SQL).bind(nowMs, limit).all();
+  return results.map((raw) => {
+    const row = dueRowSchema.parse(raw);
+    return { id: row.id, familyId: row.family_id, nextNotifyAt: row.next_notify_at };
+  });
+}
+
+/** 削除されていないワークスペースの id。通知を送る前に、予定のワークスペースが残っているかを確かめるため。 */
+export async function readLiveWorkspaceIds(db: Database): Promise<Set<string>> {
+  const { results } = await db.prepare('SELECT id FROM workspaces WHERE deleted_at IS NULL').all();
+  return new Set(results.map((raw) => idRowSchema.parse(raw).id));
+}
+
+/**
+ * next_notify_at を、読んだ値（from）のときだけ、to に変える。変えたら true。
+ * 値が from でなければ、別の実行か保存が、先に変えているので、何もしない（false）。保存が同じ瞬間に決めた
+ * 新しい値を、定期実行が古い計算で上書きしないため。通知を二重に送らないためにも使う。
+ * rev は変えない。next_notify_at はサーバーだけが使う列で、端末には送らない（設計書 5.1）。
+ */
+export async function advanceNextNotifyAt(
+  db: Database,
+  id: string,
+  from: number,
+  to: number | null,
+): Promise<boolean> {
+  const result = await db
+    .prepare('UPDATE entries SET next_notify_at = ?1 WHERE id = ?2 AND next_notify_at = ?3')
+    .bind(to, id, from)
+    .run();
+  return result.meta.changes > 0;
+}
+
 export interface WriteRequest {
   entries?: readonly Entry[];
   workspaces?: readonly Workspace[];
