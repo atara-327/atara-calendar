@@ -25,11 +25,25 @@ export const MAX_DUE_ENTRIES_PER_RUN = 10;
 /** 通知を送る予定だった時刻（next_notify_at）から、これ以上遅れた通知は、送らずに次の回へ進める（設計書 12章 Q10 の「予定の時刻」の読み方）。 */
 export const LATE_NOTIFY_LIMIT_MS = 10 * 60_000;
 
+/**
+ * 1 回の実行に使う時間の上限（ミリ秒）。行を処理する前に、実行を始めてから、これを過ぎていたら、残りの行は
+ * 処理せず、次の分に回す。レート制限の待ち（最大 5 秒を、行ごとに 2 回）と、Discord の待ち（10 秒）が重なると、
+ * 1 回の実行が長くなり、毎分の実行が重なるため。Cloudflare の、定期実行の時間の上限は、確かめられていないので、
+ * 毎分の周期（60 秒）より十分に短い、余裕を持った値にした。
+ */
+export const RUN_TIME_LIMIT_MS = 20_000;
+
 export interface NotifyRunOptions {
   /** Discord への送信に使う fetch。テストが、偽物を渡すために受け取る。 */
   fetchFn?: DiscordFetch;
   /** レート制限で待つための関数。テストが、実際には待たないために受け取る。 */
   sleep?: Sleep;
+  /**
+   * 今の時刻（ミリ秒）。実行を始めてからの時間を測るのに使う。テストが、時計を差し替えるために受け取る。
+   * Workers の Date.now() は、CPU を使っている間は進まず、I/O（D1・fetch・待ち）で進む。上限は、待ちの長さを
+   * 測るためのものなので、これで足りる。
+   */
+  now?: () => number;
 }
 
 // fetch を包むのは、オプションの fetchFn に、そのまま fetch を入れて options.fetchFn(...) と呼ぶと、this が
@@ -90,8 +104,9 @@ async function processDueEntry(context: RunContext, due: DueEntry): Promise<void
 export async function sendDueNotifications(
   env: Bindings,
   nowMs: number,
-  { fetchFn = defaultFetch, sleep }: NotifyRunOptions = {},
+  { fetchFn = defaultFetch, sleep, now = Date.now }: NotifyRunOptions = {},
 ): Promise<void> {
+  const startedAt = now();
   const due = await readDueEntries(env.DB, nowMs, MAX_DUE_ENTRIES_PER_RUN);
   if (due.length === 0) return;
 
@@ -122,7 +137,14 @@ export async function sendDueNotifications(
     },
   };
 
-  for (const entry of due) {
+  for (const [index, entry] of due.entries()) {
+    if (now() - startedAt > RUN_TIME_LIMIT_MS) {
+      // 残りの行は、値を進めていないので、次の分の実行が拾う。拾われたときに、10 分以上遅れていれば、送らずに進む。
+      console.warn(
+        `実行が ${String(RUN_TIME_LIMIT_MS / 1000)} 秒を過ぎたので、残りの ${String(due.length - index)} 行は、次の分に回します`,
+      );
+      break;
+    }
     try {
       await processDueEntry(context, entry);
     } catch (error) {

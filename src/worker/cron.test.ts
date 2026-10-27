@@ -19,7 +19,12 @@ import { TEST_APP_ORIGIN } from '../../test/helpers/env';
 import { makeEntry } from '../../test/helpers/entries';
 import { readNextNotifyAt } from '../../test/helpers/rows';
 import { jst } from '../../test/helpers/time';
-import { MAX_DUE_ENTRIES_PER_RUN, scheduled, sendDueNotifications } from './cron';
+import {
+  MAX_DUE_ENTRIES_PER_RUN,
+  RUN_TIME_LIMIT_MS,
+  scheduled,
+  sendDueNotifications,
+} from './cron';
 import { applyWrite, readSeriesEntries } from './db/store';
 import type { Bindings } from './env';
 import type { DiscordFetch } from './notify/discord';
@@ -765,6 +770,77 @@ describe('1 回の実行で処理する行数の上限', () => {
       ([id, value]) => id.startsWith('late') && value !== null,
     );
     expect(stillDue).toHaveLength(5);
+  });
+});
+
+describe('1 回の実行の時間の上限', () => {
+  /** 呼ばれるたびに、決めた時間だけ進む時計と、その分だけ時計を進める偽の Discord。 */
+  function slowDiscord(stepMs: number) {
+    let elapsed = 0;
+    const discord = fakeDiscord();
+    const fetchFn = vi.fn<DiscordFetch>((url, init) => {
+      elapsed += stepMs;
+      return discord.fetchFn(url, init);
+    });
+    return { discord, fetchFn, now: () => elapsed };
+  }
+
+  it('実行を始めてから 20 秒を過ぎたら、残りの行は処理せず、次の分に回す（値は進めない）', async () => {
+    expect(RUN_TIME_LIMIT_MS).toBe(20_000);
+    await save([timed({ id: 'a' }), timed({ id: 'b' }), timed({ id: 'c' })]);
+    // 1 件の送信ごとに 15 秒かかる。1 件目の後が 15 秒（上限の内）、2 件目の後が 30 秒（上限を過ぎた）。
+    const { discord, fetchFn, now } = slowDiscord(15_000);
+
+    await sendDueNotifications(envOf(), NOTIFY_AT, { fetchFn, sleep: discord.sleep, now });
+
+    expect(discord.calls).toHaveLength(2);
+    const values = Object.values(await readNextNotifyAt(db()));
+    expect(values.filter((value) => value === null)).toHaveLength(2);
+    expect(values.filter((value) => value === NOTIFY_AT)).toHaveLength(1);
+  });
+
+  it('次の分の実行が、回された行を拾って送る', async () => {
+    await save([timed({ id: 'a' }), timed({ id: 'b' }), timed({ id: 'c' })]);
+    const slow = slowDiscord(15_000);
+    await sendDueNotifications(envOf(), NOTIFY_AT, {
+      fetchFn: slow.fetchFn,
+      sleep: slow.discord.sleep,
+      now: slow.now,
+    });
+
+    const next = await run(NOTIFY_AT + MINUTE);
+
+    expect(next.calls).toHaveLength(1);
+    expect(await readNextNotifyAt(db())).toEqual({ a: null, b: null, c: null });
+  });
+
+  it('回したことを、ログに出す（行数だけ。中身は出さない）', async () => {
+    await save([timed({ id: 'a', title: 'ひみつ' }), timed({ id: 'b' }), timed({ id: 'c' })]);
+    const { discord, fetchFn, now } = slowDiscord(15_000);
+
+    await sendDueNotifications(envOf(), NOTIFY_AT, { fetchFn, sleep: discord.sleep, now });
+
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(String(consoleWarn.mock.calls[0]?.[0])).toContain('残りの 1 行');
+    expect(everythingLogged()).not.toContain('ひみつ');
+  });
+
+  it('ちょうど 20 秒なら、まだ処理する（過ぎたときだけ止める）', async () => {
+    await save([timed({ id: 'a' }), timed({ id: 'b' })]);
+    const { discord, fetchFn, now } = slowDiscord(20_000);
+
+    await sendDueNotifications(envOf(), NOTIFY_AT, { fetchFn, sleep: discord.sleep, now });
+
+    expect(discord.calls).toHaveLength(2);
+  });
+
+  it('時間がかからなければ、すべての行を処理する', async () => {
+    await save([timed({ id: 'a' }), timed({ id: 'b' }), timed({ id: 'c' })]);
+
+    const discord = await run(NOTIFY_AT);
+
+    expect(discord.calls).toHaveLength(3);
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 });
 
