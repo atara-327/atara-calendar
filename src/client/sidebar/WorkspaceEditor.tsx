@@ -137,8 +137,11 @@ export function WorkspaceEditor() {
   function move(id: string, direction: MoveDirection): void {
     setFailure(null);
     setMoved({ id, direction });
-    // 値が変わった行だけを、1 行ずつ保存する。同じ瞬間に、すべて受け付けられるか、すべて断られる
-    // （受け付けるかは、エンジンの状態だけで決まるため）。
+    // 値が変わった行だけを、1 行ずつ保存する。エンジンが受け付けるかは、状態（読み込み前・止めたとき）だけで決まるので、
+    // ふつうは、すべて受け付けられるか、すべて断られる。
+    // 例外: エンジンは、本文を入力用のスキーマで確かめ、合わなければ例外にする。入力のルールを満たさない行が DB に
+    // あると（API から入った値など）、途中の行で例外になり、前の行だけが列に入る。その場合も、次の［↑］［↓］で、
+    // 並びの順に振り直されるので、並びは、直る。
     submit('保存', () => {
       for (const row of reorderWorkspaces(workspaces.values(), id, direction)) {
         if (getSyncEngine().saveWorkspace(toWorkspaceInput(row)) === null) return null;
