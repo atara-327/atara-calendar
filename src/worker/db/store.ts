@@ -319,11 +319,21 @@ const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
 // その書き込みが決めた next_notify_at を、古い内容から計算した値で上書きしないため。
 // rev は変えない。next_notify_at はサーバーだけが使う列で、端末には送らない（設計書 5.1）ので、rev を進めて、
 // 他の端末に、同じ行を受け取らせる必要がない。
+// UPDATE ... FROM json_each(?1) にしないのは、UPDATE ... FROM が SQLite 3.33 以降の構文で、本番の D1 が対応しているかを、
+// 手元（Miniflare）では確かめられないため。この UPDATE は書き込みと同じ batch にあるので、構文が通らないと、削除しない行を
+// 含む保存が、すべて失敗する（予定を保存できなくなる）。upsert（INSERT ... SELECT ... FROM json_each ... ON CONFLICT）は
+// 本番で動いているので、json_each と json_extract だけを使い、行ごとに値を引く相関サブクエリで書く。
+// 相関サブクエリは、行ごとに JSON の配列を走査するので、更新する行数の 2 乗の時間がかかる。1 回の依頼で更新するのは
+// 1 つの系列の行（通常は数行〜数百行）なので、許す。Miniflare の実測（upsert を含む書き込み全体）で、300 行 約 0.1 秒、
+// 1,000 行 約 0.5 秒、2,000 行 約 1.8 秒。WHERE id IN (...) を付けるのは、行を主キーで引くため
+// （付けないと、entries の全行を走査して、D1 の読み取り行数を使う）。
 const UPDATE_NEXT_NOTIFY_AT = [
-  "UPDATE entries SET next_notify_at = json_extract(value, '$.next_notify_at')",
-  'FROM json_each(?1)',
-  "WHERE entries.id = json_extract(value, '$.id')",
-  "AND entries.edited_at = json_extract(value, '$.edited_at')",
+  'UPDATE entries',
+  "SET next_notify_at = (SELECT json_extract(value, '$.next_notify_at') FROM json_each(?1)",
+  "  WHERE json_extract(value, '$.id') = entries.id)",
+  "WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?1))",
+  "  AND edited_at = (SELECT json_extract(value, '$.edited_at') FROM json_each(?1)",
+  "    WHERE json_extract(value, '$.id') = entries.id)",
 ].join(' ');
 
 type EntryKind = Entry['kind'];

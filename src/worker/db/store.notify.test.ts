@@ -359,8 +359,11 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
 
     it('UPDATE の値は、upsert と同じく、約 1MB ごとのかたまりに分けて、同じ batch に入れる', async () => {
       const { database, batchSizes, updateValueBytes } = recordingDatabase();
-      // 1 行あたり約 90 バイト（id が UUID の長さ）の更新を 12,000 行 = 約 1.1MB。
-      const entries = Array.from({ length: 12_000 }, () => timed({ id: crypto.randomUUID() }));
+      // 1 行あたり約 5KB（id が 5,000 文字）の更新を 400 行 = 約 2MB。id を長くするのは、行数を増やすと、
+      // UPDATE が行ごとに JSON を走査するので（store.ts の UPDATE_NEXT_NOTIFY_AT）、テストが遅くなるため。
+      const entries = Array.from({ length: 400 }, (_, index) =>
+        timed({ id: `${String(index)}-${'x'.repeat(5000)}` }),
+      );
 
       await applyWrite(database, { entries }, { nowMs: NOW });
 
@@ -369,9 +372,9 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
       // 1 つ目は今の行の確認。2 つ目が書き込み（rev・upsert のかたまり・UPDATE のかたまり）。
       expect(batchSizes).toHaveLength(2);
       const nextNotifyAt = Object.values(await readNextNotifyAt(db()));
-      expect(nextNotifyAt).toHaveLength(12_000);
+      expect(nextNotifyAt).toHaveLength(400);
       expect(nextNotifyAt.every((value) => value === jst('2026-10-27', '14:50'))).toBe(true);
-    }, 30_000);
+    });
   });
 
   describe('割り込み（確認と書き込みの間に、別の書き込みが同じ行を新しくした。設計書 6.4）', () => {
