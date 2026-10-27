@@ -1,0 +1,126 @@
+/*
+ * タイムライン。0:00〜24:00 を 1 時間 60px で並べる（合計 1440px。timeline.ts の HOUR_HEIGHT と対応する）。
+ * 左の時間軸（目盛り）と、右の、項目を並べる領域（track）の 2 列。
+ */
+.timeline {
+  display: flex;
+  height: 1440px;
+}
+
+.ruler {
+  flex: none;
+  width: 44px;
+}
+
+.hourLabel {
+  display: block;
+  box-sizing: border-box;
+  height: 60px;
+  padding: 2px 8px 0 0;
+  color: var(--color-observance);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: right;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * 正時の線。1 時間ごとの箱の上端の線にする（背景のグラデーションにしないのは、1px の線が、
+ * 画面の倍率によって、にじむため。border は、画面の画素に合わせて描かれる）。
+ * 箱は、クリックを通す。タップした位置の判定が、箱ではなく、track そのものを押したときだけ、空いているところとするため。
+ */
+.hourLine {
+  box-sizing: border-box;
+  height: 60px;
+  border-top: 1px solid var(--color-grid);
+  pointer-events: none;
+}
+
+/*
+ * 項目。位置・大きさ・予定の色は、style 属性（CSSOM）で与える。
+ * 隣の項目と区別できるよう、右に 2px、下に 1px の隙間を、透明の枠で作る。余白（margin）にしないのは、
+ * 位置と高さを、時刻から決めた値のまま、変えないため。background-clip で、背景を枠の内側だけにする。
+ * ブラウザの既定の見た目（枠・背景・中央寄せ）は外す。
+ */
+.item {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  border: solid transparent;
+  border-width: 0 2px 1px 0;
+  border-radius: 4px;
+  background-color: var(--color-grid);
+  background-clip: padding-box;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.block {
+  background-color: var(--color-timeblock);
+  color: var(--color-text);
+}
+
+.item:hover {
+  filter: brightness(1.15);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: -2px;
+}
+
+/* 15 分（15px）の項目は、題名 1 行。文字を小さくして、行の高さを 14px（隙間の 1px を引いた高さ）に収める。 */
+.compact {
+  font-size: 11px;
+}
+
+.itemTitle,
+.itemTime {
+  display: block;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTime {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* 今の時刻の線（今日だけ）。左端の小さな丸は、::before。線の上のクリックは、下の空いているところに通す。 */
+.nowLine {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 2px;
+  margin-top: -1px;
+  background-color: var(--color-now);
+  pointer-events: none;
+}
+
+.nowLine::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-now);
+}
