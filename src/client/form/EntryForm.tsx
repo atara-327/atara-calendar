@@ -94,6 +94,7 @@ function initialValues(
     kind: target.kind,
     nowMs: target.openedAt,
     workspaceId: defaultWorkspaceId(choices, loadLastWorkspaceId()),
+    start: target.start,
   });
 }
 

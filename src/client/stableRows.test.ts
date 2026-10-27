@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { makeEntry } from '../../../test/helpers/entries';
-import { makeWorkspace } from '../../../test/helpers/workspaces';
-import type { RowSet } from '../sync/replay';
-import { initialState, type SyncState } from '../sync/state';
+import { makeEntry } from '../../test/helpers/entries';
+import { makeWorkspace } from '../../test/helpers/workspaces';
 import { createViewSelector } from './stableRows';
+import type { RowSet } from './sync/replay';
+import { initialState, type SyncState } from './sync/state';
 
 function stateOf(view: RowSet): SyncState {
   return { ...initialState(), view };

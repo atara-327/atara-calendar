@@ -1,4 +1,10 @@
-import { dateToDays, daysToDate, utcMsToJstDate, utcMsToJstMinuteOfDay } from '../../shared/date';
+import {
+  dateToDays,
+  daysToDate,
+  utcMsToJstDate,
+  utcMsToJstMinuteOfDay,
+  type DateStr,
+} from '../../shared/date';
 import { lastCoveredDate } from '../../shared/recurrence';
 import { inputDateSchema } from '../../shared/schema';
 
@@ -10,6 +16,12 @@ const MINUTES_PER_DAY = 24 * 60;
 
 /** 終了の初期値は、開始の 1 時間後（設計書 11.4）。 */
 export const DEFAULT_LENGTH_MIN = 60;
+
+/** 開始の日付と、時刻（'HH:MM'）。 */
+export interface StartPoint {
+  date: DateStr;
+  time: string;
+}
 
 /**
  * フォームの、開始と終了。日付は入力欄の値なので、空や、範囲（1900〜2199 年）の外のこともある。
@@ -61,20 +73,22 @@ function absoluteMinutes(date: string, time: string, allDay: boolean): number | 
   return day === null ? null : day * MINUTES_PER_DAY + (allDay ? 0 : timeToMinutes(time));
 }
 
-function fromAbsoluteMinutes(absolute: number): { date: string; time: string } {
+function fromAbsoluteMinutes(absolute: number): StartPoint {
   const day = Math.floor(absolute / MINUTES_PER_DAY);
   return { date: daysToDate(day), time: minutesToTime(absolute - day * MINUTES_PER_DAY) };
 }
 
 /** 今日（日本時間）の、次の正時。ちょうど正時のときも、その 1 時間後。23 時台なら翌日の 0:00。 */
-export function nextFullHour(nowMs: number): { date: string; time: string } {
+export function nextFullHour(nowMs: number): StartPoint {
   const nextHourMinute = (Math.floor(utcMsToJstMinuteOfDay(nowMs) / 60) + 1) * 60;
   return fromAbsoluteMinutes(dateToDays(utcMsToJstDate(nowMs)) * MINUTES_PER_DAY + nextHourMinute);
 }
 
-/** 新しく作るときの、開始と終了（時間指定）。開始は今日の次の正時、終了はその 1 時間後。 */
-export function defaultSchedule(nowMs: number): Schedule {
-  const start = nextFullHour(nowMs);
+/**
+ * start から始まる、1 時間の時間指定の、開始と終了。終了は、日付をまたいでもよい（23:30 なら、翌日の 0:30。TB-6）。
+ * start の時刻は、15 分刻みの 'HH:MM'（日表示のタップが、15 分単位に切り下げて渡す。設計書 11.3）。
+ */
+export function scheduleFromStart(start: StartPoint): Schedule {
   const end = fromAbsoluteMinutes(
     dateToDays(start.date) * MINUTES_PER_DAY + timeToMinutes(start.time) + DEFAULT_LENGTH_MIN,
   );
@@ -85,6 +99,11 @@ export function defaultSchedule(nowMs: number): Schedule {
     endDate: end.date,
     endTime: end.time,
   };
+}
+
+/** 新しく作るときの、開始と終了（時間指定）。開始は今日の次の正時、終了はその 1 時間後。 */
+export function defaultSchedule(nowMs: number): Schedule {
+  return scheduleFromStart(nextFullHour(nowMs));
 }
 
 /**

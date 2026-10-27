@@ -1,6 +1,7 @@
 import { useStore } from 'zustand';
 import type { Occurrence } from '../../shared/recurrence';
 import { createFormController, type FormController, type FormState } from './formController';
+import type { StartPoint } from './schedule';
 import type { EntryKind } from './values';
 
 let controller: FormController | null = null;
@@ -22,9 +23,12 @@ export function getFormController(): FormController {
   return controller;
 }
 
-/** 新しい予定・タイムブロックのフォームを開く。開始の初期値の「今」は、開いた時刻。 */
-export function openCreateForm(kind: EntryKind): void {
-  getFormController().open({ mode: 'create', kind, openedAt: Date.now() });
+/**
+ * 新しい予定・タイムブロックのフォームを開く。start を渡すと、そこから 1 時間が、開始と終了の初期値になる。
+ * 渡さなければ、今日の次の正時から 1 時間（その「今」は、開いた時刻）。
+ */
+export function openCreateForm(kind: EntryKind, start?: StartPoint): void {
+  getFormController().open({ mode: 'create', kind, openedAt: Date.now(), start });
 }
 
 /** 開いた回（月表示で押した予定）のフォームを開く。 */

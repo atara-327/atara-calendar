@@ -2,7 +2,15 @@ import type { Occurrence } from '../../shared/recurrence';
 import type { Entry, Rrule } from '../../shared/schema';
 import { DEFAULT_ALL_DAY_NOTIFY_MIN, DEFAULT_TIMED_NOTIFY_MIN } from './notify';
 import { NO_REPEAT, repeatFieldsOf, type RepeatFields } from './repeat';
-import { defaultSchedule, toAllDay, toTimed, type Schedule } from './schedule';
+import {
+  defaultSchedule,
+  nextFullHour,
+  scheduleFromStart,
+  toAllDay,
+  toTimed,
+  type Schedule,
+  type StartPoint,
+} from './schedule';
 
 // フォームの入力値（設計書 11.4）。開いたときの初期値と、種類・終日を切り替えたときの変わり方を決める。
 // 画面に依存しない。保存する本文（draft・changes）への変換は build.ts、確認は validate.ts。
@@ -46,19 +54,21 @@ export function defaultNotify(
 }
 
 /**
- * 新しく作るときの初期値。開始は今日の次の正時、終了はその 1 時間後（schedule.ts）。
+ * 新しく作るときの初期値。開始は、start（日表示で決めた開始）か、なければ今日の次の正時。終了は、その 1 時間後（schedule.ts）。
  * workspaceId は、呼び出し側が、前回選んだワークスペース（EV-8。workspaceChoices.ts）から決めて渡す。
  */
 export function createValues({
   kind,
   nowMs,
   workspaceId,
+  start,
 }: {
   kind: EntryKind;
   nowMs: number;
   workspaceId: string | null;
+  start?: StartPoint;
 }): FormValues {
-  const schedule = defaultSchedule(nowMs);
+  const schedule = scheduleFromStart(start ?? nextFullHour(nowMs));
   return {
     kind,
     title: '',

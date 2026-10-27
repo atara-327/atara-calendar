@@ -16,3 +16,14 @@ export function formatMonthDay(date: DateStr): string {
   const weekday = WEEKDAY_LABELS[dayOfWeek(date)] ?? '';
   return `${String(month)}月${String(day)}日（${weekday}）`;
 }
+
+/** 「10/19」。月と日だけで、0 を付けない。日表示の上部の欄の期間と、読み上げの名前に使う。 */
+export function formatShortDate(date: DateStr): string {
+  const { month, day } = dateToYmd(date);
+  return `${String(month)}/${String(day)}`;
+}
+
+/** 'HH:MM' を「9:00」にする（時の 0 を付けない）。日表示の項目の時刻と、時間軸の目盛りに使う。 */
+export function formatTime(time: string): string {
+  return `${String(Number(time.slice(0, 2)))}:${time.slice(3, 5)}`;
+}

@@ -1,0 +1,227 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.header {
+  flex: none;
+  padding: 8px 8px 4px;
+}
+
+/* 1 行目。［月表示］・前の日・日付・次の日・［今日］。［今日］は右端（margin-left: auto）。 */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 幅 360px のスマホでは、「2026年10月19日（月）」が収まらないので、少し小さくする。 */
+@media (max-width: 380px) {
+  .title {
+    font-size: 15px;
+  }
+}
+
+/* 日付の色は、月表示と同じ（設計書 11.2）。 */
+.holiday {
+  color: var(--color-holiday);
+}
+
+.saturday {
+  color: var(--color-saturday);
+}
+
+.pill {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--color-observance);
+  border-radius: 16px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pill:hover {
+  background-color: var(--color-grid);
+}
+
+.today {
+  margin-left: auto;
+}
+
+.arrow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.arrow:hover:not(:disabled) {
+  background-color: var(--color-grid);
+}
+
+.arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.pill:focus-visible,
+.arrow:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 2px;
+}
+
+/*
+ * 2 行目。祝日名・記念日名（全文。折り返してよい）と、未送信の件数（右端）。
+ * 中身がなければ、高さを持たない（:empty）。名前も件数もないとき、React は、何も描かないので、空になる。
+ */
+.subRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.subRow:empty {
+  display: none;
+}
+
+.names {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.holidayName,
+.observanceName {
+  margin-right: 8px;
+}
+
+.holidayName {
+  color: var(--color-holiday);
+}
+
+.observanceName {
+  color: var(--color-observance);
+}
+
+/*
+ * 上部の欄（DV-6）。1 行 26px（高さ 24px ＋ 隙間 2px）で、約 3.5 行（94px）を超えたら、欄の中でスクロールする。
+ * 4 行目を半分だけ見せるのは、続きがあることを、見て分かるようにするため。
+ * タイムラインが、スマホで、見えなくならない高さにする。
+ */
+.banner {
+  flex: none;
+  box-sizing: border-box;
+  max-height: 94px;
+  padding: 2px 8px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--color-grid);
+  scrollbar-color: var(--color-grid) transparent;
+  scrollbar-width: thin;
+}
+
+/*
+ * 上部の欄の 1 件。ブラウザの既定の見た目（枠・背景・文字の色・中央寄せ）を外す。
+ * 背景と文字の色は、ワークスペースの色なので、style 属性（CSSOM）で与える。
+ * 題名の省略（…）を、<button> の中身に直接かけず、中の span にかけるのは、
+ * <button> の text-overflow が、ブラウザによって効かないため（月表示と同じ）。
+ */
+.bannerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 24px;
+  margin: 0 0 2px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--color-grid);
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bannerItem:hover {
+  filter: brightness(1.15);
+}
+
+.bannerItem:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: -2px;
+}
+
+.bannerTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bannerPeriod {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* タイムラインを入れる領域。SyncOverview を、スクロールの上に重ねて出すための基準（月表示と同じ）。 */
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * タイムラインのスクロール。縦のスクロールはブラウザに任せ、横の動き（日を動かすスワイプ）は、
+ * こちらで受ける（touch-action: pan-y）。pinch-zoom は残す（拡大を、奪わないため）。
+ * 末尾の空白は、( + ) ボタンの下に、最後の項目（23:00〜24:00）が隠れないよう、スクロールを足すため。
+ */
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+  scrollbar-color: var(--color-grid) transparent;
+  scrollbar-width: thin;
+}
+
+.scroller::after {
+  content: '';
+  display: block;
+  height: 88px;
+}

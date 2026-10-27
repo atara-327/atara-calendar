@@ -1,5 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { Occurrence } from '../../shared/recurrence';
+import type { StartPoint } from './schedule';
 import type { EntryKind } from './values';
 
 // フォームを開いている間の状態と、ブラウザの履歴の出し入れ（設計書 11.4）。
@@ -12,7 +13,8 @@ import type { EntryKind } from './values';
 // （navigation.ts と違い、履歴の出し入れの順番が間違えやすく、テストで確かめるため）。
 
 export type FormTarget =
-  | { mode: 'create'; kind: EntryKind; openedAt: number }
+  /** start は、開始の初期値。なければ、今日の次の正時（日表示が、見ている日と、タップした時刻を渡す）。 */
+  | { mode: 'create'; kind: EntryKind; openedAt: number; start?: StartPoint }
   | { mode: 'edit'; occurrence: Occurrence; openedAt: number };
 
 export interface FormState {

@@ -93,6 +93,20 @@ describe('フォームを開く', () => {
     expect(history.state).toEqual({ inApp: true, form: true });
   });
 
+  it('開始の初期値（日表示で決めた開始）を渡すと、開いたフォームがそれを持つ', () => {
+    const { controller } = setup();
+    const withStart: FormTarget = {
+      mode: 'create',
+      kind: 'block',
+      openedAt: 0,
+      start: { date: '2026-10-25', time: '09:30' },
+    };
+
+    controller.open(withStart);
+
+    expect(target(controller)).toEqual(withStart);
+  });
+
   it('編集（開いた回）も同じに、履歴を積む', () => {
     const { history, controller } = setup();
 
