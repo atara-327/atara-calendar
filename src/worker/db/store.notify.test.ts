@@ -332,7 +332,7 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
       return { database, batchSizes, updateValueBytes };
     }
 
-    it('値を決める行が何行あっても、UPDATE は 1 文（rev・entries の upsert・UPDATE の 3 文）', async () => {
+    it(`値を決める行が ${String(MAX_NOTIFY_UPDATE_ROWS)} 行までなら、UPDATE は 1 文（rev・entries の upsert・UPDATE の 3 文）`, async () => {
       const { database, batchSizes } = recordingDatabase();
 
       await applyWrite(

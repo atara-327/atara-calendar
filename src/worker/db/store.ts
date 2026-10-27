@@ -327,8 +327,8 @@ const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
   extraAssignments: ['next_notify_at = NULL'],
 });
 
-// 予定の next_notify_at は、upsert のあとに、同じ batch の UPDATE で入れる。1 回の依頼で何行あっても 1 文で済むように、
-// upsert と同じく json_each に行を渡す。
+// 予定の next_notify_at は、upsert のあとに、同じ batch の UPDATE で入れる。1 回の依頼で MAX_NOTIFY_UPDATE_ROWS 行までなら
+// 1 文で済むように、upsert と同じく json_each に行を渡す。
 // edited_at が一致する行だけに入れるのは、確認と書き込みの間に、別の書き込みが同じ行を新しくした（割り込み。設計書 6.4）とき、
 // その書き込みが決めた next_notify_at を、古い内容から計算した値で上書きしないため。
 // rev は変えない。next_notify_at はサーバーだけが使う列で、端末には送らない（設計書 5.1）ので、rev を進めて、
