@@ -10,13 +10,13 @@ import { MINUTES_PER_DAY } from './timelineGeometry';
 // その日の日表示に出す項目を、展開した回から求める（設計書 11.3）。画面に依存しない。
 // 回の開始・終了を、「1970-01-01 の 0:00 からの分」にして、長さと、その日の範囲との重なりを求める。
 
-/** 上部の欄（DV-6）の 1 行。終日の予定と、24 時間以上の時間指定の予定・タイムブロック。 */
+/** 上部の欄（DV-6）の 1 行。終日の予定と、24 時間以上の時間指定の予定。タイムブロックは入らない。 */
 export interface BannerItem {
   /** 回を見分ける値。 */
   key: string;
   title: string;
-  /** ワークスペースの色。タイムブロックは null（色は、画面が決める。TB-5）。 */
-  color: string | null;
+  /** ワークスペースの色。 */
+  color: string;
   /** 複数日の期間。終日は「10/18〜10/21」、時間指定は「10/16 18:00〜10/18 20:00」。1 日だけの終日は null。 */
   period: string | null;
   /** 読み上げの名前。 */
@@ -74,7 +74,7 @@ function accessibleNameOf(occurrence: Occurrence, parts: readonly (string | null
     .join(' ');
 }
 
-function toBanner(occurrence: Occurrence, color: string | null): BannerItem {
+function toBanner(occurrence: Occurrence, color: string): BannerItem {
   const { startDate, endDate } = occurrence;
   let period: string | null;
   if (occurrence.allDay) {
@@ -124,9 +124,13 @@ function toTimeline(
 
 /**
  * date の日表示に出す項目。
- * 終日と、長さが 24 時間以上のものは、上部の欄（DV-6）。それ以外は、タイムラインで、日をまたぐものは、
- * その日の範囲に切り取る（TB-6）。終了が翌日の 0:00 ちょうどのものは、翌日には出ない（回の一覧が、
- * 回のかかる最後の日を、終了の前の日にしているため。shared の lastCoveredDate）。
+ * 終日の予定と、長さが 24 時間以上の時間指定の予定は、上部の欄（DV-6）。それ以外は、タイムラインで、
+ * 日をまたぐものは、その日の範囲に切り取る（TB-6）。終了が翌日の 0:00 ちょうどのものは、翌日には出ない
+ * （回の一覧が、回のかかる最後の日を、終了の前の日にしているため。shared の lastCoveredDate）。
+ * タイムブロックは、長さによらず、タイムラインに出す。3 日にわたるものなら、真ん中の日は 0:00〜24:00 になる。
+ * Why not 24 時間以上のタイムブロックも、上部の欄に出す: 要件 TB-6 は、日付をまたぐタイムブロックを、
+ * 前の日と次の日に分けて表示するとしている。「24 時間以上は上部の欄」は、時間指定の予定の決まりで
+ * （設計書 11.3）、タイムブロックへ広げる根拠がない。
  * タイムブロックは、ワークスペースの表示 ON/OFF によらず、常に出す（TB-3・TB-5・DV-2）。
  * 予定は、表示が ON で、削除されていないワークスペースのものだけ（WS-3）。
  * 表示が OFF のワークスペースの予定を、展開の前に除かず、展開した回から除く理由は、weekViewCache.ts と同じ。
@@ -156,7 +160,8 @@ export function dayItemsOf({
     }
 
     const range = absoluteRange(occurrence);
-    if (occurrence.allDay || range.end - range.start >= MINUTES_PER_DAY) {
+    // 色を持つのは予定だけ（タイムブロックは null）。上部の欄に出るのは、予定だけ。
+    if (color !== null && (occurrence.allDay || range.end - range.start >= MINUTES_PER_DAY)) {
       banner.push(toBanner(occurrence, color));
     } else {
       const item = toTimeline(occurrence, color, dayStart, range);

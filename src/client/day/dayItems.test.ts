@@ -113,28 +113,6 @@ describe('上部の欄（DV-6）に出るもの', () => {
     expect(timeline).toMatchObject([{ start: 540, end: 1440 }]);
   });
 
-  it('24 時間以上のタイムブロックも、上部の欄に出る。色は持たない（画面が、タイムブロックの色にする）', () => {
-    const { banner } = itemsOf('2026-10-19', [
-      block({
-        id: 'b1',
-        title: '出張',
-        startDate: '2026-10-19',
-        startTime: '09:00',
-        endDate: '2026-10-21',
-        endTime: '18:00',
-      }),
-    ]);
-
-    expect(banner).toMatchObject([
-      {
-        title: '出張',
-        color: null,
-        period: '10/19 9:00〜10/21 18:00',
-        accessibleName: 'タイムブロック 10/19 9:00〜10/21 18:00 出張',
-      },
-    ]);
-  });
-
   it('上部の欄の項目は、押したときに開く回（occurrence）を持つ', () => {
     const { banner } = itemsOf('2026-10-19', [{ id: 'e1', startDate: '2026-10-19' }]);
 
@@ -255,6 +233,46 @@ describe('日付をまたぐもの（TB-6）', () => {
     expect(itemsOf('2026-10-20', [sleep]).timeline[0]?.accessibleName).toBe(
       'タイムブロック 10/19 23:00〜10/20 7:00 睡眠',
     );
+  });
+
+  it('24 時間以上のタイムブロックは、上部の欄ではなく、タイムラインに、日ごとに切り取られて出る（3 日にわたるもの）', () => {
+    const entries = [
+      block({
+        id: 'b1',
+        title: '出張',
+        startDate: '2026-10-19',
+        startTime: '09:00',
+        endDate: '2026-10-21',
+        endTime: '18:00',
+      }),
+    ];
+
+    const first = itemsOf('2026-10-19', entries);
+    const middle = itemsOf('2026-10-20', entries);
+    const last = itemsOf('2026-10-21', entries);
+
+    expect([first.banner, middle.banner, last.banner]).toEqual([[], [], []]);
+    expect(first.timeline).toMatchObject([{ color: null, start: 540, end: 1440 }]);
+    expect(middle.timeline).toMatchObject([{ color: null, start: 0, end: 1440 }]);
+    expect(last.timeline).toMatchObject([{ color: null, start: 0, end: 1080 }]);
+  });
+
+  it('3 日にわたるタイムブロックは、どの日も、元の開始と終了の時刻と、日付つきの読み上げの名前を持つ', () => {
+    const { timeline } = itemsOf('2026-10-20', [
+      block({
+        id: 'b1',
+        title: '出張',
+        startDate: '2026-10-19',
+        startTime: '09:00',
+        endDate: '2026-10-21',
+        endTime: '18:00',
+      }),
+    ]);
+
+    expect(timeline[0]).toMatchObject({
+      timeLabel: '9:00〜18:00',
+      accessibleName: 'タイムブロック 10/19 9:00〜10/21 18:00 出張',
+    });
   });
 
   it('終了が翌日の 0:00 ちょうどのものは、翌日には出ない', () => {

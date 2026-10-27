@@ -183,12 +183,6 @@
   outline-offset: -2px;
 }
 
-/* タイムブロックの色。ワークスペースを持たないので、固定の色（TB-5）。 */
-.block {
-  background-color: var(--color-timeblock);
-  color: var(--color-text);
-}
-
 .bannerTitle {
   min-width: 0;
   overflow: hidden;
