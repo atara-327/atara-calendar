@@ -7,11 +7,11 @@ import {
   ymdToDate,
   type DateStr,
 } from '../../shared/date';
-import { expandOccurrences, lastCoveredDate } from '../../shared/recurrence';
+import { expandOccurrences, lastCoveredDate, type Occurrence } from '../../shared/recurrence';
 import { INPUT_LIMITS, type Entry } from '../../shared/schema';
 
 // 次に通知する時刻（next_notify_at）の計算（設計書 9.2）。純粋な関数だけで、DB には触れない。
-// 保存（db/store.ts）が、保存したときに呼ぶ。定期実行（実装 11b）も、通知を送った回の次を探すのに使う。
+// 保存（db/store.ts）が、保存したときに呼ぶ。定期実行（cron.ts）も、通知を送る回の確認と、その次の回を探すのに使う。
 
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_DAY = 24 * 60;
@@ -105,27 +105,38 @@ function indexFamily(family: readonly Entry[]): FamilyIndex {
 }
 
 /**
- * 例外の行。例外の行そのものが 1 回の内容を持つので、その行の開始から直接求める。
- * 直接求めるのは、移した先が遠い日付（探す範囲の外）でも、見つけるため。
- * ただし、展開（expandOccurrences）が出さない例外は、画面に出ない予定なので、通知もしない。系列が見つからない、
- * または削除されている例外と、同じ回に、より新しい例外の行が別にあるときの、古い方がそうなる。
- * 求めた時刻が afterMs 以前の例外は、展開しない（探す必要がないので、CPU 時間を使わない）。
+ * 例外の行の回。展開（expandOccurrences）が出さない例外は、画面に出ない予定なので、null（通知もしない）。
+ * 系列が見つからない、または削除されている例外と、同じ回に、より新しい例外の行が別にあるときの、古い方がそうなる。
  * 展開に渡すのは、系列の行と、同じ回の例外の行だけ。family の全行を渡すと、例外の多い系列で、例外の数の
  * 2 乗で時間がかかる（FamilyIndex）。
+ */
+function shownExceptionOccurrence(
+  row: Entry,
+  seriesId: string,
+  index: FamilyIndex,
+): Occurrence | null {
+  const series = index.byId.get(seriesId);
+  const sameOccurrence = [
+    ...(series === undefined ? [] : [series]),
+    ...(index.exceptionsOfOccurrence.get(occurrenceKey(seriesId, row.originalDate)) ?? []),
+  ];
+  return (
+    expandOccurrences(sameOccurrence, row.startDate, lastCoveredDate(row)).find(
+      (occurrence) => occurrence.entryId === row.id,
+    ) ?? null
+  );
+}
+
+/**
+ * 例外の行。例外の行そのものが 1 回の内容を持つので、その行の開始から直接求める。
+ * 直接求めるのは、移した先が遠い日付（探す範囲の外）でも、見つけるため。
+ * 求めた時刻が afterMs 以前の例外は、展開しない（探す必要がないので、CPU 時間を使わない）。
  */
 function exceptionNotifyAt(row: Entry, index: FamilyIndex, afterMs: number): number | null {
   if (row.seriesId === null || row.cancelled) return null;
   const at = notifyAtMs(row);
   if (at <= afterMs) return null;
-  const series = index.byId.get(row.seriesId);
-  const sameOccurrence = [
-    ...(series === undefined ? [] : [series]),
-    ...(index.exceptionsOfOccurrence.get(occurrenceKey(row.seriesId, row.originalDate)) ?? []),
-  ];
-  const shown = expandOccurrences(sameOccurrence, row.startDate, lastCoveredDate(row)).some(
-    (occurrence) => occurrence.entryId === row.id,
-  );
-  return shown ? at : null;
+  return shownExceptionOccurrence(row, row.seriesId, index) === null ? null : at;
 }
 
 /**
@@ -198,4 +209,53 @@ export function nextNotifyTimes({
     }
   }
   return result;
+}
+
+/**
+ * 通知の時刻がちょうど notifyAt になる、その行の回。なければ null。
+ * 定期実行（cron.ts）が、送る直前に、読んだ next_notify_at の回が、まだその行の回かを確かめ、送る回の内容
+ * （題名・日時・場所）を得るのに使う。2 台でほぼ同時に操作した割り込み（設計書 6.4）で、next_notify_at に、
+ * もうない回の古い値が残ることがあるため（設計書 9.3）。
+ * family は、nextNotifyTimes と同じ（1 つの系列の全行、または繰り返さない予定の 1 行）。
+ * 削除されている行・通知が OFF の行・展開が出さない回は、null（nextNotifyTimes が値を返さない行と同じ）。
+ * 系列の行は、通知の時刻から開始日を逆算して、その 1 日だけを展開する。nextNotifyTimes のように、期間を広げて
+ * 探さないのは、探す回の日付が、時刻から一つに決まるため（CPU 時間を使わない）。
+ */
+export function occurrenceNotifiedAt({
+  family,
+  rowId,
+  notifyAt,
+}: {
+  family: readonly Entry[];
+  rowId: string;
+  notifyAt: number;
+}): Occurrence | null {
+  const index = indexFamily(family);
+  const row = index.byId.get(rowId);
+  if (row === undefined || row.deletedAt !== null || !row.notifyEnabled) return null;
+
+  if (row.seriesId !== null) {
+    if (row.cancelled || notifyAtMs(row) !== notifyAt) return null;
+    return shownExceptionOccurrence(row, row.seriesId, index);
+  }
+  if (row.rrule === null) {
+    if (notifyAtMs(row) !== notifyAt) return null;
+    return (
+      expandOccurrences([row], row.startDate, lastCoveredDate(row)).find(
+        (occurrence) => occurrence.entryId === row.id,
+      ) ?? null
+    );
+  }
+  // 開始 = 通知の時刻 + 通知の分。時刻は、系列のどの回でも同じ（回の長さと開始の時刻は、系列の行のもの）なので、
+  // 開始の日本時間の日付が、探す回の日付になる。
+  const startDate = utcMsToJstDate(notifyAt + row.notifyOffsetMin * MS_PER_MINUTE);
+  const sameSeries = [row, ...(index.exceptionsOfSeries.get(row.id) ?? [])];
+  return (
+    expandOccurrences(sameSeries, startDate, startDate).find(
+      (occurrence) =>
+        occurrence.entryId === row.id &&
+        occurrence.startDate === startDate &&
+        notifyAtMs(occurrence) === notifyAt,
+    ) ?? null
+  );
 }
