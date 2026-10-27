@@ -69,22 +69,59 @@ function singleNotifyAt(row: Entry, afterMs: number): number | null {
 }
 
 /**
+ * family を、展開に渡す行の単位で引けるようにしたもの。nextNotifyTimes が 1 回だけ作る。
+ * 行ごとに family の全行を走査（filter）しないのは、例外の多い系列で、例外の数の 2 乗で時間がかかるため
+ * （まだ通知していない例外が、1,000 件で 約 7ms、2,000 件で 約 26ms。CPU 時間は無料プランで 1 回 10ms）。
+ */
+interface FamilyIndex {
+  /** 行の id → 行（系列の行を、例外の行の seriesId から引く）。 */
+  byId: ReadonlyMap<string, Entry>;
+  /** 系列の id → その例外の行。 */
+  exceptionsOfSeries: ReadonlyMap<string, readonly Entry[]>;
+  /** （系列の id, 元の回の日付）→ 同じ回の例外の行。 */
+  exceptionsOfOccurrence: ReadonlyMap<string, readonly Entry[]>;
+}
+
+function occurrenceKey(seriesId: string, originalDate: DateStr | null): string {
+  return `${seriesId}\n${originalDate ?? ''}`;
+}
+
+function indexFamily(family: readonly Entry[]): FamilyIndex {
+  const byId = new Map<string, Entry>();
+  const exceptionsOfSeries = new Map<string, Entry[]>();
+  const exceptionsOfOccurrence = new Map<string, Entry[]>();
+  const push = (map: Map<string, Entry[]>, key: string, row: Entry) => {
+    const rows = map.get(key);
+    if (rows === undefined) map.set(key, [row]);
+    else rows.push(row);
+  };
+  for (const row of family) {
+    byId.set(row.id, row);
+    if (row.seriesId === null) continue;
+    push(exceptionsOfSeries, row.seriesId, row);
+    push(exceptionsOfOccurrence, occurrenceKey(row.seriesId, row.originalDate), row);
+  }
+  return { byId, exceptionsOfSeries, exceptionsOfOccurrence };
+}
+
+/**
  * 例外の行。例外の行そのものが 1 回の内容を持つので、その行の開始から直接求める。
  * 直接求めるのは、移した先が遠い日付（探す範囲の外）でも、見つけるため。
  * ただし、展開（expandOccurrences）が出さない例外は、画面に出ない予定なので、通知もしない。系列が見つからない、
  * または削除されている例外と、同じ回に、より新しい例外の行が別にあるときの、古い方がそうなる。
  * 求めた時刻が afterMs 以前の例外は、展開しない（探す必要がないので、CPU 時間を使わない）。
  * 展開に渡すのは、系列の行と、同じ回の例外の行だけ。family の全行を渡すと、例外の多い系列で、例外の数の
- * 2 乗で時間がかかる（例外 300 件で約 8ms。CPU 時間は無料プランで 1 回 10ms）。
+ * 2 乗で時間がかかる（FamilyIndex）。
  */
-function exceptionNotifyAt(row: Entry, family: readonly Entry[], afterMs: number): number | null {
-  if (row.cancelled) return null;
+function exceptionNotifyAt(row: Entry, index: FamilyIndex, afterMs: number): number | null {
+  if (row.seriesId === null || row.cancelled) return null;
   const at = notifyAtMs(row);
   if (at <= afterMs) return null;
-  const sameOccurrence = family.filter(
-    ({ id, seriesId, originalDate }) =>
-      id === row.seriesId || (seriesId === row.seriesId && originalDate === row.originalDate),
-  );
+  const series = index.byId.get(row.seriesId);
+  const sameOccurrence = [
+    ...(series === undefined ? [] : [series]),
+    ...(index.exceptionsOfOccurrence.get(occurrenceKey(row.seriesId, row.originalDate)) ?? []),
+  ];
   const shown = expandOccurrences(sameOccurrence, row.startDate, lastCoveredDate(row)).some(
     (occurrence) => occurrence.entryId === row.id,
   );
@@ -97,10 +134,8 @@ function exceptionNotifyAt(row: Entry, family: readonly Entry[], afterMs: number
  * 期間を区切って先へ広げ、見つかったら、そこで止める。通知の分は系列で 1 つなので、通知の時刻の順は、
  * 開始日の順と同じになる。先の期間に、より早い回はない。
  */
-function seriesNotifyAt(series: Entry, family: readonly Entry[], afterMs: number): number | null {
-  const sameSeries = family.filter(
-    ({ id, seriesId }) => id === series.id || seriesId === series.id,
-  );
+function seriesNotifyAt(series: Entry, index: FamilyIndex, afterMs: number): number | null {
+  const sameSeries = [series, ...(index.exceptionsOfSeries.get(series.id) ?? [])];
   // 開始日より前に回はないので、探し始めは開始日より前にしない。afterMs の日付から数えて 9 年より先に始まる系列も、
   // 最初の回から探す（そうしないと、保存し直さない限り、開始日になっても通知されない。計算は、保存したときと
   // 通知を送ったときにしか動かないため）。9 年も、探し始めから数える。
@@ -144,14 +179,15 @@ export function nextNotifyTimes({
   afterMs: number;
 }): Map<string, number | null> {
   const result = new Map<string, number | null>();
+  const index = indexFamily(family);
   for (const row of family) {
     if (row.deletedAt !== null) continue;
     if (!row.notifyEnabled) {
       result.set(row.id, null);
     } else if (row.seriesId !== null) {
-      result.set(row.id, exceptionNotifyAt(row, family, afterMs));
+      result.set(row.id, exceptionNotifyAt(row, index, afterMs));
     } else if (row.rrule !== null) {
-      result.set(row.id, seriesNotifyAt(row, family, afterMs));
+      result.set(row.id, seriesNotifyAt(row, index, afterMs));
     } else {
       result.set(row.id, singleNotifyAt(row, afterMs));
     }
