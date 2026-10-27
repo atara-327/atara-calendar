@@ -866,7 +866,8 @@ Googleカレンダーと同じく、「元の予定（系列）」と「例外�
 
 **Discord への送信**（`notify/discord.ts`）
 
-- Webhook の URL（Secret `DISCORD_WEBHOOK_URL`。[10.4](#104-秘密情報nf-3)）に、`POST`・`Content-Type: application/json` で、`{ "content": 文面, "allowed_mentions": { "parse": [] } }` を送ります。2xx なら成功です。`allowed_mentions` の理由は [9.4](#94-通知の文面) です。
+- Webhook の URL（Secret `DISCORD_WEBHOOK_URL`。[10.4](#104-秘密情報nf-3)）に、`POST`・`Content-Type: application/json` で、`{ "content": 文面, "allowed_mentions": { "parse": [] }, "flags": 4 }` を送ります。2xx なら成功です。`allowed_mentions` の理由は [9.4](#94-通知の文面) です。
+- **`flags: 4`（SUPPRESS_EMBEDS）で、リンクの埋め込み（カード）を付けさせません**。**Why**: 文面の最後のリンク（[9.4](#94-通知の文面)）の先は、Access の後ろにあります。Discord がリンクを読みに行くと、ログインの画面のカードが、毎回付くおそれがあるためです。
 - **失敗（2xx 以外・通信の例外・待ちの上限）したら、その場で 1 回だけ再送します**。それでも失敗したら、ログに残して終わります。先に `next_notify_at` を進めているので、その回は届きません（最悪「1 回届かない」で済む、という上の考え方です）。**Why 1 回だけなのか**: 何度も再送すると、Discord が落ちているときに、ほかの通知まで遅らせるためです。
 - **1 回の待ちに、10 秒の上限を付けます**（`AbortSignal.timeout`）。**Why**: Discord が応答しないとき、定期実行が、ほかの行の通知を送れないまま待ち続けないためです。
 - **ログに、Webhook の URL を出しません**。失敗の理由は、HTTP の状態（`HTTP 500`）か、例外の名前（`TimeoutError` など）だけを出し、例外のメッセージと応答の本文は出しません。**Why**: Webhook の URL を知っていれば、誰でも、そのチャンネルに投稿できるためです。`fetch` の例外のメッセージには、URL が入ることがあります。

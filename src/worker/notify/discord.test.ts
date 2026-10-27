@@ -47,9 +47,20 @@ describe('NT-1: Discord への送信', () => {
     expect(init?.method).toBe('POST');
     expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(typeof init?.body).toBe('string');
-    expect(JSON.parse(typeof init?.body === 'string' ? init.body : 'null')).toEqual({
+    expect(JSON.parse(typeof init?.body === 'string' ? init.body : 'null')).toMatchObject({
       content: '🔔 10分後: 歯医者',
       allowed_mentions: { parse: [] },
+    });
+  });
+
+  it('リンクの埋め込み（カード）を付けさせない（flags: 4 = SUPPRESS_EMBEDS）', async () => {
+    const fetchFn = fetchReturning(ok());
+
+    await postToDiscord({ webhookUrl: WEBHOOK_URL, content: 'x', fetchFn });
+
+    const init = fetchFn.mock.calls[0]?.[1];
+    expect(JSON.parse(typeof init?.body === 'string' ? init.body : 'null')).toMatchObject({
+      flags: 4,
     });
   });
 

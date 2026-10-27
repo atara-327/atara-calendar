@@ -6,6 +6,9 @@ export type DiscordFetch = (url: string, init: RequestInit) => Promise<Response>
 /** 1 回の送信を待つ上限。Discord が応答しないとき、定期実行が、ほかの通知を送れないまま待ち続けないため。 */
 export const DISCORD_TIMEOUT_MS = 10_000;
 
+/** メッセージの flags の SUPPRESS_EMBEDS。Webhook の投稿で指定できるのは、このフラグと SUPPRESS_NOTIFICATIONS だけ。 */
+const SUPPRESS_EMBEDS = 4;
+
 /** 失敗の理由（ログ用）。URL や応答の中身は含めない。 */
 type Failure = string;
 
@@ -20,7 +23,9 @@ async function attempt(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // allowed_mentions で、題名に @everyone などを書いた予定が、サーバー全員への通知にならないようにする（設計書 9.4）。
-      body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+      // flags: 4（SUPPRESS_EMBEDS）で、リンクの埋め込み（カード）を付けさせない。リンク先は Access の後ろにあるので、
+      // Discord がリンクを読みに行くと、毎回、ログインの画面のカードが付くおそれがある（設計書 9.3）。
+      body: JSON.stringify({ content, allowed_mentions: { parse: [] }, flags: SUPPRESS_EMBEDS }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     // 本文は使わない。読まずに放ると、接続が開いたままになるので、捨てる。捨てるのに失敗しても、送れたことは変わらない。
