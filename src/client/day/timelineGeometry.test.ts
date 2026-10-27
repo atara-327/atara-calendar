@@ -3,6 +3,7 @@ import {
   DAY_HEIGHT,
   FALLBACK_TOP_MINUTE,
   HOUR_LABELS,
+  addButtonStart,
   initialTopMinute,
   minutesToTime,
   tapStartTime,
@@ -91,5 +92,44 @@ describe('分から時刻', () => {
     expect(minutesToTime(h(9, 5))).toBe('09:05');
     expect(minutesToTime(0)).toBe('00:00');
     expect(minutesToTime(h(23, 45))).toBe('23:45');
+  });
+});
+
+describe('( + ) ボタンの開始（日表示。設計書 11.3）', () => {
+  // 日本時間 2026-10-27（火）の 14:20（UTC 05:20）。
+  const AT_1420 = Date.UTC(2026, 9, 27, 5, 20);
+
+  it('今日を見ているときは、今日の、今の次の正時（14:20 なら 15:00）', () => {
+    expect(addButtonStart('2026-10-27', AT_1420)).toEqual({ date: '2026-10-27', time: '15:00' });
+  });
+
+  it('今日以外を見ているときは、見ている日の、今の時刻の次の正時（日は、見ている日のまま）', () => {
+    expect(addButtonStart('2026-11-10', AT_1420)).toEqual({ date: '2026-11-10', time: '15:00' });
+    expect(addButtonStart('2026-10-01', AT_1420)).toEqual({ date: '2026-10-01', time: '15:00' });
+  });
+
+  it('ちょうど正時のときも、その 1 時間後（14:00 なら 15:00）', () => {
+    expect(addButtonStart('2026-10-27', Date.UTC(2026, 9, 27, 5, 0)).time).toBe('15:00');
+  });
+
+  it('23 時台は、見ている日の 23:00（0:00 や翌日にしない）', () => {
+    // 日本時間 23:20 = UTC 14:20。
+    const at2320 = Date.UTC(2026, 9, 27, 14, 20);
+
+    expect(addButtonStart('2026-10-27', at2320)).toEqual({ date: '2026-10-27', time: '23:00' });
+    expect(addButtonStart('2026-11-10', at2320)).toEqual({ date: '2026-11-10', time: '23:00' });
+  });
+
+  it('ちょうど 23:00 も、23:00', () => {
+    expect(addButtonStart('2026-10-27', Date.UTC(2026, 9, 27, 14, 0)).time).toBe('23:00');
+  });
+
+  it('0 時台は 1:00', () => {
+    // 日本時間 0:10 = 前日の UTC 15:10。
+    expect(addButtonStart('2026-10-27', Date.UTC(2026, 9, 26, 15, 10)).time).toBe('01:00');
+  });
+
+  it('時刻は、UTC ではなく日本時間で決める（UTC ではまだ 10-26 の 15:30 でも、日本時間は 0:30）', () => {
+    expect(addButtonStart('2026-10-27', Date.UTC(2026, 9, 26, 15, 30)).time).toBe('01:00');
   });
 });

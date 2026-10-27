@@ -1,9 +1,12 @@
+import type { DateStr } from '../../shared/date';
+import { utcMsToJstMinuteOfDay } from '../../shared/date';
 import { formatTime } from '../dateFormat';
+import type { StartPoint } from '../form/schedule';
 
 // 日表示のタイムラインの、大きさと位置の決まり（設計書 11.3）。画面に依存しない。
 // ファイル名を timeline.ts にしない: 同じフォルダの Timeline.tsx と、大文字小文字だけが違い、大文字小文字を
 // 区別しないファイルシステム（macOS・Windows）で、`./Timeline` が、このファイルに解決されるため。
-// 数値は CSS の px と対応する（DayView.module.css）。時間は、その日の 0:00 からの分。
+// 数値は CSS の px と対応する（Timeline.module.css）。時間は、その日の 0:00 からの分。
 
 export const MINUTES_PER_DAY = 24 * 60;
 
@@ -67,6 +70,19 @@ export function tapStartTime(offsetY: number): string {
   const minute = Math.floor(offsetY / PX_PER_MINUTE);
   const clamped = Math.min(Math.max(minute, 0), MINUTES_PER_DAY - 1);
   return minutesToTime(Math.floor(clamped / TAP_SNAP_MINUTES) * TAP_SNAP_MINUTES);
+}
+
+/**
+ * 日表示の ( + ) ボタンの、開始。見ている日の、今の次の正時。ちょうど正時のときも、その 1 時間後。
+ * 23 時台は、見ている日の 23:00（日は変えず、時刻を、その日の中に収める）。
+ * 日は、見ている日のまま（今日以外を見ているときも）。日表示は、その日の時間割を立てる場所のため（設計書 11.3）。
+ * Why not form/schedule.ts の nextFullHour: 23 時台は、翌日の 0:00 を返す。その時刻だけを使うと、
+ * 今日を見ていて 23:20 に押したとき、23 時間以上前の、タイムラインの反対の端に作ってしまう。
+ * 「開いてすぐ、これから使う時間帯になっている」（設計書 11.4）とも、逆になる。
+ */
+export function addButtonStart(date: DateStr, nowMs: number): StartPoint {
+  const hour = Math.min(Math.floor(utcMsToJstMinuteOfDay(nowMs) / 60) + 1, 23);
+  return { date, time: minutesToTime(hour * 60) };
 }
 
 /** 時間軸の目盛りの文字（「0:00」〜「23:00」）。 */

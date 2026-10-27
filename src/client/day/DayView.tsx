@@ -10,7 +10,6 @@ import { addDays, todayJst, utcMsToJstMinuteOfDay, type DateStr } from '../../sh
 import { isDateInSupportedYears } from '../../shared/schema';
 import { AddEntryButton } from '../form/AddEntryButton';
 import { openCreateForm } from '../form/instance';
-import { nextFullHour } from '../form/schedule';
 import { goToMonth, replaceDay } from '../navigation';
 import { createViewSelector } from '../stableRows';
 import { useSyncState } from '../sync/instance';
@@ -24,7 +23,7 @@ import { dayItemsOf, dayNamesOf } from './dayItems';
 import styles from './DayView.module.css';
 import { layoutDay } from './layout';
 import { createSwipeTracker } from './swipe';
-import { PX_PER_MINUTE, initialTopMinute, tapStartTime } from './timelineGeometry';
+import { PX_PER_MINUTE, addButtonStart, initialTopMinute, tapStartTime } from './timelineGeometry';
 import { Timeline } from './Timeline';
 
 function selectReady(state: SyncState): boolean {
@@ -181,9 +180,8 @@ export function DayView({ date }: { date: DateStr }) {
       </div>
       <AddEntryButton
         kind="block"
-        // 見ている日の、今の次の正時から。日表示は、その日の時間割を立てる場所なので、今日以外を見ているときも、
-        // その日に作る（設計書 11.3）。23 時台は、見ている日の 0:00。
-        start={() => ({ date, time: nextFullHour(Date.now()).time })}
+        // 見ている日の、今の次の正時から（addButtonStart）。押した時刻で決める（描画した時刻を残さない）。
+        start={() => addButtonStart(date, Date.now())}
       />
     </div>
   );
