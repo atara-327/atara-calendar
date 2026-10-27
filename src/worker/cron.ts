@@ -22,7 +22,7 @@ import { nextNotifyTimes, occurrenceNotifiedAt } from './notify/nextNotifyAt';
  */
 export const MAX_DUE_ENTRIES_PER_RUN = 10;
 
-/** 通知の時刻から、これ以上遅れた通知は、送らずに次の回へ進める（設計書 Q10）。 */
+/** 通知を送る予定だった時刻（next_notify_at）から、これ以上遅れた通知は、送らずに次の回へ進める（設計書 12章 Q10 の「予定の時刻」の読み方）。 */
 export const LATE_NOTIFY_LIMIT_MS = 10 * 60_000;
 
 export interface NotifyRunOptions {
