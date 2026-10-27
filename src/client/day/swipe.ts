@@ -37,6 +37,16 @@ interface Tracking {
   axis: 'horizontal' | 'vertical' | null;
 }
 
+/**
+ * スワイプの直後の click を、捨てるか。捨てるのは、スワイプに続いて来た、指（やマウス）の click だけ。
+ * キーボード（Enter・Space）から来た click は、event.detail が 0 で、スワイプのものではないので、捨てない。
+ * Why: スワイプのあと、click が来ない端末では、「スワイプした」印が、次の pointerdown まで残る。
+ * その間に、Enter で押した項目を、1 回、無視してしまう。
+ */
+export function isClickAfterSwipe(swiped: boolean, detail: number): boolean {
+  return swiped && detail !== 0;
+}
+
 export function createSwipeTracker(): SwipeTracker {
   let tracking: Tracking | null = null;
 

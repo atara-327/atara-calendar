@@ -21,7 +21,7 @@ import { DayHeader } from './DayHeader';
 import { dayItemsOf, dayNamesOf } from './dayItems';
 import styles from './DayView.module.css';
 import { layoutDay } from './layout';
-import { createSwipeTracker } from './swipe';
+import { createSwipeTracker, isClickAfterSwipe } from './swipe';
 import {
   PX_PER_MINUTE,
   addButtonStart,
@@ -137,8 +137,9 @@ export function DayView({ date }: { date: DateStr }) {
       swipe.cancel(event.pointerId);
     },
     onClickCapture: (event: MouseEvent) => {
-      if (!swipedRef.current) return;
+      const swallow = isClickAfterSwipe(swipedRef.current, event.detail);
       swipedRef.current = false;
+      if (!swallow) return;
       event.preventDefault();
       event.stopPropagation();
     },

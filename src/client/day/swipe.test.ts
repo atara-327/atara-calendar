@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SWIPE_DISTANCE, createSwipeTracker } from './swipe';
+import { SWIPE_DISTANCE, createSwipeTracker, isClickAfterSwipe } from './swipe';
 
 // 指の識別（pointerId）。最初の指は isPrimary で、2 本目の指は、isPrimary ではない。
 const FINGER = 1;
@@ -165,5 +165,20 @@ describe('2 本目の指（拡大などの 2 本指の操作と、スワイプ�
     tracker.move(200, 402, 3);
 
     expect(tracker.end(200, 3)).toBe('left');
+  });
+});
+
+describe('スワイプの直後の click', () => {
+  it('スワイプのあとに、指（やマウス）の click が来たら、捨てる（空いているところのタップにしない）', () => {
+    expect(isClickAfterSwipe(true, 1)).toBe(true);
+  });
+
+  it('キーボード（Enter・Space）から来た click（detail が 0）は、スワイプの直後でも、捨てない', () => {
+    expect(isClickAfterSwipe(true, 0)).toBe(false);
+  });
+
+  it('スワイプしていないときの click は、捨てない', () => {
+    expect(isClickAfterSwipe(false, 1)).toBe(false);
+    expect(isClickAfterSwipe(false, 0)).toBe(false);
   });
 });
