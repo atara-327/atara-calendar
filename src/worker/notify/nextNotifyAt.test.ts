@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { jstToUtcMs } from '../../shared/date';
 import type { Entry } from '../../shared/schema';
 import { deepFreeze, makeEntry } from '../../../test/helpers/entries';
+import { jst } from '../../../test/helpers/time';
 import { nextNotifyTimes, notifyAtMs } from './nextNotifyAt';
-
-/** 日本時間の日付と 'HH:MM' から、UTC のミリ秒。期待値を、読める形で書くため。 */
-function jst(date: string, time: string): number {
-  return jstToUtcMs(date, Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)));
-}
 
 /** 時間指定の予定（15:00〜16:00、10 分前に通知）。繰り返さない。 */
 function timed(overrides: Partial<Entry> & Pick<Entry, 'id'>): Entry {

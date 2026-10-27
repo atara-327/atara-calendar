@@ -30,3 +30,14 @@ export async function readAllRows(db: D1Database): Promise<AllRows> {
     ),
   };
 }
+
+/**
+ * 予定の行ごとの next_notify_at（id → 値）。next_notify_at は Entry に入れない列（設計書 4.2）なので、
+ * 行の変換を通さず、直接読む。
+ */
+export async function readNextNotifyAt(db: D1Database): Promise<Record<string, number | null>> {
+  const { results } = await db
+    .prepare('SELECT id, next_notify_at FROM entries ORDER BY id')
+    .all<{ id: string; next_notify_at: number | null }>();
+  return Object.fromEntries(results.map((row) => [row.id, row.next_notify_at]));
+}
