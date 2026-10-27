@@ -9,7 +9,7 @@ import { makeEntry } from '../../../test/helpers/entries';
 import { readNextNotifyAt } from '../../../test/helpers/rows';
 import { jst } from '../../../test/helpers/time';
 import { nextNotifyTimes } from '../notify/nextNotifyAt';
-import { applyWrite, readChanges, type Database } from './store';
+import { MAX_NOTIFY_UPDATE_ROWS, applyWrite, readChanges, type Database } from './store';
 
 // 計算が例外を投げたとき（バグ）を再現するため、nextNotifyTimes だけ差し替えられるようにする。
 // 入力の行は applyWrite が entrySchema で確かめるので、データだけで、計算を例外にすることはできない。
@@ -356,6 +356,29 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
 
       expect(batchSizes).toEqual([2, 2]);
     });
+
+    it.each([
+      { rows: MAX_NOTIFY_UPDATE_ROWS, statements: 1 },
+      { rows: MAX_NOTIFY_UPDATE_ROWS + 1, statements: 2 },
+      { rows: MAX_NOTIFY_UPDATE_ROWS * 2 + 1, statements: 3 },
+    ])(
+      `UPDATE は、1 文に入る行数を ${String(MAX_NOTIFY_UPDATE_ROWS)} 行までにする（値の大きさが小さくても、行数で分ける）。$rows 行の更新は $statements 文`,
+      async ({ rows, statements }) => {
+        const { database, batchSizes, updateValueBytes } = recordingDatabase();
+        const entries = Array.from({ length: rows }, (_, index) =>
+          timed({ id: `e${String(index)}` }),
+        );
+
+        await applyWrite(database, { entries }, { nowMs: NOW });
+
+        expect(updateValueBytes).toHaveLength(statements);
+        // 1 つ目は今の行の確認。2 つ目が書き込み（rev・entries の upsert・UPDATE のかたまり）。
+        expect(batchSizes).toEqual([3, 1 + 1 + statements]);
+        const nextNotifyAt = Object.values(await readNextNotifyAt(db()));
+        expect(nextNotifyAt).toHaveLength(rows);
+        expect(nextNotifyAt.every((value) => value === jst('2026-10-27', '14:50'))).toBe(true);
+      },
+    );
 
     it('UPDATE の値は、upsert と同じく、約 1MB ごとのかたまりに分けて、同じ batch に入れる', async () => {
       const { database, batchSizes, updateValueBytes } = recordingDatabase();

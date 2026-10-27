@@ -237,23 +237,37 @@ export type WriteResult = { applied: false } | { applied: true; rev: number };
  */
 export const MAX_UPSERT_VALUE_BYTES = 1_000_000;
 
+/**
+ * next_notify_at の UPDATE の 1 文に入れる行数の上限。値の大きさの上限（MAX_UPSERT_VALUE_BYTES）とは別に、
+ * 行数でも分ける。UPDATE_NEXT_NOTIFY_AT は、更新する行数の 2 乗の時間がかかる（2,000 行で約 1.8 秒）ので、
+ * 行数に上限を付けておけば、どんなに大きな書き込みでも、1 文の時間が数百 ms に収まる。D1 の 1 回のクエリの
+ * 時間には上限（30 秒）があり、超えると batch 全体が失敗して、保存がすべて失敗する。
+ * 文が増えるのは、この行数を超えるときだけなので、普段の書き込み（数行）の文の数は変わらない。
+ * upsert は、行数の 2 乗にならないので、行数では分けない。
+ */
+export const MAX_NOTIFY_UPDATE_ROWS = 500;
+
 const textEncoder = new TextEncoder();
 
 /**
  * 行を、JSON 配列の文字列に分ける。1 つの文字列は、MAX_UPSERT_VALUE_BYTES を超えないようにする。
+ * maxRows を渡したときは、1 つの文字列に入る行数も、maxRows までにする。
  * 大きさは、string.length（文字数）ではなく、UTF-8 のバイト数で数える。D1 の上限がバイトで、日本語は
  * 1 文字 3 バイトなので、文字数で数えると、上限の 3 倍近くまで大きくなってしまう。
  * 1 行だけで上限を超える行は、行を分けられないので、その行だけで 1 つのかたまりにする。そういう行は、
  * ここでは防げない。入力の文字列の長さの上限（実装 #4c。設計書 4.2）で防ぐ。
  */
-function toJsonChunks(rows: readonly unknown[]): string[] {
+function toJsonChunks(rows: readonly unknown[], maxRows = Number.POSITIVE_INFINITY): string[] {
   const chunks: string[][] = [];
   let current: string[] = [];
   let bytes = 2; // 配列の [ と ]
   for (const row of rows) {
     const json = JSON.stringify(row);
     const size = textEncoder.encode(json).length + 1; // 区切りの ,
-    if (current.length > 0 && bytes + size > MAX_UPSERT_VALUE_BYTES) {
+    if (
+      current.length > 0 &&
+      (bytes + size > MAX_UPSERT_VALUE_BYTES || current.length >= maxRows)
+    ) {
       chunks.push(current);
       current = [];
       bytes = 2;
@@ -323,9 +337,9 @@ const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
 // 手元（Miniflare）では確かめられないため。この UPDATE は書き込みと同じ batch にあるので、構文が通らないと、削除しない行を
 // 含む保存が、すべて失敗する（予定を保存できなくなる）。upsert（INSERT ... SELECT ... FROM json_each ... ON CONFLICT）は
 // 本番で動いているので、json_each と json_extract だけを使い、行ごとに値を引く相関サブクエリで書く。
-// 相関サブクエリは、行ごとに JSON の配列を走査するので、更新する行数の 2 乗の時間がかかる。1 回の依頼で更新するのは
-// 1 つの系列の行（通常は数行〜数百行）なので、許す。Miniflare の実測（upsert を含む書き込み全体）で、300 行 約 0.1 秒、
-// 1,000 行 約 0.5 秒、2,000 行 約 1.8 秒。WHERE id IN (...) を付けるのは、行を主キーで引くため
+// 相関サブクエリは、行ごとに JSON の配列を走査するので、1 文の行数の 2 乗の時間がかかる。Miniflare の実測
+// （upsert を含む書き込み全体）で、300 行 約 0.1 秒、1,000 行 約 0.5 秒、2,000 行 約 1.8 秒。そこで、1 文に入る行数を
+// MAX_NOTIFY_UPDATE_ROWS までにして、文を分ける。WHERE id IN (...) を付けるのは、行を主キーで引くため
 // （付けないと、entries の全行を走査して、D1 の読み取り行数を使う）。
 const UPDATE_NEXT_NOTIFY_AT = [
   'UPDATE entries',
@@ -420,7 +434,10 @@ function assertNoDuplicateIds(ids: readonly string[]): void {
   }
 }
 
-/** next_notify_at の UPDATE。値は、upsert と同じく、大きさで分けたかたまりごとに 1 文（toJsonChunks）。 */
+/**
+ * next_notify_at の UPDATE。値は、upsert と同じく、大きさで分けたかたまりごとに 1 文（toJsonChunks）。
+ * さらに、1 文に入る行数を MAX_NOTIFY_UPDATE_ROWS までにする。
+ */
 function notifyUpdateStatements(
   db: Database,
   updates: readonly NotifyUpdate[],
@@ -430,7 +447,9 @@ function notifyUpdateStatements(
     edited_at: editedAt,
     next_notify_at: nextNotifyAt,
   }));
-  return toJsonChunks(rows).map((json) => db.prepare(UPDATE_NEXT_NOTIFY_AT).bind(json));
+  return toJsonChunks(rows, MAX_NOTIFY_UPDATE_ROWS).map((json) =>
+    db.prepare(UPDATE_NEXT_NOTIFY_AT).bind(json),
+  );
 }
 
 /** applyWrite の、書く行とは別の入力。 */
