@@ -47,7 +47,7 @@ const LOOKBACK_DAYS = Math.ceil(-INPUT_LIMITS.notifyOffsetMin.min / MINUTES_PER_
 // 毎日の系列を、いきなり 9 年ぶん展開すると、CPU 時間（無料プランは 1 回 10ms。付録 A.2）を使うため。
 const FIRST_WINDOW_DAYS = 62;
 const NEXT_WINDOW_DAYS = 365;
-// 2/29 の毎年は、次の回が最大 8 年先になる（2096 年の次のうるう年は 2104 年。設計書 9.2）ので、9 年まで探す。
+// 2/29 の毎年は、次の回が最大 8 年先になる（2096 年の次のうるう年は 2104 年。設計書 9.2）ので、探し始めから 9 年まで探す。
 const SEARCH_YEARS = 9;
 
 /** 同じ月日の n 年後。その年にない日（2/29）は、月末にする。探す範囲の終わりを決めるだけなので、1 日のずれは気にしない。 */
@@ -55,6 +55,11 @@ function addYears(date: DateStr, years: number): DateStr {
   const { year, month, day } = dateToYmd(date);
   const target = year + years;
   return ymdToDate(target, month, Math.min(day, daysInMonth(target, month)));
+}
+
+/** 遅い方の日付。'YYYY-MM-DD' は、文字列のまま比べても、日付の順になる。 */
+function laterDate(a: DateStr, b: DateStr): DateStr {
+  return a > b ? a : b;
 }
 
 /** 繰り返さない予定。その行の 1 回だけ。通知の時刻が afterMs 以前なら、もう通知しない。 */
@@ -96,9 +101,12 @@ function seriesNotifyAt(series: Entry, family: readonly Entry[], afterMs: number
   const sameSeries = family.filter(
     ({ id, seriesId }) => id === series.id || seriesId === series.id,
   );
-  const afterDate = utcMsToJstDate(afterMs);
-  const lastDate = addYears(afterDate, SEARCH_YEARS);
-  let from = addDays(afterDate, -LOOKBACK_DAYS);
+  // 開始日より前に回はないので、探し始めは開始日より前にしない。afterMs の日付から数えて 9 年より先に始まる系列も、
+  // 最初の回から探す（そうしないと、保存し直さない限り、開始日になっても通知されない。計算は、保存したときと
+  // 通知を送ったときにしか動かないため）。9 年も、探し始めから数える。
+  const searchFrom = laterDate(addDays(utcMsToJstDate(afterMs), -LOOKBACK_DAYS), series.startDate);
+  const lastDate = addYears(searchFrom, SEARCH_YEARS);
+  let from = searchFrom;
   let windowDays = FIRST_WINDOW_DAYS;
   while (from <= lastDate) {
     const windowEnd = addDays(from, windowDays - 1);

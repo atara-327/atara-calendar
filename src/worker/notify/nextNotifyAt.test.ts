@@ -280,17 +280,42 @@ describe('RP-1〜6: nextNotifyTimes（繰り返しの系列）', () => {
     });
   });
 
-  describe('探す範囲は、afterMs の日付から 9 年まで', () => {
-    it('9 年後の同じ日の回までは見つかる', () => {
-      const series = allDay({ id: 's', rrule: { freq: 'daily' }, startDate: '2035-10-27' });
+  describe('探す範囲は、探し始め（afterMs の日付の 2 日前と、系列の開始日の、遅い方）から 9 年まで', () => {
+    it('開始日が 9 年より先の系列も、開始日の最初の回が見つかる（毎年）', () => {
+      const series = allDay({ id: 's', rrule: { freq: 'yearly' }, startDate: '2036-04-01' });
 
-      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2035-10-27', '06:00'));
+      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2036-04-01', '06:00'));
     });
 
-    it('9 年より先にしか回がなければ、null', () => {
+    it('開始日が 9 年より先の系列も、開始日の最初の回が見つかる（毎日・開始日が 9 年と 1 日後）', () => {
       const series = allDay({ id: 's', rrule: { freq: 'daily' }, startDate: '2035-10-28' });
 
-      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBeNull();
+      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2035-10-28', '06:00'));
+    });
+
+    it('開始日が遠い先の、毎年の 2/29 は、開始日の最初の回が見つかる（うるう年の開始日）', () => {
+      const series = allDay({ id: 's', rrule: { freq: 'yearly' }, startDate: '2096-02-29' });
+
+      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2096-02-29', '06:00'));
+    });
+
+    it('開始日が遠い先の、毎週・平日の系列も、開始日以降の最初の回が見つかる', () => {
+      // 2040-01-02 と 2040-02-06 は月曜。
+      const weekly = allDay({
+        id: 's',
+        rrule: { freq: 'weekly', days: [1] },
+        startDate: '2040-01-02',
+      });
+      const weekday = allDay({ id: 's', rrule: { freq: 'weekday' }, startDate: '2040-02-06' });
+
+      expect(nextOfSeries([weekly], jst('2026-10-27', '09:00'))).toBe(jst('2040-01-02', '06:00'));
+      expect(nextOfSeries([weekday], jst('2026-10-27', '09:00'))).toBe(jst('2040-02-06', '06:00'));
+    });
+
+    it('開始日が過去なら、これまでどおり、afterMs の後の最初の回（開始日からは探さない）', () => {
+      const series = allDay({ id: 's', rrule: { freq: 'yearly' }, startDate: '2020-04-01' });
+
+      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2027-04-01', '06:00'));
     });
   });
 
