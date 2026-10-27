@@ -1,0 +1,166 @@
+/*
+ * サイドメニュー（設計書 11.5）。<dialog>（showModal）の中身。左から重ねて出す。幅は 300px まで（狭い画面では、画面の 85%）。
+ * 背景（::backdrop）は暗くして、押すと閉じる。CSP の下なので、HTML の style 属性や <style> 要素は使わない。
+ * ワークスペースの色の丸だけ、実行時に決まる値なので、React の style プロパティ（CSSOM。CSP の対象外）で与える。
+ */
+
+.drawer {
+  box-sizing: border-box;
+  /* 既定の、中央に寄せる指定（margin: auto・max-width・max-height）を外し、左の端に、画面の高さいっぱいに置く。 */
+  inset: 0 auto 0 0;
+  width: min(300px, 85vw);
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-right: 1px solid var(--color-grid);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 8px 0 32px rgb(0 0 0 / 60%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.drawer::backdrop {
+  background-color: rgb(0 0 0 / 60%);
+}
+
+@keyframes slide-in-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .drawer[open] {
+    animation: slide-in-from-left 160ms ease-out;
+  }
+}
+
+/* 中身が dialog の全面を覆う。背景を押したときだけ、click の target が dialog そのものになるため。 */
+.panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+  padding-bottom: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 0 16px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.closeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.closeButton:hover {
+  background-color: var(--color-grid);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+.error {
+  margin: 0;
+  padding: 0 16px;
+  color: var(--color-holiday);
+  font-size: 13px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionTitle {
+  margin: 8px 0 0;
+  padding: 4px 16px;
+  color: var(--color-observance);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--color-observance);
+  font-size: 14px;
+}
+
+/* 1 行が、押しやすい高さ（44px）のチェックボックス。 */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.row:hover {
+  background-color: rgb(255 255 255 / 6%);
+}
+
+.row:has(input:disabled) {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.row:has(input:focus-visible) {
+  outline: 2px solid var(--color-today);
+  outline-offset: -2px;
+}
+
+.check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

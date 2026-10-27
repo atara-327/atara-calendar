@@ -1,0 +1,24 @@
+/* ヘッダーの左端の ≡。日表示の前後の日の矢印（32px）と同じ大きさ。 */
+.button {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: var(--color-grid);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 2px;
+}

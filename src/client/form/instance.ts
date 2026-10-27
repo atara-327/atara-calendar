@@ -1,5 +1,6 @@
 import { useStore } from 'zustand';
 import type { Occurrence } from '../../shared/recurrence';
+import { browserHistoryEnv } from '../historyMark';
 import { createFormController, type FormController, type FormState } from './formController';
 import type { StartPoint } from './schedule';
 import type { EntryKind } from './values';
@@ -11,15 +12,7 @@ let controller: FormController | null = null;
  * 作るのを、モジュールの読み込み時にしないのは、読み込んだだけで、window に触れないため（sync/instance.ts と同じ）。
  */
 export function getFormController(): FormController {
-  controller ??= createFormController({
-    history: window.history,
-    onPopState: (listener) => {
-      window.addEventListener('popstate', listener);
-      return () => {
-        window.removeEventListener('popstate', listener);
-      };
-    },
-  });
+  controller ??= createFormController(browserHistoryEnv());
   return controller;
 }
 

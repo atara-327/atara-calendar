@@ -23,6 +23,19 @@ export interface HistoryEnv {
   onPopState(listener: () => void): () => void;
 }
 
+/** このブラウザの履歴。呼んだときに初めて window に触れる（読み込んだだけでは触れない）。 */
+export function browserHistoryEnv(): HistoryEnv {
+  return {
+    history: window.history,
+    onPopState: (listener) => {
+      window.addEventListener('popstate', listener);
+      return () => {
+        window.removeEventListener('popstate', listener);
+      };
+    },
+  };
+}
+
 /** 印を付けた履歴を、開いている側が見張るために渡すもの。 */
 export interface MarkedLayer {
   isOpen(): boolean;
