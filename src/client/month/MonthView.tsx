@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { WEEKDAY_LABELS } from '../dateFormat';
 import { AddEntryButton } from '../form/AddEntryButton';
+import { MenuButton } from '../sidebar/MenuButton';
 import { PendingBadge, SyncOverview } from '../sync/SyncStatus';
 import { useToday } from './useToday';
 import { MonthGrid } from './MonthGrid';
@@ -15,9 +16,8 @@ const SUNDAY = 0;
 const SATURDAY = 6;
 
 /**
- * 月表示（MV-1〜10）。固定のヘッダー（年月・今日ボタン・曜日）と、縦に途切れずスクロールする週の行と、
+ * 月表示（MV-1〜10）。固定のヘッダー（≡・年月・今日ボタン・曜日）と、縦に途切れずスクロールする週の行と、
  * 新しい予定を作る ( + ) ボタン。
- * まだない部品は出さない（≡ のサイドメニューは実装 #10）。
  */
 export function MonthView() {
   const today = useToday();
@@ -35,7 +35,10 @@ export function MonthView() {
   return (
     <div className={styles.screen}>
       <header className={styles.header}>
-        <h1 className={styles.title}>{headerTitle(weekOfRow(topRow))}</h1>
+        <div className={styles.headerStart}>
+          <MenuButton />
+          <h1 className={styles.title}>{headerTitle(weekOfRow(topRow))}</h1>
+        </div>
         <div className={styles.headerEnd}>
           <PendingBadge />
           <button type="button" className={styles.todayButton} onClick={goToToday}>

@@ -12,7 +12,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px 4px;
+  padding: 8px 12px 4px 8px;
+}
+
+/* 左端の ≡ と年月。年月が長くなっても、［今日］を押し出さない（min-width: 0）。 */
+.headerStart {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .title {

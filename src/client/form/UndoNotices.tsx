@@ -19,6 +19,8 @@ export function showDeletedNotice(requestId: string): void {
 
 /**
  * 画面の下の「削除しました［元に戻す］」（OT-1。設計書 6.6）。置き場所は、同期の知らせと同じ列（BottomNotices）。
+ * ワークスペースの編集のダイアログ（sidebar/WorkspaceEditor.tsx）の中にも、同じ知らせを出す。削除のあとも、ダイアログが
+ * 開いたままで、モーダルの外の列は、押せないため。知らせの状態（undoNotices）は 1 つで、どちらにも同じものが出る。
  * 中身がないときも、読み上げ用の領域（role="status"）は置いておく。あとから領域を足すと、
  * 読み上げソフトが、出てきた知らせを読まないことがある。
  */

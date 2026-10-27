@@ -1,0 +1,240 @@
+/*
+ * ワークスペースの編集（設計書 11.5）。ダイアログの枠・ボタン・入力欄は、予定のフォームと同じ CSS（EntryForm.module.css）を使う。
+ * ここに書くのは、段の中身（一覧・名前と色・削除の確認）の並べ方だけ。CSP の下なので、HTML の style 属性や
+ * <style> 要素は使わない。ワークスペースの色だけ、実行時に決まる値なので、React の style プロパティ（CSSOM）で与える。
+ */
+
+.title {
+  margin: 0;
+  padding-left: 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* 段を変えたとき、見出しにフォーカスを置く（tabIndex = -1）。枠は出さない。 */
+.title:focus {
+  outline: none;
+}
+
+.failure {
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--color-holiday);
+  font-size: 13px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 4px 16px 20px;
+}
+
+/* ---- 一覧 ---- */
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+}
+
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+}
+
+/*
+ * 名前（押すと、名前と色の段）。行の残りの幅を、全部使う。
+ * 長い名前の省略（…）を、<button> に直接かけず、中の span にかけるのは、<button> の text-overflow が、
+ * ブラウザによって効かないため（月表示・日表示の予定のボタンと同じ）。
+ */
+.nameButton {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameButton:hover {
+  background-color: rgb(255 255 255 / 6%);
+}
+
+.moveButton {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.moveButton:hover:not(:disabled) {
+  background-color: var(--color-grid);
+}
+
+.moveButton:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.nameButton:focus-visible,
+.moveButton:focus-visible,
+.addButton:focus-visible,
+.swatch:has(input:focus-visible) .swatchDot {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+.addButton {
+  padding: 10px 16px;
+  border: 1px solid var(--color-grid);
+  border-radius: 20px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.addButton:hover {
+  background-color: var(--color-grid);
+}
+
+/* ---- 名前と色 ---- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.label {
+  padding: 0;
+  color: var(--color-observance);
+  font-size: 13px;
+}
+
+/* fieldset の legend は、flex の gap の対象にならないので、色の見本との間を、余白で空ける。 */
+legend.label {
+  margin-bottom: 10px;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/*
+ * 色の見本（ラジオボタン）。ラジオボタン本体は、見えなくして、見本の全面に重ねる（Tab・矢印キーで選べる）。
+ * 選んでいる色は、色に頼らず、見本のまわりの輪で示す（色の見分けにくい人にも分かるように）。
+ */
+.swatch {
+  position: relative;
+  width: 36px;
+  height: 36px;
+}
+
+.swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.swatchDot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.swatch input:checked + .swatchDot {
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 4px var(--color-text);
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-observance);
+  font-size: 13px;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* 最後の 1 つの［削除］は、押せない。予定のフォームの［削除］（EntryForm.module.css）には、押せない見た目がない。 */
+.buttons button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.confirmText {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.confirmText:focus {
+  outline: none;
+}
+
+/*
+ * 削除したあとの「元に戻す」。ダイアログの下端に、貼り付ける（中身をスクロールしても、見えるように）。
+ * 知らせがないときは、何も出さない（高さを持たない）。
+ */
+.notices {
+  position: sticky;
+  bottom: 0;
+  background-color: var(--color-bg);
+}
+
+.notices:has(p) {
+  padding: 8px 12px 12px;
+}

@@ -5,6 +5,7 @@ import {
   formatMonthDay,
   formatShortDate,
   formatTime,
+  formatYear,
 } from './dateFormat';
 
 describe('日付の表記', () => {
@@ -20,6 +21,18 @@ describe('日付の表記', () => {
     expect(WEEKDAY_LABELS).toEqual(['日', '月', '火', '水', '木', '金', '土']);
     expect(formatDayTitle('2026-10-18')).toContain('（日）');
     expect(formatDayTitle('2026-10-24')).toContain('（土）');
+  });
+});
+
+describe('年の表記', () => {
+  it('「2026年」の形にする', () => {
+    expect(formatYear('2026-10-21')).toBe('2026年');
+  });
+
+  it('年と、月日・曜日をつなぐと、「2026年10月21日（水）」になる（日表示のヘッダーが、年だけを省けるように）', () => {
+    expect(`${formatYear('2026-10-21')}${formatMonthDay('2026-10-21')}`).toBe(
+      formatDayTitle('2026-10-21'),
+    );
   });
 });
 
