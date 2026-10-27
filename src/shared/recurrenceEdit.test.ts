@@ -9,6 +9,7 @@ import {
   type Occurrence,
 } from './recurrence';
 import { addDays } from './date';
+import { entryProblem } from './entryRules';
 import type { Entry, EntryChanges, EntryDraft, Rrule, Scope } from './schema';
 import { deepFreeze, makeEntry } from '../../test/helpers/entries';
 
@@ -1195,6 +1196,137 @@ describe('展開との組み合わせ（行を書き込んだ後の見え方）'
     );
     expect(expandOccurrences(after, '2026-10-01', '2027-12-31')).toEqual([]);
   });
+});
+
+describe('項目をまたぐ確認（設計書 4.2）との組み合わせ: 回が 1 つもない系列は、守られていない行になる', () => {
+  const daily = makeEntry({
+    id: 's1',
+    allDay: false,
+    startDate: '2026-10-19',
+    startTime: '19:00',
+    endTime: '20:00',
+    rrule: { freq: 'daily' },
+  });
+  /** 10/19 からの毎日を、10/24 の「これ以降すべて」の削除で、10/23 までにしたもの。 */
+  const cutAtOct23 = applyRows([daily], remove([daily], '2026-10-24', 'following'));
+  const toSunday: EntryChanges = { rrule: { freq: 'weekly', days: [0] } };
+
+  /** 書く行のうち、削除しない行の、守られていない決まりの説明。 */
+  function problemsOf(rows: readonly Entry[]): string[] {
+    return rows.filter((row) => row.deletedAt === null).flatMap((row) => entryProblem(row) ?? []);
+  }
+
+  it('これ以降すべて: 10/23 の回を毎週 日に変えると、新しい系列の開始日が 10/25 になり、untilDate（10/23）より後になる', () => {
+    expect(cutAtOct23.map(({ untilDate }) => untilDate)).toEqual(['2026-10-23']);
+
+    const rows = change(cutAtOct23, '2026-10-23', 'following', toSunday);
+
+    expect(rowOf(rows, NEW_ID)).toMatchObject({ startDate: '2026-10-25', untilDate: '2026-10-23' });
+    expect(entryProblem(rowOf(rows, NEW_ID))).toEqual(expect.any(String));
+  });
+
+  it('すべて: 10/23 の回を毎週 日に変えると、開始日が 10/19 から 10/25 にずれ、untilDate（10/23）より後になる', () => {
+    const rows = change(cutAtOct23, '2026-10-23', 'all', toSunday);
+
+    expect(rowOf(rows, 's1')).toMatchObject({ startDate: '2026-10-25', untilDate: '2026-10-23' });
+    expect(entryProblem(rowOf(rows, 's1'))).toEqual(expect.any(String));
+  });
+
+  it.each(['following', 'all'] as const)(
+    '%s: ルールを変えずに題名だけ変えるのは、守られている',
+    (scope) => {
+      expect(problemsOf(change(cutAtOct23, '2026-10-23', scope, { title: '新ジム' }))).toEqual([]);
+    },
+  );
+
+  it.each(['following', 'all'] as const)(
+    '%s: ルールに合う最初の日（10/25）が untilDate と同じ日なら、その日の 1 回が残るので、守られている',
+    (scope) => {
+      const cutAtOct25 = applyRows([daily], remove([daily], '2026-10-26', 'following'));
+
+      const rows = change(cutAtOct25, '2026-10-23', scope, toSunday);
+
+      expect(rowOf(rows, scope === 'all' ? 's1' : NEW_ID)).toMatchObject({
+        startDate: '2026-10-25',
+        untilDate: '2026-10-25',
+      });
+      expect(problemsOf(rows)).toEqual([]);
+    },
+  );
+
+  it.each(['following', 'all'] as const)(
+    '%s: ルールをなくすと untilDate も null になり、守られている',
+    (scope) => {
+      const rows = change(cutAtOct23, '2026-10-23', scope, { rrule: null });
+
+      expect(rowOf(rows, scope === 'all' ? 's1' : NEW_ID).untilDate).toBeNull();
+      expect(problemsOf(rows)).toEqual([]);
+    },
+  );
+
+  // 最初の回の「これ以降すべて」は「すべて」に回る（系列を切らない）ので、切った untilDate は、必ず開始日以降になる。
+  it.each([
+    {
+      name: '終わりがない毎日の系列',
+      rows: [daily],
+      dates: ['2026-10-19', '2026-10-20', '2026-10-25'],
+    },
+    {
+      name: '10/23 で切られた毎日の系列',
+      rows: cutAtOct23,
+      dates: ['2026-10-19', '2026-10-20', '2026-10-23'],
+    },
+  ])(
+    '$name: どの回の「これ以降すべて」でも、題名の変更も削除も、守られている',
+    ({ rows, dates }) => {
+      for (const date of dates) {
+        expect(problemsOf(change(rows, date, 'following', { title: '新ジム' })), date).toEqual([]);
+        expect(problemsOf(remove(rows, date, 'following')), date).toEqual([]);
+      }
+    },
+  );
+
+  // ルールを変えずに日付をずらすと、開始日と untilDate が同じだけずれる。開始日と untilDate が同じ日になる境目でも、
+  // その日の 1 回が残るので、守られている。
+  it.each([
+    {
+      name: '毎週 月・水・金（10/19〜10/23）の 10/23 の回を 10/24 へ',
+      series: makeEntry({
+        id: 's1',
+        rrule: { freq: 'weekly', days: [1, 3, 5] },
+        startDate: '2026-10-19',
+        untilDate: '2026-10-23',
+      }),
+      date: '2026-10-23',
+      to: '2026-10-24',
+      following: { startDate: '2026-10-24', untilDate: '2026-10-24' },
+      all: { startDate: '2026-10-20', untilDate: '2026-10-24' },
+    },
+    {
+      name: '毎月（1/31〜3/31）の 3/31 の回を 3/30 へ',
+      series: makeEntry({
+        id: 's1',
+        rrule: { freq: 'monthly' },
+        startDate: '2026-01-31',
+        untilDate: '2026-03-31',
+      }),
+      date: '2026-03-31',
+      to: '2026-03-30',
+      following: { startDate: '2026-03-30', untilDate: '2026-03-30' },
+      all: { startDate: '2026-01-30', untilDate: '2026-03-30' },
+    },
+  ])(
+    '$name: ルールを変えずに日付をずらすのは、どちらの範囲でも、守られている',
+    ({ series, date, to, following, all }) => {
+      const followingRows = change([series], date, 'following', { startDate: to });
+      expect(rowOf(followingRows, NEW_ID)).toMatchObject(following);
+      expect(problemsOf(followingRows)).toEqual([]);
+
+      const allRows = change([series], date, 'all', { startDate: to });
+      expect(rowOf(allRows, 's1')).toMatchObject(all);
+      expect(problemsOf(allRows)).toEqual([]);
+    },
+  );
 });
 
 describe('RP-6: タイムブロックでも同じように動く', () => {

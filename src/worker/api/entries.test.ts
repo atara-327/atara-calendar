@@ -10,7 +10,7 @@ import {
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { writeResponseSchema } from '../../shared/api';
-import type { Entry } from '../../shared/schema';
+import type { Entry, Scope } from '../../shared/schema';
 import { applyWrite } from '../db/store';
 
 let testDatabase: TestDatabase;
@@ -1096,6 +1096,44 @@ describe('PATCH /api/entries/:id（変更）', () => {
       });
 
       expect(res.body).toEqual({ applied: true });
+    });
+
+    describe('項目をまたぐ確認: 後ろを切った系列で、ルールに合う最初の日が untilDate より後にずれる（4.2）', () => {
+      // 10/19（月）からの毎日を 10/23（金）で切った系列の、10/23 の回を、毎週 日に変える。最初の日は 10/25（日）にずれる。
+      const toSunday = { rrule: { freq: 'weekly', days: [0] } };
+
+      it.each<Scope>(['following', 'all'])(
+        '回が 1 つもない系列になる変更は 400（scope: %s）。DB は変わらない',
+        async (scope) => {
+          await seedSeries({ untilDate: '2026-10-23' });
+          const before = await dumpTables(db());
+
+          const res = await patchEntry('s', {
+            scope,
+            occurrenceDate: '2026-10-23',
+            changes: toSunday,
+          });
+
+          expect(res.status).toBe(400);
+          expect(res.body).toEqual(invalidRequest);
+          expect(await dumpTables(db())).toEqual(before);
+        },
+      );
+
+      it.each<Scope>(['following', 'all'])(
+        'untilDate が最初の日（10/25）と同じなら、その日の 1 回が残るので通る（scope: %s）',
+        async (scope) => {
+          await seedSeries({ untilDate: '2026-10-25' });
+
+          const res = await patchEntry('s', {
+            scope,
+            occurrenceDate: '2026-10-23',
+            changes: toSunday,
+          });
+
+          expect(res.body).toEqual({ applied: true });
+        },
+      );
     });
 
     it.each<{ name: string; overrides: Record<string, unknown> }>([
