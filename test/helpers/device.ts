@@ -11,6 +11,7 @@ import type { SyncState } from '../../src/client/sync/state';
 import { createIdbStorage, type PendingStorage } from '../../src/client/sync/storage';
 import type { Bindings } from '../../src/worker/env';
 import { app } from '../../src/worker/index';
+import { TEST_APP_ORIGIN } from './env';
 
 // 同期の結合テストの道具。端末（同期のエンジンと、その環境）を、本物の Worker（Miniflare の D1 と app）に
 // つなぐ。時計・電波・ページの出来事・タブの錠は、テストが自由に動かせる偽物にする。
@@ -131,6 +132,7 @@ export class WorkerNetwork {
         DB: this.db,
         ACCESS_TEAM_DOMAIN: '',
         ACCESS_AUD: '',
+        APP_ORIGIN: TEST_APP_ORIGIN,
         AUTH_MODE: 'dev',
       };
       const response = await app.request(
