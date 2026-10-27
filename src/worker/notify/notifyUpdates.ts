@@ -22,9 +22,10 @@ function calculateOrNull(
   key: string,
   family: readonly Entry[],
   nowMs: number,
+  afterMsById: ReadonlyMap<string, number>,
 ): Map<string, number | null> | null {
   try {
-    return nextNotifyTimes({ family, afterMs: nowMs });
+    return nextNotifyTimes({ family, afterMs: nowMs, afterMsById });
   } catch (error) {
     // 計算のバグで保存を失敗させると、端末が再送し続けるか、4xx で捨てて、予定そのものを失う。
     // 保存は成功させ、この系列だけ、通知しない（NULL）。ログに出すのは id と例外だけで、予定の中身（題名など）は出さない。
@@ -46,6 +47,13 @@ function calculateOrNull(
  * 通知の対象になる行が残らず、削除した行の next_notify_at は upsert が NULL に戻す。見ようとすると、
  * ワークスペースの削除のように、削除する行が多い書き込みで、系列ごとの読み込みと検証が増えて、CPU 時間を使う。
  *
+ * 書く行は「今」より後の回だけを数える（保存した時点で過ぎている回は飛ばす）。書かない行は、「今」と、その行の
+ * 今の next_notify_at の 1 ms 前の、早い方より後の回を数える（今の値が NULL なら「今」）。書かない行の、
+ * 時刻が来て、まだ送っていない回は、利用者が今回保存した回ではないので、飛ばさず、定期実行が送るもののまま残す。
+ * 飛ばすと、14:50 に通知する毎日の系列で、14:50:20 に、明日の回を「この予定のみ」で変えたとき、書かない系列の行が
+ * 「今」で計算し直されて、今日の通知が明日に進み、届かない。afterMs を小さくしても、例外で移した・削除した回は、
+ * 展開がもとから除くので、その回の通知は、数えられない。
+ *
  * 計算が例外を投げたら、その系列の削除されていない全行を NULL にする（calculateOrNull）。書かない行は、
  * upsert が NULL に戻さないので、古い値が残る。残すと、変わった系列に、古い時刻で通知してしまう。
  */
@@ -61,23 +69,35 @@ export function planNotifyUpdates({
   const keys = new Set(written.filter((row) => row.deletedAt === null).map(familyKey));
 
   // id → 行と、upsert のあとに next_notify_at が持っている値。書いた行は、upsert が NULL に戻している。
-  const families = new Map<string, Map<string, { entry: Entry; current: number | null }>>();
-  const add = (entry: Entry, current: number | null) => {
-    const key = familyKey(entry);
+  interface FamilyRow {
+    entry: Entry;
+    current: number | null;
+    written: boolean;
+  }
+  const families = new Map<string, Map<string, FamilyRow>>();
+  const add = (row: FamilyRow) => {
+    const key = familyKey(row.entry);
     if (!keys.has(key)) return;
-    const family = families.get(key) ?? new Map<string, { entry: Entry; current: number | null }>();
-    family.set(entry.id, { entry, current });
+    const family = families.get(key) ?? new Map<string, FamilyRow>();
+    family.set(row.entry.id, row);
     families.set(key, family);
   };
-  for (const { entry, nextNotifyAt } of stored) add(entry, nextNotifyAt);
-  for (const entry of written) add(entry, null);
+  for (const { entry, nextNotifyAt } of stored) {
+    add({ entry, current: nextNotifyAt, written: false });
+  }
+  for (const entry of written) add({ entry, current: null, written: true });
 
   const updates: NotifyUpdate[] = [];
   for (const [key, family] of families) {
+    const afterMsById = new Map<string, number>();
+    for (const { entry, current, written: isWritten } of family.values()) {
+      if (!isWritten && current !== null) afterMsById.set(entry.id, Math.min(nowMs, current - 1));
+    }
     const times = calculateOrNull(
       key,
       [...family.values()].map(({ entry }) => entry),
       nowMs,
+      afterMsById,
     );
     for (const { entry, current } of family.values()) {
       if (entry.deletedAt !== null) continue;

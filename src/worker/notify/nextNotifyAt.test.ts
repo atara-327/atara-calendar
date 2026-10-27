@@ -179,6 +179,49 @@ describe('NT-2〜4: nextNotifyTimes（繰り返さない予定）', () => {
   });
 });
 
+describe('nextNotifyTimes の afterMsById（行ごとの afterMs の上書き）', () => {
+  const daily = timed({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+  // 通知の時刻（14:50）が来て 20 秒たち、まだ送っていない。
+  const afterDue = jst('2026-10-27', '14:50') + 20_000;
+
+  it('上書きした行だけ、その afterMs で計算する。ほかの行は、afterMs のまま', () => {
+    const other = timed({ id: 'o', startDate: '2026-10-27' });
+
+    const result = nextNotifyTimes({
+      family: [daily, other],
+      afterMs: afterDue,
+      afterMsById: new Map([['s', jst('2026-10-27', '14:50') - 1]]),
+    });
+
+    expect(result.get('s')).toBe(jst('2026-10-27', '14:50'));
+    expect(result.get('o')).toBeNull();
+  });
+
+  it('上書きがなければ、これまでどおり、afterMs より後の回', () => {
+    expect(nextNotifyTimes({ family: [daily], afterMs: afterDue }).get('s')).toBe(
+      jst('2026-10-28', '14:50'),
+    );
+  });
+
+  it('例外で移した・削除した回は、afterMs を小さくしても、系列の回として数えない', () => {
+    const moved = timed({
+      id: 'x',
+      seriesId: 's',
+      originalDate: '2026-10-27',
+      startDate: '2026-10-29',
+    });
+
+    const result = nextNotifyTimes({
+      family: [daily, moved],
+      afterMs: afterDue,
+      afterMsById: new Map([['s', jst('2026-10-27', '14:50') - 1]]),
+    });
+
+    // 今日の回は、例外の行に取られている。系列は、その次の 10/28。
+    expect(result.get('s')).toBe(jst('2026-10-28', '14:50'));
+  });
+});
+
 describe('RP-1〜6: nextNotifyTimes（繰り返しの系列）', () => {
   // 2026-10-19 は月曜。
   const daily = timed({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' });

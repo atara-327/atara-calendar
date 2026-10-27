@@ -215,6 +215,32 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
       expect(await readNextNotifyAt(db())).toEqual({ s: jst('2026-10-27', '14:50'), x: null });
     });
 
+    it('時刻が来て、まだ送っていない通知は、同じ系列の明日の回を変えても、書かない系列の行に残る', async () => {
+      await write([series()]);
+      expect((await readNextNotifyAt(db())).s).toBe(jst('2026-10-27', '14:50'));
+
+      // 14:50:20（定期実行が、14:50 の通知を拾う前）に、明日の回を「この予定のみ」で変える。
+      await applyWrite(
+        db(),
+        {
+          entries: [
+            exception({
+              id: 'x',
+              originalDate: '2026-10-28',
+              startDate: '2026-10-28',
+              startTime: '16:00',
+            }),
+          ],
+        },
+        { nowMs: jst('2026-10-27', '14:50') + 20_000 },
+      );
+
+      expect(await readNextNotifyAt(db())).toEqual({
+        s: jst('2026-10-27', '14:50'),
+        x: jst('2026-10-28', '15:50'),
+      });
+    });
+
     it('別の系列の行は、読まず、書き換えない', async () => {
       await write([
         timed({ id: 'other', rrule: { freq: 'weekly', days: [3] }, startDate: '2026-10-21' }),

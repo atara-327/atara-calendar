@@ -168,28 +168,33 @@ function seriesNotifyAt(series: Entry, index: FamilyIndex, afterMs: number): num
  * 通知が OFF の行は null。
  * afterMs は、保存したときは「今」。通知を送った回の次を探すときは、送った回の時刻を渡す（同じ回を 2 回見つけないため）。
  * 今より前の回は飛ばす（保存した時点で通知の時刻が過ぎている回は、送っても役に立たないため）。
+ * afterMsById は、行ごとに afterMs を変えたいときの上書き（行の id → afterMs）。保存で書かない行は、時刻が来て
+ * まだ送っていない回を飛ばさないために、「今」より前の afterMs で計算する（notifyUpdates.ts）。
  * ワークスペース（削除・表示 OFF）は見ない。送るときに確かめる。見ると、ワークスペースを変えるたびに、
  * 中の全行を計算し直すことになる。
  */
 export function nextNotifyTimes({
   family,
   afterMs,
+  afterMsById,
 }: {
   family: readonly Entry[];
   afterMs: number;
+  afterMsById?: ReadonlyMap<string, number>;
 }): Map<string, number | null> {
   const result = new Map<string, number | null>();
   const index = indexFamily(family);
   for (const row of family) {
     if (row.deletedAt !== null) continue;
+    const after = afterMsById?.get(row.id) ?? afterMs;
     if (!row.notifyEnabled) {
       result.set(row.id, null);
     } else if (row.seriesId !== null) {
-      result.set(row.id, exceptionNotifyAt(row, index, afterMs));
+      result.set(row.id, exceptionNotifyAt(row, index, after));
     } else if (row.rrule !== null) {
-      result.set(row.id, seriesNotifyAt(row, index, afterMs));
+      result.set(row.id, seriesNotifyAt(row, index, after));
     } else {
-      result.set(row.id, singleNotifyAt(row, afterMs));
+      result.set(row.id, singleNotifyAt(row, after));
     }
   }
   return result;

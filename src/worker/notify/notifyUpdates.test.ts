@@ -112,6 +112,84 @@ describe('planNotifyUpdates（保存したときの、next_notify_at の更新�
     expect(updates.map(({ id }) => id)).toEqual(['a']);
   });
 
+  describe('時刻が来て、まだ送っていない通知（書かない行は、飛ばさない）', () => {
+    // 14:50 に通知する毎日の系列。14:50:20 になっても、定期実行がまだ拾っていない（next_notify_at は今日の 14:50 のまま）。
+    const due = jst('2026-10-27', '14:50');
+    const afterDue = due + 20_000;
+
+    it('明日の回を「この予定のみ」で変えても、書かない系列の行は、今日の通知のまま（更新に入れない）', () => {
+      const updates = planNotifyUpdates({
+        stored: [stored(daily(), due)],
+        written: [exception({ id: 'x', originalDate: '2026-10-28', startDate: '2026-10-28' })],
+        nowMs: afterDue,
+      });
+
+      expect(updates).toEqual([
+        { id: 'x', editedAt: 1000, nextNotifyAt: jst('2026-10-28', '14:50') },
+      ]);
+    });
+
+    it('書く行は、これまでどおり「今」で計算する（保存した時点で過ぎている回は飛ばす）', () => {
+      const updates = planNotifyUpdates({
+        stored: [stored(daily(), due)],
+        written: [{ ...daily(), editedAt: 2000, title: '名前を変える' }],
+        nowMs: afterDue,
+      });
+
+      expect(updates).toEqual([
+        { id: 's', editedAt: 2000, nextNotifyAt: jst('2026-10-28', '14:50') },
+      ]);
+    });
+
+    it('時刻が来た回を、例外で別の日に移したときは、書かない系列の行は、その回を飛ばして次の回になる', () => {
+      const updates = planNotifyUpdates({
+        stored: [stored(daily(), due)],
+        written: [
+          exception({
+            id: 'x',
+            originalDate: '2026-10-27',
+            startDate: '2026-10-28',
+            startTime: '10:00',
+          }),
+        ],
+        nowMs: afterDue,
+      });
+
+      expect(updates).toEqual([
+        { id: 's', editedAt: 1000, nextNotifyAt: jst('2026-10-28', '14:50') },
+        { id: 'x', editedAt: 1000, nextNotifyAt: jst('2026-10-28', '09:50') },
+      ]);
+    });
+
+    it('書かない行の今の値が、まだ先（今より後）なら、「今」で計算する（これまでどおり）', () => {
+      const updates = planNotifyUpdates({
+        stored: [stored(daily(), jst('2026-10-27', '14:50'))],
+        written: [exception({ id: 'x', originalDate: '2026-10-27', startDate: '2026-10-29' })],
+        nowMs: jst('2026-10-27', '09:00'),
+      });
+
+      expect(updates.find(({ id }) => id === 's')).toEqual({
+        id: 's',
+        editedAt: 1000,
+        nextNotifyAt: jst('2026-10-28', '14:50'),
+      });
+    });
+
+    it('書かない行の今の値が NULL なら、「今」で計算する（過ぎた回は飛ばす）', () => {
+      const updates = planNotifyUpdates({
+        stored: [stored(daily(), null)],
+        written: [exception({ id: 'x', originalDate: '2026-10-29', startDate: '2026-10-29' })],
+        nowMs: afterDue,
+      });
+
+      expect(updates.find(({ id }) => id === 's')).toEqual({
+        id: 's',
+        editedAt: 1000,
+        nextNotifyAt: jst('2026-10-28', '14:50'),
+      });
+    });
+  });
+
   describe('計算が例外を投げたとき', () => {
     // 存在しない日付（2/30）の行は、通知の時刻を求めるところで RangeError になる。entrySchema を通らない行だが、
     // この関数は、書く行を確かめない（確かめるのは applyWrite）ので、計算が例外を投げる場合を、データで再現できる。
