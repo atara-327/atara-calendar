@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
-import { dayItemsOf } from './dayItems';
+import { workspaceDisplayOf } from '../workspaceDisplay';
+import { dayItemsOf, dayNamesOf } from './dayItems';
 
 const workspaces = [
   makeWorkspace({ id: 'w1', color: '#039BE5' }),
@@ -28,7 +29,7 @@ function itemsOf(
 ) {
   return dayItemsOf({
     entries: entries.map((entry) => makeEntry(entry)),
-    workspaces: options.workspaces ?? workspaces,
+    display: workspaceDisplayOf(options.workspaces ?? workspaces),
     date,
   });
 }
@@ -349,5 +350,42 @@ describe('同じ日の、複数の項目', () => {
 
     expect(banner.map((item) => item.title)).toEqual(['終日']);
     expect(timeline.map((item) => item.title)).toEqual(['会議', '勉強']);
+  });
+});
+
+describe('祝日名・記念日名（ヘッダーの 2 行目）', () => {
+  const display = workspaceDisplayOf(workspaces);
+
+  it('祝日の日は、祝日名が出る', () => {
+    expect(dayNamesOf('2026-11-03', display)).toEqual({ holiday: '文化の日', observances: [] });
+  });
+
+  it('記念日の日は、記念日の名前が出る', () => {
+    expect(dayNamesOf('2026-10-31', display)).toEqual({
+      holiday: null,
+      observances: ['ハロウィン'],
+    });
+  });
+
+  it('祝日でも記念日でもない日は、どちらもない', () => {
+    expect(dayNamesOf('2026-10-27', display)).toEqual({ holiday: null, observances: [] });
+  });
+
+  it('組み込みの「祝日」が OFF なら、祝日名を出さない（記念日は出る）', () => {
+    const off = workspaceDisplayOf([
+      makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday', visible: false }),
+    ]);
+
+    expect(dayNamesOf('2026-11-03', off).holiday).toBeNull();
+    expect(dayNamesOf('2026-10-31', off).observances).toEqual(['ハロウィン']);
+  });
+
+  it('組み込みの「記念日」が OFF なら、記念日の名前を出さない（祝日は出る）', () => {
+    const off = workspaceDisplayOf([
+      makeWorkspace({ id: 'builtin-observance', builtin: 'observance', visible: false }),
+    ]);
+
+    expect(dayNamesOf('2026-10-31', off).observances).toEqual([]);
+    expect(dayNamesOf('2026-11-03', off).holiday).toBe('文化の日');
   });
 });

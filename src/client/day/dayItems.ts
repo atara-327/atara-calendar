@@ -1,9 +1,10 @@
 import { dateToDays, type DateStr } from '../../shared/date';
+import { namedDatesBetween } from '../../shared/holidays';
 import { occurrencesInPeriod } from '../../shared/period';
 import type { Occurrence } from '../../shared/recurrence';
-import type { Entry, Workspace } from '../../shared/schema';
+import type { Entry } from '../../shared/schema';
 import { formatShortDate, formatTime } from '../dateFormat';
-import { workspaceDisplayOf } from '../workspaceDisplay';
+import type { WorkspaceDisplay } from '../workspaceDisplay';
 import { MINUTES_PER_DAY } from './timeline';
 
 // その日の日表示に出す項目を、展開した回から求める（設計書 11.3）。画面に依存しない。
@@ -132,15 +133,15 @@ function toTimeline(
  */
 export function dayItemsOf({
   entries,
-  workspaces,
+  display,
   date,
 }: {
   /** 全行（繰り返さない予定・系列・例外・タイムブロック。削除済みを含んでよい）。 */
   entries: readonly Entry[];
-  workspaces: Iterable<Workspace>;
+  /** ワークスペースの行から決めた、出すものの決まり（workspaceDisplayOf）。 */
+  display: WorkspaceDisplay;
   date: DateStr;
 }): DayItems {
-  const display = workspaceDisplayOf(workspaces);
   const dayStart = dateToDays(date) * MINUTES_PER_DAY;
   const banner: BannerItem[] = [];
   const timeline: TimelineItem[] = [];
@@ -163,4 +164,21 @@ export function dayItemsOf({
     }
   }
   return { banner, timeline };
+}
+
+/** その日の祝日名と記念日の名前（ヘッダーの 2 行目に出す）。 */
+export interface DayNames {
+  /** 祝日名。祝日でない日と、組み込みのワークスペース「祝日」が OFF のときは null。 */
+  holiday: string | null;
+  /** 記念日の名前（同じ日に重なることがある）。「記念日」が OFF のときは空。 */
+  observances: readonly string[];
+}
+
+/** date の祝日名・記念日名。組み込みのワークスペースが OFF なら、出さない（月表示と同じ。設計書 11.2）。 */
+export function dayNamesOf(date: DateStr, display: WorkspaceDisplay): DayNames {
+  const named = namedDatesBetween(date, date);
+  return {
+    holiday: display.showHolidays ? (named.holidays[0]?.name ?? null) : null,
+    observances: display.showObservances ? named.observances.map(({ name }) => name) : [],
+  };
 }
