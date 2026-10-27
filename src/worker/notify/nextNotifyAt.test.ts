@@ -284,6 +284,31 @@ describe('RP-1〜6: nextNotifyTimes（繰り返しの系列）', () => {
     });
   });
 
+  describe('通知の分が 10080（1 週間前）の系列は、1 週間先の回の通知を選ぶ', () => {
+    it('毎日: 10/27 の朝は、11/3 の回の通知（10/27 の 15:00）。それが過ぎたら、11/4 の回の通知', () => {
+      const series = timed({
+        id: 's',
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-19',
+        notifyOffsetMin: 10_080,
+      });
+
+      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2026-10-27', '15:00'));
+      expect(nextOfSeries([series], jst('2026-10-27', '15:00'))).toBe(jst('2026-10-28', '15:00'));
+    });
+
+    it('毎週 月: 11/2（月）の回の通知は 10/26 の 15:00 で過ぎているので、11/9 の回の通知（11/2 の 15:00）', () => {
+      const series = timed({
+        id: 's',
+        rrule: { freq: 'weekly', days: [1] },
+        startDate: '2026-10-19',
+        notifyOffsetMin: 10_080,
+      });
+
+      expect(nextOfSeries([series], jst('2026-10-27', '09:00'))).toBe(jst('2026-11-02', '15:00'));
+    });
+  });
+
   describe('毎週・毎月・毎年', () => {
     it('毎週 月・水・金: 水曜の通知が過ぎたら、金曜', () => {
       const series = timed({

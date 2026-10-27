@@ -457,6 +457,44 @@ describe('next_notify_at（保存したときに、次に通知する時刻を�
     });
   });
 
+  describe('書かない行への割り込み', () => {
+    it('書かない行（系列の行）が、確認と書き込みの間に新しくなったとき、その書き込みが決めた値を、古い内容から計算した値で上書きしない', async () => {
+      const series = timed({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+      await write([series]);
+      let batches = 0;
+      const interleaved: Database = {
+        prepare: (query) => db().prepare(query),
+        batch: async <T>(statements: D1PreparedStatement[]) => {
+          batches += 1;
+          // 2 回目の batch（書き込み）の前に、別の端末が、系列の行を、通知の分を変えて書く（書く依頼は、例外の行だけ）。
+          if (batches === 2) {
+            await applyWrite(
+              db(),
+              { entries: [{ ...series, editedAt: 3000, notifyOffsetMin: 60 }] },
+              { nowMs: NOW },
+            );
+          }
+          return db().batch<T>(statements);
+        },
+      };
+
+      // 今日の回を、10/29 に移す。この依頼だけで計算すると、系列の行は 10/28 の回になる。
+      await applyWrite(
+        interleaved,
+        {
+          entries: [exception({ id: 'x', originalDate: '2026-10-27', startDate: '2026-10-29' })],
+        },
+        { nowMs: NOW },
+      );
+
+      // 割り込んだ書き込み（edited_at 3000。60 分前）が決めた値が、そのまま残る。
+      expect(await readNextNotifyAt(db())).toEqual({
+        s: jst('2026-10-27', '14:00'),
+        x: jst('2026-10-29', '14:50'),
+      });
+    });
+  });
+
   describe('計算が例外を投げたとき（バグ）でも、保存は成功させる', () => {
     function failNextCalculation(error: Error) {
       vi.mocked(nextNotifyTimes).mockImplementationOnce(() => {
