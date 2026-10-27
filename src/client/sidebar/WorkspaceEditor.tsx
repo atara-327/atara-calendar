@@ -185,6 +185,8 @@ export function WorkspaceEditor() {
     // 確認の段を開いている間に、ほかの端末の変更で、最後の 1 つになることがある。サーバーは 400 にし、端末は
     // その依頼を捨てる（保存した変更が画面から消える。設計書 6.2）ので、送る前に、もう一度確かめる。
     if (isLastWorkspace(workspaces.values(), original.id)) {
+      // ［削除］は、押せなくなるので、見出しにフォーカスを置く。
+      pendingFocus.current = 'heading';
       setStep({ kind: 'edit', edit });
       setFailure('最後の 1 つは削除できません');
       return;
