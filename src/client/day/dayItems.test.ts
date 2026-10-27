@@ -305,6 +305,122 @@ describe('日付をまたぐもの（TB-6）', () => {
   });
 });
 
+describe('繰り返しと、24 時間ちょうど', () => {
+  it('毎日 23:00〜翌 7:00 のタイムブロックは、ある日に、前の日の回の続き（0:00〜7:00）と、当日の回（23:00〜24:00）の 2 件が出る。key は別', () => {
+    const { timeline } = itemsOf('2026-10-20', [
+      block({
+        id: 's1',
+        title: '睡眠',
+        startDate: '2026-10-18',
+        startTime: '23:00',
+        endDate: '2026-10-19',
+        endTime: '07:00',
+        rrule: { freq: 'daily' },
+      }),
+    ]);
+
+    expect(timeline.map(({ start, end }) => ({ start, end }))).toEqual([
+      { start: 0, end: 420 },
+      { start: 1380, end: 1440 },
+    ]);
+    expect(timeline.map((item) => item.key)).toEqual(['s1:2026-10-19', 's1:2026-10-20']);
+  });
+
+  it('ちょうど 24 時間で、終了が 0:00 の予定（10/19 0:00〜10/20 0:00）は、10/19 の上部の欄に出て、10/20 には出ない', () => {
+    const entries = [
+      timed({
+        id: 'e1',
+        title: '丸一日',
+        startDate: '2026-10-19',
+        startTime: '00:00',
+        endDate: '2026-10-20',
+        endTime: '00:00',
+      }),
+    ];
+
+    const day19 = itemsOf('2026-10-19', entries);
+    const day20 = itemsOf('2026-10-20', entries);
+
+    expect(day19.banner).toMatchObject([{ title: '丸一日' }]);
+    expect(day19.timeline).toEqual([]);
+    expect({ banner: day20.banner, timeline: day20.timeline }).toEqual({
+      banner: [],
+      timeline: [],
+    });
+  });
+});
+
+describe('繰り返しの、変更・削除した回（例外）', () => {
+  const series = timed({
+    id: 's1',
+    title: '毎日',
+    startDate: '2026-10-19',
+    startTime: '09:00',
+    endTime: '10:00',
+    rrule: { freq: 'daily' },
+  });
+
+  it('時刻を変えた回は、元の時刻ではなく、変えた時刻に出る（同じ日に 1 件だけ）', () => {
+    const { timeline } = itemsOf('2026-10-21', [
+      series,
+      timed({
+        id: 'x1',
+        title: '毎日',
+        seriesId: 's1',
+        originalDate: '2026-10-21',
+        startDate: '2026-10-21',
+        startTime: '14:00',
+        endDate: '2026-10-21',
+        endTime: '15:00',
+      }),
+    ]);
+
+    expect(timeline).toMatchObject([{ start: 840, end: 900 }]);
+  });
+
+  it('別の日に移した回は、元の日には出ず、移した先の日に、系列の回と並んで出る', () => {
+    const entries = [
+      series,
+      timed({
+        id: 'x1',
+        title: '毎日',
+        seriesId: 's1',
+        originalDate: '2026-10-21',
+        startDate: '2026-10-22',
+        startTime: '14:00',
+        endDate: '2026-10-22',
+        endTime: '15:00',
+      }),
+    ];
+
+    expect(itemsOf('2026-10-21', entries).timeline).toEqual([]);
+    const moved = itemsOf('2026-10-22', entries).timeline;
+    expect(moved.map(({ start, end }) => ({ start, end }))).toEqual([
+      { start: 540, end: 600 },
+      { start: 840, end: 900 },
+    ]);
+    expect(new Set(moved.map((item) => item.key)).size).toBe(2);
+  });
+
+  it('削除した回（cancelled）は出ない。前後の日の回は出る', () => {
+    const entries = [
+      series,
+      timed({
+        id: 'x1',
+        title: '毎日',
+        seriesId: 's1',
+        originalDate: '2026-10-21',
+        startDate: '2026-10-21',
+        cancelled: true,
+      }),
+    ];
+
+    expect(itemsOf('2026-10-21', entries).timeline).toEqual([]);
+    expect(itemsOf('2026-10-20', entries).timeline).toHaveLength(1);
+    expect(itemsOf('2026-10-22', entries).timeline).toHaveLength(1);
+  });
+});
+
 describe('表示するワークスペース（WS-3）', () => {
   it('表示が OFF のワークスペースの予定は、出ない。タイムブロックは、常に出る（TB-3）', () => {
     const { banner, timeline } = itemsOf(
