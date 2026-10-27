@@ -45,10 +45,6 @@ describe('URL から画面を決める', () => {
 });
 
 describe('画面から URL を作る', () => {
-  it('日表示の URL は /day/YYYY-MM-DD', () => {
-    expect(dayPath('2026-10-21')).toBe('/day/2026-10-21');
-  });
-
   it('作った URL は、読み戻せる', () => {
     expect(parseRoute(dayPath('2026-10-21'))).toEqual({ name: 'day', date: '2026-10-21' });
   });

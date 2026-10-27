@@ -1,5 +1,6 @@
 import { dateToDays, dayOfWeek, utcMsToJstDate, type DateStr } from '../../shared/date';
 import { WEEKDAY_LABELS, formatShortDate, formatTime } from '../../shared/dateFormat';
+import { dayPath } from '../../shared/paths';
 import type { Occurrence } from '../../shared/recurrence';
 import { notifyAtMs } from './nextNotifyAt';
 
@@ -98,7 +99,7 @@ export function buildNotifyMessage(fields: NotifyMessageFields, appOrigin: strin
   const period = multiDayAllDay
     ? `（${formatShortDate(fields.startDate)}〜${formatShortDate(fields.endDate)}）`
     : '';
-  const link = `${appOrigin.replace(/\/+$/, '')}/day/${fields.startDate}`;
+  const link = `${appOrigin.replace(/\/+$/, '')}${dayPath(fields.startDate)}`;
 
   const compose = (title: string, location: string | null): string =>
     [

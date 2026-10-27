@@ -72,6 +72,7 @@ atara-calendar/
 │  ├─ shared/        画面と Worker の両方で使うコード
 │  │  ├─ date.ts         日付の計算（日本時間固定）と、日本時間の「その日の 0:00 からの分」。日本時間の日付と分から UTC のミリ秒への変換
 │  │  ├─ dateFormat.ts   月日（「10/19」）・時刻（「9:00」）・曜日の表記。画面（`client/dateFormat.ts` が再び出す）と、通知の文面（[9.4](#94-通知の文面)）が同じ表記を使うため
+│  │  ├─ paths.ts        画面の URL のパス（日表示の `/day/YYYY-MM-DD`）。画面（`client/route.ts` が再び出す）と、通知のリンク（[9.4](#94-通知の文面)）が使う
 │  │  ├─ holidays.ts     祝日・記念日の計算、期間の祝日・記念日の一覧
 │  │  ├─ solarTerms.ts   春分・秋分・夏至・冬至・立春の天文計算
 │  │  ├─ astronomia.d.ts astronomia の型宣言（ライブラリに型定義が付いていないため）

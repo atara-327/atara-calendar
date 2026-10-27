@@ -1,6 +1,9 @@
 import type { DateStr } from '../shared/date';
 import { inputDateSchema } from '../shared/schema';
 
+// 日表示のパスは、通知のリンク（Worker）と共通なので、shared にある。画面の import を変えずに済むよう、ここから再び出す。
+export { dayPath } from '../shared/paths';
+
 /** 画面の切り替え先。月表示は `/`、日表示は `/day/YYYY-MM-DD`（設計書 11.1）。 */
 export type Route = { name: 'month' } | { name: 'day'; date: DateStr };
 
@@ -22,7 +25,3 @@ export function parseRoute(pathname: string): Route | null {
 }
 
 export const MONTH_PATH = '/';
-
-export function dayPath(date: DateStr): string {
-  return `/day/${date}`;
-}
