@@ -105,7 +105,13 @@ function toTimeline(
   // 高さ 0 の項目を、画面に出さないための守り。
   if (end <= start) return null;
   const { startDate, endDate, startTime, endTime } = occurrence;
-  const timeLabel = `${formatTime(startTime ?? '00:00')}〜${formatTime(endTime ?? '00:00')}`;
+  const datedRange = `${dateTime(startDate, startTime)}〜${dateTime(endDate, endTime)}`;
+  // 24 時間以上のもの（タイムブロックだけ。予定は上部の欄に出る）は、日付も出す。時刻だけだと、
+  // 「9:00〜9:00」（長さ 0 に見える）や、真ん中の日の「18:00〜20:00」（その日の 18:00〜20:00 に見える）になるため。
+  const timeLabel =
+    range.end - range.start >= MINUTES_PER_DAY
+      ? datedRange
+      : `${formatTime(startTime ?? '00:00')}〜${formatTime(endTime ?? '00:00')}`;
   return {
     key: `${occurrence.entryId}:${occurrence.occurrenceDate}`,
     title: occurrence.title,
@@ -113,11 +119,7 @@ function toTimeline(
     start,
     end,
     timeLabel,
-    accessibleName: accessibleNameOf(occurrence, [
-      endDate > startDate
-        ? `${dateTime(startDate, startTime)}〜${dateTime(endDate, endTime)}`
-        : timeLabel,
-    ]),
+    accessibleName: accessibleNameOf(occurrence, [endDate > startDate ? datedRange : timeLabel]),
     occurrence,
   };
 }

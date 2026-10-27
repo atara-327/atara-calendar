@@ -257,7 +257,7 @@ describe('日付をまたぐもの（TB-6）', () => {
     expect(last.timeline).toMatchObject([{ color: null, start: 0, end: 1080 }]);
   });
 
-  it('3 日にわたるタイムブロックは、どの日も、元の開始と終了の時刻と、日付つきの読み上げの名前を持つ', () => {
+  it('3 日にわたるタイムブロックは、どの日も、元の開始と終了を、日付つきで出す（時刻だけだと、その日の時刻に見えるため）', () => {
     const { timeline } = itemsOf('2026-10-20', [
       block({
         id: 'b1',
@@ -270,9 +270,23 @@ describe('日付をまたぐもの（TB-6）', () => {
     ]);
 
     expect(timeline[0]).toMatchObject({
-      timeLabel: '9:00〜18:00',
+      timeLabel: '10/19 9:00〜10/21 18:00',
       accessibleName: 'タイムブロック 10/19 9:00〜10/21 18:00 出張',
     });
+  });
+
+  it('ちょうど 24 時間のタイムブロックも、日付つきで出す（「9:00〜9:00」と、長さ 0 に見えないように）', () => {
+    const { timeline } = itemsOf('2026-10-19', [
+      block({
+        id: 'b1',
+        startDate: '2026-10-19',
+        startTime: '09:00',
+        endDate: '2026-10-20',
+        endTime: '09:00',
+      }),
+    ]);
+
+    expect(timeline[0]?.timeLabel).toBe('10/19 9:00〜10/20 9:00');
   });
 
   it('終了が翌日の 0:00 ちょうどのものは、翌日には出ない', () => {
