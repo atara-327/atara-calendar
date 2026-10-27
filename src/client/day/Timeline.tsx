@@ -6,7 +6,7 @@ import { EmojiText } from '../emoji/EmojiText';
 import { openEditForm } from '../form/instance';
 import type { TimelineItem } from './dayItems';
 import type { DayPlacement } from './layout';
-import { HOUR_LABELS, MIN_ITEM_HEIGHT, PX_PER_MINUTE, TWO_LINE_HEIGHT } from './timeline';
+import { HOUR_LABELS, MIN_ITEM_HEIGHT, PX_PER_MINUTE, TWO_LINE_HEIGHT } from './timelineGeometry';
 import styles from './Timeline.module.css';
 import { useNowMinute } from './useNowMinute';
 

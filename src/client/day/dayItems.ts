@@ -5,7 +5,7 @@ import type { Occurrence } from '../../shared/recurrence';
 import type { Entry } from '../../shared/schema';
 import { formatShortDate, formatTime } from '../dateFormat';
 import type { WorkspaceDisplay } from '../workspaceDisplay';
-import { MINUTES_PER_DAY } from './timeline';
+import { MINUTES_PER_DAY } from './timelineGeometry';
 
 // その日の日表示に出す項目を、展開した回から求める（設計書 11.3）。画面に依存しない。
 // 回の開始・終了を、「1970-01-01 の 0:00 からの分」にして、長さと、その日の範囲との重なりを求める。

@@ -1,6 +1,8 @@
 import { formatTime } from '../dateFormat';
 
 // 日表示のタイムラインの、大きさと位置の決まり（設計書 11.3）。画面に依存しない。
+// ファイル名を timeline.ts にしない: 同じフォルダの Timeline.tsx と、大文字小文字だけが違い、大文字小文字を
+// 区別しないファイルシステム（macOS・Windows）で、`./Timeline` が、このファイルに解決されるため。
 // 数値は CSS の px と対応する（DayView.module.css）。時間は、その日の 0:00 からの分。
 
 export const MINUTES_PER_DAY = 24 * 60;

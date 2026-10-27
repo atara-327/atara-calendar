@@ -141,7 +141,7 @@ atara-calendar/
 │     │  ├─ Timeline.tsx       タイムライン（時間軸・正時の線・項目・今の時刻の線）
 │     │  ├─ dayItems.ts        その日に出す項目を、展開した回から求める（上部の欄とタイムラインへの振り分け・日またぎの切り取り・読み上げの名前）と、祝日名・記念日名
 │     │  ├─ layout.ts          重なる項目の横の並べ方（グループ・列）
-│     │  ├─ timeline.ts        タイムラインの大きさ、最初に表示する位置、タップした位置の時刻
+│     │  ├─ timelineGeometry.ts   タイムラインの大きさ、最初に表示する位置、タップした位置の時刻。`timeline.ts` にしないのは、`Timeline.tsx` と大文字小文字だけが違い、大文字小文字を区別しないファイルシステム（macOS・Windows）で、`./Timeline` が取り違えられるため
 │     │  ├─ swipe.ts           左右のスワイプの判定
 │     │  ├─ useNowMinute.ts    今の時刻（分）を読む hook（今の時刻の線）
 │     │  └─ *.module.css       CSS Modules

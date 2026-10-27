@@ -24,7 +24,7 @@ import { dayItemsOf, dayNamesOf } from './dayItems';
 import styles from './DayView.module.css';
 import { layoutDay } from './layout';
 import { createSwipeTracker } from './swipe';
-import { PX_PER_MINUTE, initialTopMinute, tapStartTime } from './timeline';
+import { PX_PER_MINUTE, initialTopMinute, tapStartTime } from './timelineGeometry';
 import { Timeline } from './Timeline';
 
 function selectReady(state: SyncState): boolean {

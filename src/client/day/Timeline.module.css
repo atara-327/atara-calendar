@@ -1,5 +1,5 @@
 /*
- * タイムライン。0:00〜24:00 を 1 時間 60px で並べる（合計 1440px。timeline.ts の HOUR_HEIGHT と対応する）。
+ * タイムライン。0:00〜24:00 を 1 時間 60px で並べる（合計 1440px。timelineGeometry.ts の HOUR_HEIGHT と対応する）。
  * 左の時間軸（目盛り）と、右の、項目を並べる領域（track）の 2 列。
  */
 .timeline {
