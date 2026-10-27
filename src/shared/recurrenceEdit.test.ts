@@ -1285,6 +1285,48 @@ describe('項目をまたぐ確認（設計書 4.2）との組み合わせ: 回�
       }
     },
   );
+
+  // ルールを変えずに日付をずらすと、開始日と untilDate が同じだけずれる。開始日と untilDate が同じ日になる境目でも、
+  // その日の 1 回が残るので、守られている。
+  it.each([
+    {
+      name: '毎週 月・水・金（10/19〜10/23）の 10/23 の回を 10/24 へ',
+      series: makeEntry({
+        id: 's1',
+        rrule: { freq: 'weekly', days: [1, 3, 5] },
+        startDate: '2026-10-19',
+        untilDate: '2026-10-23',
+      }),
+      date: '2026-10-23',
+      to: '2026-10-24',
+      following: { startDate: '2026-10-24', untilDate: '2026-10-24' },
+      all: { startDate: '2026-10-20', untilDate: '2026-10-24' },
+    },
+    {
+      name: '毎月（1/31〜3/31）の 3/31 の回を 3/30 へ',
+      series: makeEntry({
+        id: 's1',
+        rrule: { freq: 'monthly' },
+        startDate: '2026-01-31',
+        untilDate: '2026-03-31',
+      }),
+      date: '2026-03-31',
+      to: '2026-03-30',
+      following: { startDate: '2026-03-30', untilDate: '2026-03-30' },
+      all: { startDate: '2026-01-30', untilDate: '2026-03-30' },
+    },
+  ])(
+    '$name: ルールを変えずに日付をずらすのは、どちらの範囲でも、守られている',
+    ({ series, date, to, following, all }) => {
+      const followingRows = change([series], date, 'following', { startDate: to });
+      expect(rowOf(followingRows, NEW_ID)).toMatchObject(following);
+      expect(problemsOf(followingRows)).toEqual([]);
+
+      const allRows = change([series], date, 'all', { startDate: to });
+      expect(rowOf(allRows, 's1')).toMatchObject(all);
+      expect(problemsOf(allRows)).toEqual([]);
+    },
+  );
 });
 
 describe('RP-6: タイムブロックでも同じように動く', () => {

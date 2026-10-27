@@ -32,7 +32,7 @@ export function entryProblem(entry: RuleFields): string | null {
   // 終わりの日が開始日より前の系列は、回が 1 つもなく、展開が何も出さないので、画面から直せない（設計書 4.2）。
   // 回を数えて確かめずに、日付を比べるだけにするのは、開始日が、ルールに合う日にそろえてあるため（normalizeStart）。
   // ルールがない行は見ない。その行の untilDate は展開に使われず、ルールをなくす変更は untilDate を null にする
-  // （recurrence.ts の changeAll）。
+  // （recurrence.ts の changeAll・changeFollowing）。
   if (entry.rrule !== null && entry.untilDate !== null && entry.untilDate < entry.startDate) {
     return '繰り返しの終わりの日が、開始日より前です';
   }
