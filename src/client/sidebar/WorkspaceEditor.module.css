@@ -150,6 +150,11 @@
   font-size: 13px;
 }
 
+/* fieldset の legend は、flex の gap の対象にならないので、色の見本との間を、余白で空ける。 */
+legend.label {
+  margin-bottom: 10px;
+}
+
 .swatches {
   display: flex;
   flex-wrap: wrap;
