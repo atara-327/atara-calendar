@@ -5,7 +5,7 @@ import { CloseIcon } from '../form/icons';
 import { unavailableMessage } from '../form/messages';
 import { getSyncEngine, useSyncState } from '../sync/instance';
 import type { SyncState } from '../sync/state';
-import { closeSidebar } from './instance';
+import { closeSidebar, openWorkspaceEditor } from './instance';
 import styles from './SidebarMenu.module.css';
 import { toWorkspaceInput } from './workspaceEdit';
 import { menuSections } from './workspaceList';
@@ -160,6 +160,15 @@ export function SidebarMenu() {
           </h3>
           <ul className={styles.list}>{sections.builtins.map((item) => row(item, false))}</ul>
         </section>
+
+        <button
+          type="button"
+          className={styles.editButton}
+          disabled={!ready}
+          onClick={openWorkspaceEditor}
+        >
+          ワークスペースを編集
+        </button>
       </div>
     </dialog>
   );

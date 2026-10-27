@@ -164,3 +164,30 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ［ワークスペースを編集］。最初の読み込みが終わるまでは、押せない。 */
+.editButton {
+  align-self: flex-start;
+  margin: 8px 16px 0;
+  padding: 10px 16px;
+  border: 1px solid var(--color-grid);
+  border-radius: 20px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.editButton:hover:not(:disabled) {
+  background-color: var(--color-grid);
+}
+
+.editButton:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 1px;
+}
+
+.editButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
