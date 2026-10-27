@@ -119,15 +119,15 @@ export function DayView({ date }: { date: DateStr }) {
     onPointerDown: (event: PointerEvent) => {
       swipedRef.current = false;
       if (event.pointerType === 'mouse') return;
-      swipe.start(event.clientX, event.clientY);
+      swipe.start(event.clientX, event.clientY, event.pointerId, event.isPrimary);
     },
     onPointerMove: (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
-      swipe.move(event.clientX, event.clientY);
+      swipe.move(event.clientX, event.clientY, event.pointerId);
     },
     onPointerUp: (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
-      const direction = swipe.end(event.clientX);
+      const direction = swipe.end(event.clientX, event.pointerId);
       if (direction === null) return;
       // この直後に click が届いても、空いているところのタップ（タイムブロックの作成）にしない。
       swipedRef.current = true;
@@ -135,8 +135,8 @@ export function DayView({ date }: { date: DateStr }) {
       if (direction === 'right' && hasPrevious) replaceDay(previousDate);
     },
     // ブラウザが縦のスクロールを始めると届く。動き始めが縦だった、ということ。
-    onPointerCancel: () => {
-      swipe.cancel();
+    onPointerCancel: (event: PointerEvent) => {
+      swipe.cancel(event.pointerId);
     },
     onClickCapture: (event: MouseEvent) => {
       if (!swipedRef.current) return;

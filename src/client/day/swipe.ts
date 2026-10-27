@@ -11,18 +11,26 @@ const DIRECTION_SLOP = 8;
 /** 'left' は、指を左へ動かした（次の日へ）。'right' は、右へ（前の日へ）。 */
 export type SwipeDirection = 'left' | 'right';
 
+/**
+ * 指ごとの出来事（Pointer Events の pointerId）で受け取る。追跡するのは、最初の指（isPrimary の指）だけ。
+ * 2 本目の指が触れたら、その操作は、スワイプにしない。
+ * Why not 指を区別せず、最後に置いた指の位置を起点にする: 指 A を置いたあと、指 B を置くと、起点が B の位置に
+ * 上書きされ、A がほとんど動いていなくても、B との距離で、日が動く判定になる（拡大などの 2 本指の操作と、
+ * 取り違える）。
+ */
 export interface SwipeTracker {
-  /** 指を置いた。 */
-  start(x: number, y: number): void;
-  /** 指を動かした。動き始めの向きを決めるために使う。 */
-  move(x: number, y: number): void;
-  /** 指を離した。横にスワイプしたなら、その向き。そうでなければ null。 */
-  end(x: number): SwipeDirection | null;
-  /** 取り消された（ブラウザが縦のスクロールを始めたとき）。 */
-  cancel(): void;
+  /** 指を置いた。最初の指（isPrimary）でなければ、追跡をやめる（2 本目の指が触れた）。 */
+  start(x: number, y: number, pointerId: number, isPrimary: boolean): void;
+  /** 指を動かした。動き始めの向きを決めるために使う。追跡している指の出来事だけを見る。 */
+  move(x: number, y: number, pointerId: number): void;
+  /** 指を離した。追跡している指が、横にスワイプしたなら、その向き。そうでなければ null。 */
+  end(x: number, pointerId: number): SwipeDirection | null;
+  /** 取り消された（ブラウザが縦のスクロールを始めたとき）。追跡している指の出来事だけを見る。 */
+  cancel(pointerId: number): void;
 }
 
 interface Tracking {
+  pointerId: number;
   originX: number;
   originY: number;
   /** 動き始めの向き。まだ決まっていなければ null。 */
@@ -33,11 +41,12 @@ export function createSwipeTracker(): SwipeTracker {
   let tracking: Tracking | null = null;
 
   return {
-    start(x, y) {
-      tracking = { originX: x, originY: y, axis: null };
+    start(x, y, pointerId, isPrimary) {
+      // 2 本目の指（isPrimary でない）が触れたら、最初の指の追跡も捨てる。以後、その操作は、スワイプにしない。
+      tracking = isPrimary ? { pointerId, originX: x, originY: y, axis: null } : null;
     },
-    move(x, y) {
-      if (tracking === null || tracking.axis !== null) return;
+    move(x, y, pointerId) {
+      if (tracking === null || tracking.pointerId !== pointerId || tracking.axis !== null) return;
       const dx = x - tracking.originX;
       const dy = y - tracking.originY;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < DIRECTION_SLOP) return;
@@ -45,16 +54,17 @@ export function createSwipeTracker(): SwipeTracker {
       // 縦にスクロールしながら、日を動かしてしまわないため）。
       tracking.axis = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
     },
-    end(x) {
+    end(x, pointerId) {
       const current = tracking;
+      if (current?.pointerId !== pointerId) return null;
       tracking = null;
-      if (current?.axis !== 'horizontal') return null;
+      if (current.axis !== 'horizontal') return null;
       const dx = x - current.originX;
       if (Math.abs(dx) < SWIPE_DISTANCE) return null;
       return dx < 0 ? 'left' : 'right';
     },
-    cancel() {
-      tracking = null;
+    cancel(pointerId) {
+      if (tracking?.pointerId === pointerId) tracking = null;
     },
   };
 }
