@@ -118,8 +118,16 @@ function fakeDiscord(
     const outcome = respond(calls.length);
     return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome);
   });
+  // レート制限で待つ時間の記録。実際には待たない。
+  const waits: number[] = [];
+  const sleep = (ms: number) => {
+    waits.push(ms);
+    return Promise.resolve();
+  };
   return {
     fetchFn,
+    sleep,
+    waits,
     calls,
     /** 送った content（再送を含む）。 */
     contents: () => calls.map(({ body }) => (body as { content: string }).content),
@@ -139,7 +147,10 @@ function envOf(overrides: Partial<Bindings> = {}): Bindings {
 
 /** 時刻 nowMs の定期実行を、偽の Discord に向けて動かす。 */
 async function run(nowMs: number, discord = fakeDiscord(), overrides: Partial<Bindings> = {}) {
-  await sendDueNotifications(envOf(overrides), nowMs, { fetchFn: discord.fetchFn });
+  await sendDueNotifications(envOf(overrides), nowMs, {
+    fetchFn: discord.fetchFn,
+    sleep: discord.sleep,
+  });
   return discord;
 }
 
@@ -612,6 +623,39 @@ describe('Discord への送信の失敗', () => {
 
     expect(discord.calls).toHaveLength(3);
     expect(await readNextNotifyAt(db())).toEqual({ a: null, b: null });
+  });
+});
+
+describe('Discord のレート制限（同じ時刻の通知が多いとき）', () => {
+  it('429 のときは、Retry-After の秒数だけ待って、再送する。通知は届く', async () => {
+    await save([timed({ id: 'a' })]);
+    const discord = fakeDiscord((call) =>
+      call === 1
+        ? new Response(null, { status: 429, headers: { 'Retry-After': '2' } })
+        : new Response(null, { status: 204 }),
+    );
+
+    await run(NOTIFY_AT, discord);
+
+    expect(discord.calls).toHaveLength(2);
+    expect(discord.waits).toEqual([2000]);
+  });
+
+  it('応答の X-RateLimit-Remaining が 0 なら、次の行の通知の前に待つ（1 回の実行の中の、行をまたいで）', async () => {
+    await save([timed({ id: 'a' }), timed({ id: 'b' }), timed({ id: 'c' })]);
+    const discord = fakeDiscord((call) =>
+      call === 2
+        ? new Response(null, {
+            status: 204,
+            headers: { 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset-After': '1.2' },
+          })
+        : new Response(null, { status: 204 }),
+    );
+
+    await run(NOTIFY_AT, discord);
+
+    expect(discord.calls).toHaveLength(3);
+    expect(discord.waits).toEqual([1200]);
   });
 });
 

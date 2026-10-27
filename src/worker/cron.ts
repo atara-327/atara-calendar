@@ -9,7 +9,7 @@ import {
   type DueEntry,
 } from './db/store';
 import type { Bindings } from './env';
-import { postToDiscord, type DiscordFetch } from './notify/discord';
+import { createDiscordSender, type DiscordFetch, type Sleep } from './notify/discord';
 import { buildNotifyMessage } from './notify/message';
 import { nextNotifyTimes, occurrenceNotifiedAt } from './notify/nextNotifyAt';
 
@@ -28,6 +28,8 @@ export const LATE_NOTIFY_LIMIT_MS = 10 * 60_000;
 export interface NotifyRunOptions {
   /** Discord への送信に使う fetch。テストが、偽物を渡すために受け取る。 */
   fetchFn?: DiscordFetch;
+  /** レート制限で待つための関数。テストが、実際には待たないために受け取る。 */
+  sleep?: Sleep;
 }
 
 // fetch を包むのは、オプションの fetchFn に、そのまま fetch を入れて options.fetchFn(...) と呼ぶと、this が
@@ -88,19 +90,24 @@ async function processDueEntry(context: RunContext, due: DueEntry): Promise<void
 export async function sendDueNotifications(
   env: Bindings,
   nowMs: number,
-  { fetchFn = defaultFetch }: NotifyRunOptions = {},
+  { fetchFn = defaultFetch, sleep }: NotifyRunOptions = {},
 ): Promise<void> {
   const due = await readDueEntries(env.DB, nowMs, MAX_DUE_ENTRIES_PER_RUN);
   if (due.length === 0) return;
 
   const webhookUrl = env.DISCORD_WEBHOOK_URL?.trim();
+  // 送り手は、1 回の実行で 1 つ。レート制限の「次の投稿の前に待つ」が、行をまたいで効くため。
+  const sender =
+    webhookUrl === undefined || webhookUrl === ''
+      ? undefined
+      : createDiscordSender({ webhookUrl, fetchFn, sleep });
   let missingWebhookLogged = false;
   const context: RunContext = {
     db: env.DB,
     nowMs,
     liveWorkspaceIds: await readLiveWorkspaceIds(env.DB),
     deliver: async (occurrence) => {
-      if (webhookUrl === undefined || webhookUrl === '') {
+      if (sender === undefined) {
         // 設定する前の通知が、設定した瞬間にまとめて届かないように、送らずに、値は進める。
         // ログは、1 回の実行で 1 回だけ。URL が未設定のときに、通知が出る行の数だけ出すと、うるさい。
         if (!missingWebhookLogged) {
@@ -111,11 +118,7 @@ export async function sendDueNotifications(
         }
         return;
       }
-      await postToDiscord({
-        webhookUrl,
-        content: buildNotifyMessage(occurrence, env.APP_ORIGIN),
-        fetchFn,
-      });
+      await sender.send(buildNotifyMessage(occurrence, env.APP_ORIGIN));
     },
   };
 
