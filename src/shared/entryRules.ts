@@ -16,6 +16,7 @@ type RuleFields = Pick<
   | 'startTime'
   | 'endDate'
   | 'endTime'
+  | 'rrule'
   | 'untilDate'
 >;
 
@@ -26,6 +27,14 @@ export function entryProblem(entry: RuleFields): string | null {
   // ずれる）。出たまま保存すると、展開が回を 1 つも出さない系列になる（設計書 4.2）。
   for (const date of [entry.startDate, entry.endDate, entry.untilDate]) {
     if (date !== null && !isDateInSupportedYears(date)) return `日付の年が範囲外です（${date}）`;
+  }
+
+  // 終わりの日が開始日より前の系列は、回が 1 つもなく、展開が何も出さないので、画面から直せない（設計書 4.2）。
+  // 回を数えて確かめずに、日付を比べるだけにするのは、開始日が、ルールに合う日にそろえてあるため（normalizeStart）。
+  // ルールがない行は見ない。その行の untilDate は展開に使われず、ルールをなくす変更は untilDate を null にする
+  // （recurrence.ts の changeAll）。
+  if (entry.rrule !== null && entry.untilDate !== null && entry.untilDate < entry.startDate) {
+    return '繰り返しの終わりの日が、開始日より前です';
   }
 
   if (entry.kind === 'block') {

@@ -3,6 +3,7 @@ import { makeEntry } from '../../test/helpers/entries';
 import { entryProblem } from './entryRules';
 
 const timed = { allDay: false, startTime: '15:00', endTime: '16:00' } as const;
+const daily = { rrule: { freq: 'daily' } } as const;
 
 describe('entryProblem: 項目をまたぐ確認（設計書 4.2）', () => {
   it.each([
@@ -25,6 +26,19 @@ describe('entryProblem: 項目をまたぐ確認（設計書 4.2）', () => {
     {
       name: '年の範囲の上端（2199-12-31）',
       overrides: { startDate: '2199-12-31', endDate: '2199-12-31', untilDate: '2199-12-31' },
+    },
+    {
+      name: '繰り返しの終わりの日（untilDate）が開始日と同じ（その日の 1 回が残る）',
+      overrides: { ...daily, untilDate: '2026-10-19' },
+    },
+    {
+      name: '繰り返しの終わりの日（untilDate）が開始日より後',
+      overrides: { ...daily, untilDate: '2026-10-23' },
+    },
+    { name: '繰り返しの終わりの日（untilDate）がない', overrides: { ...daily, untilDate: null } },
+    {
+      name: '繰り返さない行の untilDate は、開始日より前でも見ない',
+      overrides: { rrule: null, untilDate: '2026-10-18' },
     },
   ] as const)('$name は守られている', ({ overrides }) => {
     expect(entryProblem(makeEntry({ id: 'e', ...overrides }))).toBeNull();
@@ -55,6 +69,10 @@ describe('entryProblem: 項目をまたぐ確認（設計書 4.2）', () => {
     },
     { name: '終わりの日（untilDate）の年が 2199 より後', overrides: { untilDate: '2200-01-01' } },
     { name: '終わりの日（untilDate）の年が 1900 より前', overrides: { untilDate: '1899-12-31' } },
+    {
+      name: '繰り返しの終わりの日（untilDate）が開始日より前',
+      overrides: { ...daily, untilDate: '2026-10-18' },
+    },
   ] as const)('$name は守られていない', ({ overrides }) => {
     expect(entryProblem(makeEntry({ id: 'e', ...overrides }))).toEqual(expect.any(String));
   });

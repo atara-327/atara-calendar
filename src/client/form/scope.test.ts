@@ -407,6 +407,35 @@ describe('変更: 選べる範囲は、変えた内容で絞る（設計書 4.5�
       ).toEqual({ kind: 'choose', scopes: ['following', 'all'] });
     });
   });
+
+  describe('後ろを切った系列で、ルールに合う最初の日が、終わりの日（untilDate）より後にずれるとき（設計書 4.2）', () => {
+    // 10/19（月）からの毎日を、10/23（金）で切った系列。10/23 の回を毎週 日に変えると、最初の日が 10/25（日）にずれる。
+    const toSunday = { rrule: { freq: 'weekly', days: [0] } } satisfies EntryChanges;
+
+    it('「これ以降すべて」も「すべて」も、回が 1 つもない系列になるので、どの範囲も選べない（保存しない。理由は汎用）', () => {
+      const rows = [daily({ untilDate: '2026-10-23' })];
+
+      expect(decideChange(rows, '2026-10-23', toSunday)).toEqual({
+        kind: 'unavailable',
+        reason: 'other',
+      });
+    });
+
+    it('ルールを変えずに題名だけ変えるなら、3 つとも選べる', () => {
+      const rows = [daily({ untilDate: '2026-10-23' })];
+
+      expect(decideChange(rows, '2026-10-23', { title: '変更' })).toEqual(ALL_SCOPES);
+    });
+
+    it('終わりの日が最初の日（10/25）と同じなら、その日の 1 回が残るので、「これ以降すべて」と「すべて」を選べる', () => {
+      const rows = [daily({ untilDate: '2026-10-25' })];
+
+      expect(decideChange(rows, '2026-10-23', toSunday)).toEqual({
+        kind: 'choose',
+        scopes: ['following', 'all'],
+      });
+    });
+  });
 });
 
 describe('削除: 範囲', () => {
