@@ -116,7 +116,8 @@ export type EntryChanges = z.infer<typeof entryChangesSchema>;
  * ワークスペースの1行（設計書 4.2 の workspaces）。builtin は、組み込みの「祝日」「記念日」の印（WS-4）。
  * color は '#RRGGBB' の形だけを確かめる。8 色に絞るのは、画面の色の選択だけ（client/workspaceColors.ts）。
  * Why not サーバーでも 8 色に絞る: 組み込みの「祝日」「記念日」が、8 色以外の色を持ち、例外が要るため。
- * API はユーザー専用で、サーバーで絞る必要が小さい（ユーザーの回答。実装 #10 の確認 Q4。設計書 11.5）。
+ * API はユーザー専用で、サーバーで絞る必要が小さいため。
+ * 絞らないと決めたのは、ユーザーの回答（推奨どおり。実装 #10 の確認 Q4。設計書 11.5）。上の理由は、推奨案のもの。
  */
 export const workspaceSchema = z.object({
   id: z.string().min(1),

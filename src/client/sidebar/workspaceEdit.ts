@@ -143,8 +143,8 @@ export const CURRENT_COLOR_NAME = '今の色';
 /**
  * 色の見本。8 色の見本に、current が 8 色にないときは、9 つ目に「今の色」を足す。
  * Why: API から、8 色以外の色が入ったワークスペースを、編集画面で、その色のまま保存できるようにするため。
- * 画面は、8 色からだけ選べるが、API から入った値は、表示するだけで、勝手に書き換えない
- * （ユーザーの回答。実装 #10 の確認 Q4）。
+ * 画面は、8 色からだけ選べるが、API から入った値は、表示するだけで、勝手に書き換えない。
+ * 決めたのは、ユーザーの回答（推奨どおり。実装 #10 の確認 Q4）。上の理由は、推奨案のもの。
  */
 export function colorSwatches(current: string): WorkspaceColor[] {
   const isPalette = WORKSPACE_COLORS.some(({ value }) => isSameColor(value, current));
