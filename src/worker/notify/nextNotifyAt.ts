@@ -69,15 +69,18 @@ function singleNotifyAt(row: Entry, afterMs: number): number | null {
  * ただし、展開（expandOccurrences）が出さない例外は、画面に出ない予定なので、通知もしない。系列が見つからない、
  * または削除されている例外と、同じ回に、より新しい例外の行が別にあるときの、古い方がそうなる。
  * 求めた時刻が afterMs 以前の例外は、展開しない（探す必要がないので、CPU 時間を使わない）。
+ * 展開に渡すのは、系列の行と、同じ回の例外の行だけ。family の全行を渡すと、例外の多い系列で、例外の数の
+ * 2 乗で時間がかかる（例外 300 件で約 8ms。CPU 時間は無料プランで 1 回 10ms）。
  */
 function exceptionNotifyAt(row: Entry, family: readonly Entry[], afterMs: number): number | null {
   if (row.cancelled) return null;
   const at = notifyAtMs(row);
   if (at <= afterMs) return null;
-  const sameSeries = family.filter(
-    ({ id, seriesId }) => id === row.seriesId || seriesId === row.seriesId,
+  const sameOccurrence = family.filter(
+    ({ id, seriesId, originalDate }) =>
+      id === row.seriesId || (seriesId === row.seriesId && originalDate === row.originalDate),
   );
-  const shown = expandOccurrences(sameSeries, row.startDate, lastCoveredDate(row)).some(
+  const shown = expandOccurrences(sameOccurrence, row.startDate, lastCoveredDate(row)).some(
     (occurrence) => occurrence.entryId === row.id,
   );
   return shown ? at : null;
