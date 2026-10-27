@@ -105,6 +105,9 @@ function seriesNotifyAt(series: Entry, family: readonly Entry[], afterMs: number
   // 最初の回から探す（そうしないと、保存し直さない限り、開始日になっても通知されない。計算は、保存したときと
   // 通知を送ったときにしか動かないため）。9 年も、探し始めから数える。
   const searchFrom = laterDate(addDays(utcMsToJstDate(afterMs), -LOOKBACK_DAYS), series.startDate);
+  // 終わりの日が探し始めより前の系列は、通知する回がもうないので、期間を展開せずに終える。終わった系列
+  // （「これ以降すべて」で切った古い系列）を、保存のたびに、10 個の期間ぶん、無駄に展開しないため。
+  if (series.untilDate !== null && series.untilDate < searchFrom) return null;
   const lastDate = addYears(searchFrom, SEARCH_YEARS);
   let from = searchFrom;
   let windowDays = FIRST_WINDOW_DAYS;

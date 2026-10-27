@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { addDays } from '../../shared/date';
 import type { Entry } from '../../shared/schema';
 import { deepFreeze, makeEntry } from '../../../test/helpers/entries';
 import { jst } from '../../../test/helpers/time';
@@ -328,6 +329,51 @@ describe('RP-1〜6: nextNotifyTimes（繰り返しの系列）', () => {
 
     it('untilDate を過ぎたら、null', () => {
       expect(nextOfSeries([cut], jst('2026-10-27', '15:00'))).toBeNull();
+    });
+
+    it('untilDate が、ずっと前に過ぎた系列は、null（例外の行が多くても、同じ）', () => {
+      const old = { ...daily, untilDate: '2026-06-30' };
+      const exceptions = Array.from({ length: 30 }, (_, index) =>
+        exception({
+          id: `x${String(index)}`,
+          originalDate: addDays('2026-05-01', index),
+          startDate: addDays('2026-05-01', index),
+        }),
+      );
+
+      expect(nextOfSeries([old, ...exceptions], jst('2026-10-27', '09:00'))).toBeNull();
+    });
+
+    it('untilDate が昨日でも、開始の 1 日後に通知する回（-1440）の通知が残っていれば、その回', () => {
+      const series = timed({
+        id: 's',
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-19',
+        untilDate: '2026-10-26',
+        startTime: '23:30',
+        notifyOffsetMin: -1440,
+      });
+
+      // 10/26 23:30 の回（最後の回）は、10/27 23:30 に通知する。10/27 の朝 5 時の時点では、まだ先。
+      expect(nextOfSeries([series], jst('2026-10-27', '05:00'))).toBe(jst('2026-10-27', '23:30'));
+      expect(nextOfSeries([series], jst('2026-10-27', '23:30'))).toBeNull();
+    });
+
+    it('untilDate より前の回は、その回の通知が残っていれば、これまでどおり返す（例外を移した先の回は、別の行）', () => {
+      const moved = exception({
+        id: 'x',
+        originalDate: '2026-10-27',
+        startDate: '2026-11-05',
+      });
+
+      const result = nextNotifyTimes({
+        family: [cut, moved],
+        afterMs: jst('2026-10-27', '09:00'),
+      });
+
+      // 系列は、今日の回を例外に取られたので、もう回がない（null）。例外の行は、移した先の通知。
+      expect(result.get('s')).toBeNull();
+      expect(result.get('x')).toBe(jst('2026-11-05', '14:50'));
     });
   });
 
