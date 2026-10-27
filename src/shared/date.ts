@@ -146,6 +146,17 @@ export function utcMsToJstMinuteOfDay(utcMs: number): number {
   return Math.floor(msOfDay / 60_000);
 }
 
+/**
+ * 日本時間の日付と、その日の 0:00 からの分（0〜1439）を、UTC のミリ秒にする。utcMsToJstDate・utcMsToJstMinuteOfDay の逆。
+ * 日本時間は夏時間がなく +9 時間で固定なので、日数と分の足し算だけで求まる（Date は使わない）。
+ */
+export function jstToUtcMs(date: DateStr, minuteOfDay: number): number {
+  if (!Number.isInteger(minuteOfDay) || minuteOfDay < 0 || minuteOfDay >= 24 * 60) {
+    throw new RangeError(`0:00 からの分が不正です: ${String(minuteOfDay)}`);
+  }
+  return dateToDays(date) * MS_PER_DAY + minuteOfDay * 60_000 - JST_OFFSET_MS;
+}
+
 /** 日本時間の「今日」。端末のタイムゾーンは見ない。 */
 export function todayJst(nowMs: number = Date.now()): DateStr {
   return utcMsToJstDate(nowMs);

@@ -6,6 +6,7 @@ import {
   type Entry,
   type Workspace,
 } from '../../shared/schema';
+import { familyKey, planNotifyUpdates, type NotifyUpdate } from '../notify/notifyUpdates';
 import {
   CorruptRowError,
   ENTRY_COLUMNS,
@@ -236,23 +237,37 @@ export type WriteResult = { applied: false } | { applied: true; rev: number };
  */
 export const MAX_UPSERT_VALUE_BYTES = 1_000_000;
 
+/**
+ * next_notify_at の UPDATE の 1 文に入れる行数の上限。値の大きさの上限（MAX_UPSERT_VALUE_BYTES）とは別に、
+ * 行数でも分ける。UPDATE_NEXT_NOTIFY_AT は、更新する行数の 2 乗の時間がかかる（2,000 行で約 1.8 秒）ので、
+ * 行数に上限を付けておけば、どんなに大きな書き込みでも、1 文の時間が数百 ms に収まる。D1 の 1 回のクエリの
+ * 時間には上限（30 秒）があり、超えると batch 全体が失敗して、保存がすべて失敗する。
+ * 文が増えるのは、この行数を超えるときだけなので、普段の書き込み（数行）の文の数は変わらない。
+ * upsert は、行数の 2 乗にならないので、行数では分けない。
+ */
+export const MAX_NOTIFY_UPDATE_ROWS = 500;
+
 const textEncoder = new TextEncoder();
 
 /**
  * 行を、JSON 配列の文字列に分ける。1 つの文字列は、MAX_UPSERT_VALUE_BYTES を超えないようにする。
+ * maxRows を渡したときは、1 つの文字列に入る行数も、maxRows までにする。
  * 大きさは、string.length（文字数）ではなく、UTF-8 のバイト数で数える。D1 の上限がバイトで、日本語は
  * 1 文字 3 バイトなので、文字数で数えると、上限の 3 倍近くまで大きくなってしまう。
  * 1 行だけで上限を超える行は、行を分けられないので、その行だけで 1 つのかたまりにする。そういう行は、
  * ここでは防げない。入力の文字列の長さの上限（実装 #4c。設計書 4.2）で防ぐ。
  */
-function toJsonChunks(rows: readonly unknown[]): string[] {
+function toJsonChunks(rows: readonly unknown[], maxRows = Number.POSITIVE_INFINITY): string[] {
   const chunks: string[][] = [];
   let current: string[] = [];
   let bytes = 2; // 配列の [ と ]
   for (const row of rows) {
     const json = JSON.stringify(row);
     const size = textEncoder.encode(json).length + 1; // 区切りの ,
-    if (current.length > 0 && bytes + size > MAX_UPSERT_VALUE_BYTES) {
+    if (
+      current.length > 0 &&
+      (bytes + size > MAX_UPSERT_VALUE_BYTES || current.length >= maxRows)
+    ) {
       chunks.push(current);
       current = [];
       bytes = 2;
@@ -306,11 +321,34 @@ const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS, { keepOnUpd
 // 確認の後に別の書き込みが同じ id の行を作る割り込みは、確認をすり抜ける。割り込まれても、設計書 4.5
 // 「kind は作成後に変えられない」を、DB への書き込みの形で守る。
 // next_notify_at は、新しい行の INSERT では書かず（NULL）、更新では NULL に戻す。更新で残すと、変更・削除した
-// 予定の通知が、古い時刻に送られる。通知の時刻は、通知を作る実装 #11 が、更新のたびに計算し直す。
+// 予定の通知が、古い時刻に送られる。通知の時刻は、同じ batch の、この upsert のあとの UPDATE（UPDATE_NEXT_NOTIFY_AT）で入れる。
 const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
   keepOnUpdate: ['kind'],
   extraAssignments: ['next_notify_at = NULL'],
 });
+
+// 予定の next_notify_at は、upsert のあとに、同じ batch の UPDATE で入れる。1 回の依頼で MAX_NOTIFY_UPDATE_ROWS 行までなら
+// 1 文で済むように、upsert と同じく json_each に行を渡す。
+// edited_at が一致する行だけに入れるのは、確認と書き込みの間に、別の書き込みが同じ行を新しくした（割り込み。設計書 6.4）とき、
+// その書き込みが決めた next_notify_at を、古い内容から計算した値で上書きしないため。
+// rev は変えない。next_notify_at はサーバーだけが使う列で、端末には送らない（設計書 5.1）ので、rev を進めて、
+// 他の端末に、同じ行を受け取らせる必要がない。
+// UPDATE ... FROM json_each(?1) にしないのは、UPDATE ... FROM が SQLite 3.33 以降の構文で、本番の D1 が対応しているかを、
+// 手元（Miniflare）では確かめられないため。この UPDATE は書き込みと同じ batch にあるので、構文が通らないと、削除しない行を
+// 含む保存が、すべて失敗する（予定を保存できなくなる）。upsert（INSERT ... SELECT ... FROM json_each ... ON CONFLICT）は
+// 本番で動いているので、json_each と json_extract だけを使い、行ごとに値を引く相関サブクエリで書く。
+// 相関サブクエリは、行ごとに JSON の配列を走査するので、1 文の行数の 2 乗の時間がかかる。Miniflare の実測
+// （upsert を含む書き込み全体）で、300 行 約 0.1 秒、1,000 行 約 0.5 秒、2,000 行 約 1.8 秒。そこで、1 文に入る行数を
+// MAX_NOTIFY_UPDATE_ROWS までにして、文を分ける。WHERE id IN (...) を付けるのは、行を主キーで引くため
+// （付けないと、entries の全行を走査して、D1 の読み取り行数を使う）。
+const UPDATE_NEXT_NOTIFY_AT = [
+  'UPDATE entries',
+  "SET next_notify_at = (SELECT json_extract(value, '$.next_notify_at') FROM json_each(?1)",
+  "  WHERE json_extract(value, '$.id') = entries.id)",
+  "WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?1))",
+  "  AND edited_at = (SELECT json_extract(value, '$.edited_at') FROM json_each(?1)",
+  "    WHERE json_extract(value, '$.id') = entries.id)",
+].join(' ');
 
 type EntryKind = Entry['kind'];
 
@@ -318,12 +356,15 @@ type EntryKind = Entry['kind'];
 interface CurrentRows {
   workspaces: Map<string, { editedAt: number }>;
   entries: Map<string, { editedAt: number; kind: EntryKind }>;
+  /** familyIds の系列の、系列の行と例外の行（next_notify_at の計算に使う）。削除済みを含む。 */
+  family: StoredEntry[];
 }
 
 async function readCurrentRows(
   db: Database,
   workspaceIds: readonly string[],
   entryIds: readonly string[],
+  familyIds: readonly string[],
 ): Promise<CurrentRows> {
   // json_each で ids を 1 つの値として渡すのは、行数が多い依頼でも、D1 の bind できる値の数の上限
   // （1 文あたり 100 個）に当たらないようにするため。
@@ -331,10 +372,22 @@ async function readCurrentRows(
     db
       .prepare(`SELECT ${columns} FROM ${table} WHERE id IN (SELECT value FROM json_each(?1))`)
       .bind(JSON.stringify(ids));
-  const results = await db.batch([
+  // 系列の行を読むのは、書く行に、削除しない行がある系列だけ（なければ、文ごと省く）。
+  const statements = [
     select('workspaces', 'id, edited_at', workspaceIds),
     select('entries', 'id, kind, edited_at', entryIds),
-  ]);
+  ];
+  if (familyIds.length > 0) {
+    statements.push(
+      db
+        .prepare(
+          `SELECT * FROM entries
+           WHERE id IN (SELECT value FROM json_each(?1)) OR series_id IN (SELECT value FROM json_each(?1))`,
+        )
+        .bind(JSON.stringify(familyIds)),
+    );
+  }
+  const results = await db.batch(statements);
   return {
     workspaces: new Map(
       rowsAt(results, 0).map((raw) => {
@@ -348,6 +401,7 @@ async function readCurrentRows(
         return [row.id, { editedAt: row.edited_at, kind: row.kind }] as const;
       }),
     ),
+    family: familyIds.length > 0 ? parseRows(rowsAt(results, 2), entryFromRow) : [],
   };
 }
 
@@ -381,6 +435,30 @@ function assertNoDuplicateIds(ids: readonly string[]): void {
 }
 
 /**
+ * next_notify_at の UPDATE。値は、upsert と同じく、大きさで分けたかたまりごとに 1 文（toJsonChunks）。
+ * さらに、1 文に入る行数を MAX_NOTIFY_UPDATE_ROWS までにする。
+ */
+function notifyUpdateStatements(
+  db: Database,
+  updates: readonly NotifyUpdate[],
+): D1PreparedStatement[] {
+  const rows = updates.map(({ id, editedAt, nextNotifyAt }) => ({
+    id,
+    edited_at: editedAt,
+    next_notify_at: nextNotifyAt,
+  }));
+  return toJsonChunks(rows, MAX_NOTIFY_UPDATE_ROWS).map((json) =>
+    db.prepare(UPDATE_NEXT_NOTIFY_AT).bind(json),
+  );
+}
+
+/** applyWrite の、書く行とは別の入力。 */
+export interface WriteOptions {
+  /** 通知の時刻の計算に使う「今」（UTC のミリ秒）。省くと Date.now()。テストが、時刻を決めるために渡す。 */
+  nowMs?: number;
+}
+
+/**
  * 変更を書き込む（設計書 6.4）。recurrence.ts の作成・変更・削除が返す行の配列を、そのまま渡せる。
  * どれか 1 行でも、今の行の edited_at が書き込む行の edited_at 以上なら、依頼全体を捨てる。
  * 「以上」にするのは、同じ依頼をもう一度送られたとき、2 回目を「もう反映済み」として捨てるため（設計書 6.2）。
@@ -391,6 +469,7 @@ function assertNoDuplicateIds(ids: readonly string[]): void {
 export async function applyWrite(
   db: Database,
   { entries: entryInputs = [], workspaces: workspaceInputs = [] }: WriteRequest,
+  { nowMs = Date.now() }: WriteOptions = {},
 ): Promise<WriteResult> {
   // API の入力の検証だけに任せないのは、サーバーが計算した行（recurrence.ts の結果）も、ここを通って
   // 書かれるため。ここで確かめれば、「書けた行は、必ず読める」（rows.ts）が、呼び出し側によらず成り立つ。
@@ -407,6 +486,7 @@ export async function applyWrite(
     db,
     workspaces.map(({ id }) => id),
     entries.map(({ id }) => id),
+    [...new Set(entries.filter(({ deletedAt }) => deletedAt === null).map(familyKey))],
   );
   // 古い行の判定より先に確かめる。kind の食い違いは、古い依頼でも呼び出し側のバグなので、「捨てた」として隠さない。
   assertSameKinds(entries, current.entries);
@@ -430,9 +510,13 @@ export async function applyWrite(
   const upserts = tables.flatMap(({ table, sql, rows }) =>
     toJsonChunks(rows).map((json) => ({ table, statement: db.prepare(sql).bind(json) })),
   );
+  // 通知の時刻は、書き込みと同じ batch で入れる。別の呼び出しにすると、その間に失敗したとき、upsert が戻した
+  // NULL のまま残り、予定が黙って通知されなくなる。
+  const notifyUpdates = planNotifyUpdates({ stored: current.family, written: entries, nowMs });
   const results = await db.batch([
     db.prepare('UPDATE meta SET rev = rev + 1 WHERE id = 1 RETURNING rev'),
     ...upserts.map(({ statement }) => statement),
+    ...notifyUpdateStatements(db, notifyUpdates),
   ]);
   // 1 つ目の結果は rev の UPDATE なので、upserts[i] の結果は i + 1 番目。
   // 書けた行数が少ないのは、確認の後に別の書き込みが同じ行を新しく書き、upsert の WHERE が弾いたとき。

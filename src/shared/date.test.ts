@@ -7,6 +7,7 @@ import {
   daysInMonth,
   daysToDate,
   isLeapYear,
+  jstToUtcMs,
   nthWeekday,
   todayJst,
   utcMsToJstDate,
@@ -233,6 +234,47 @@ describe('utcMsToJstMinuteOfDay', () => {
   it('1970年より前のミリ秒でも 0〜1439 に収まる', () => {
     expect(utcMsToJstMinuteOfDay(-9 * 3_600_000)).toBe(0);
     expect(utcMsToJstMinuteOfDay(-9 * 3_600_000 - 60_000)).toBe(24 * 60 - 1);
+  });
+});
+
+describe('jstToUtcMs', () => {
+  it('日本時間の 15:00 は、UTC の 06:00（9 時間前）', () => {
+    expect(jstToUtcMs('2026-10-19', 15 * 60)).toBe(Date.UTC(2026, 9, 19, 6, 0));
+  });
+
+  it('日本時間の 0:00 は、前の日の UTC 15:00', () => {
+    expect(jstToUtcMs('2026-10-19', 0)).toBe(Date.UTC(2026, 9, 18, 15, 0));
+  });
+
+  it('日本時間の 23:59 は、同じ日の UTC 14:59', () => {
+    expect(jstToUtcMs('2026-10-19', 24 * 60 - 1)).toBe(Date.UTC(2026, 9, 19, 14, 59));
+  });
+
+  it('1970 年より前でも求まる', () => {
+    expect(jstToUtcMs('1970-01-01', 0)).toBe(-9 * 3_600_000);
+    expect(jstToUtcMs('1969-12-31', 24 * 60 - 1)).toBe(-9 * 3_600_000 - 60_000);
+  });
+
+  it.each([
+    ['2026-10-19', 0],
+    ['2026-10-19', 15 * 60 + 45],
+    ['2026-12-31', 24 * 60 - 1],
+    ['2024-02-29', 6 * 60],
+    ['1900-01-01', 0],
+    ['2199-12-31', 24 * 60 - 1],
+  ])('%s の %i 分を UTC にして日本時間に戻すと、元の日付と分になる', (date, minuteOfDay) => {
+    const utcMs = jstToUtcMs(date, minuteOfDay);
+
+    expect(utcMsToJstDate(utcMs)).toBe(date);
+    expect(utcMsToJstMinuteOfDay(utcMs)).toBe(minuteOfDay);
+  });
+
+  it.each([-1, 24 * 60, 1.5, Number.NaN])('分が %s のときは例外を投げる', (minuteOfDay) => {
+    expect(() => jstToUtcMs('2026-10-19', minuteOfDay)).toThrow(RangeError);
+  });
+
+  it('存在しない日付は例外を投げる', () => {
+    expect(() => jstToUtcMs('2026-02-30', 0)).toThrow(RangeError);
   });
 });
 
