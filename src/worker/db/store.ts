@@ -205,7 +205,10 @@ export interface DueEntry {
 }
 
 /**
- * 通知の時刻が来た行を、時刻の順に limit 件。部分索引 entries_notify（設計書 4.2）を使う。
+ * 通知の時刻が来た行を、時刻が新しい順に limit 件。部分索引 entries_notify（設計書 4.2）を使う（索引を逆向きに読む）。
+ * 新しい順にするのは、遅れた行（定期実行が止まったあと、データを復元したあと）や、壊れて値が進まない行が、
+ * 古い順の枠（limit 件）を占めると、時刻どおりの新しい通知が遅れたり、10 分を過ぎて送られなくなったりするため
+ * （設計書 9.3）。新しい順なら、そうした行は、新しい行が limit 件に満たない実行でだけ処理される。
  * 索引の条件（next_notify_at IS NOT NULL AND deleted_at IS NULL）を、そのまま WHERE に書くのは、
  * 部分索引を使えるのが、WHERE が索引の条件を含むときだけのため。ORDER BY に id を足さないのは、
  * 同じ時刻の行が多いとき（毎朝 6 時の終日の予定など）に、索引だけで limit 件を取れなくなるため。
@@ -213,7 +216,7 @@ export interface DueEntry {
 export const SELECT_DUE_ENTRIES_SQL = [
   'SELECT id, COALESCE(series_id, id) AS family_id, next_notify_at FROM entries',
   'WHERE next_notify_at IS NOT NULL AND next_notify_at <= ?1 AND deleted_at IS NULL',
-  'ORDER BY next_notify_at LIMIT ?2',
+  'ORDER BY next_notify_at DESC LIMIT ?2',
 ].join(' ');
 
 const dueRowSchema = z.object({

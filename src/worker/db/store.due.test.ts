@@ -58,7 +58,7 @@ async function seed(
 }
 
 describe('readDueEntries（通知の時刻が来た行を探す。設計書 9.1）', () => {
-  it('時刻が来た行（next_notify_at が今以前）を、時刻の順に返す', async () => {
+  it('時刻が来た行（next_notify_at が今以前）を、時刻が新しい順に返す', async () => {
     await seed([
       { id: 'c', nextNotifyAt: 3000 },
       { id: 'a', nextNotifyAt: 1000 },
@@ -68,9 +68,9 @@ describe('readDueEntries（通知の時刻が来た行を探す。設計書 9.1�
     const due = await readDueEntries(db(), 5000, 10);
 
     expect(due).toEqual([
-      { id: 'a', familyId: 'a', nextNotifyAt: 1000 },
-      { id: 'b', familyId: 'b', nextNotifyAt: 2000 },
       { id: 'c', familyId: 'c', nextNotifyAt: 3000 },
+      { id: 'b', familyId: 'b', nextNotifyAt: 2000 },
+      { id: 'a', familyId: 'a', nextNotifyAt: 1000 },
     ]);
   });
 
@@ -101,7 +101,7 @@ describe('readDueEntries（通知の時刻が来た行を探す。設計書 9.1�
     expect((await readDueEntries(db(), 5000, 10)).map(({ id }) => id)).toEqual(['live']);
   });
 
-  it('limit 件までしか返さない。時刻が早い順の先頭から', async () => {
+  it('limit 件までしか返さない。時刻が新しい行から取る（古い行が、枠を占めない）', async () => {
     await seed(
       Array.from({ length: 15 }, (_, index) => ({
         id: `e${String(index).padStart(2, '0')}`,
@@ -111,8 +111,9 @@ describe('readDueEntries（通知の時刻が来た行を探す。設計書 9.1�
 
     const due = await readDueEntries(db(), 5000, 10);
 
+    // 15 行のうち、新しい 10 行（e14〜e05）。古い 5 行（e04〜e00）は、取らない。
     expect(due.map(({ id }) => id)).toEqual(
-      Array.from({ length: 10 }, (_, index) => `e${String(index).padStart(2, '0')}`),
+      Array.from({ length: 10 }, (_, index) => `e${String(14 - index).padStart(2, '0')}`),
     );
   });
 
@@ -125,8 +126,8 @@ describe('readDueEntries（通知の時刻が来た行を探す。設計書 9.1�
     const due = await readDueEntries(db(), 5000, 10);
 
     expect(due.map(({ id, familyId }) => [id, familyId])).toEqual([
-      ['s', 's'],
       ['x', 's'],
+      ['s', 's'],
     ]);
   });
 
@@ -145,7 +146,7 @@ describe('readDueEntries（通知の時刻が来た行を探す。設計書 9.1�
     const plan = results.map(({ detail }) => detail).join('\n');
     expect(plan).toContain('USING INDEX entries_notify');
     expect(plan).not.toContain('SCAN entries');
-    // 索引で時刻の順に取れるので、並べ替えのための一時的な表は要らない。
+    // 索引を逆向きに読めば、時刻が新しい順に取れるので、並べ替えのための一時的な表は要らない。
     expect(plan).not.toContain('TEMP B-TREE');
   });
 });

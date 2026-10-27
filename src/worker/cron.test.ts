@@ -730,17 +730,41 @@ describe('1 回の実行で処理する行数の上限', () => {
     expect(new Set(sentTitles)).toEqual(new Set(ids));
   });
 
-  it('時刻が早い順に拾う（遅れていない行の中で、通知の時刻が早い行から）', async () => {
-    // 15 分前の通知は 14:45（5 分の遅れ。まだ送る）。ほかの 15 行は 14:50。
+  it('通知の時刻が新しい行から拾う（古い行は、新しい行の後に回る）', async () => {
+    // 15 分前の通知は 14:45（5 分の遅れ。まだ送れる）。ほかの 15 行は 14:50。
     await save([
       ...ids.map((id) => timed({ id, title: id })),
-      timed({ id: 'early', title: 'early', notifyOffsetMin: 15 }),
+      timed({ id: 'older', title: 'older', notifyOffsetMin: 15 }),
     ]);
 
     const first = await run(NOTIFY_AT);
-
     expect(first.calls).toHaveLength(10);
-    expect(first.contents().map(titleOf)).toContain('early');
+    expect(first.contents().map(titleOf)).not.toContain('older');
+
+    // 次の分に、残りの 14:50 の 5 行と、14:45 の行（6 分の遅れ。まだ送れる）を拾う。
+    const second = await run(NOTIFY_AT + MINUTE);
+    expect(second.contents().map(titleOf)).toContain('older');
+    expect(second.calls).toHaveLength(6);
+  });
+
+  it('止まっていた間に溜まった、遅れた古い行が、枠より多くても、時刻どおりの新しい通知は、先に送る', async () => {
+    // 30 分前に通知する予定だった行（14:20 の通知。14:50 には 30 分の遅れで、送らない）が 12 行。今の通知（14:50）が 3 行。
+    await save([
+      ...Array.from({ length: 12 }, (_, index) =>
+        timed({ id: `late${String(index)}`, title: 'late', startTime: '14:30', endTime: '15:00' }),
+      ),
+      ...['a', 'b', 'c'].map((id) => timed({ id, title: id })),
+    ]);
+    // 14:30 開始の 10 分前の通知は 14:20（保存は 09:00 なので、値が入っている）。
+
+    const first = await run(NOTIFY_AT);
+
+    expect(first.contents().map(titleOf).sort()).toEqual(['a', 'b', 'c']);
+    // 枠の残りの 7 行は、古い行を、送らずに進めた。5 行は、次の実行に回る。
+    const stillDue = Object.entries(await readNextNotifyAt(db())).filter(
+      ([id, value]) => id.startsWith('late') && value !== null,
+    );
+    expect(stillDue).toHaveLength(5);
   });
 });
 
@@ -752,14 +776,19 @@ describe('1 行で例外が起きても、ほかの行は続ける', () => {
       .filter((message) => message.startsWith('通知の処理に失敗しました'));
 
   /** 構造が壊れた行（日付が日付でない）。読むと CorruptRowError になる。 */
-  async function insertBrokenRow(id: string, nextNotifyAt: number): Promise<void> {
+  async function insertBrokenRow(
+    id: string,
+    nextNotifyAt: number | null,
+    seriesId: string | null = null,
+  ): Promise<void> {
     await db()
       .prepare(
         `INSERT INTO entries (id, kind, title, workspace_id, start_date, start_time, end_date, end_time,
-           notify_enabled, notify_offset_min, next_notify_at, edited_at, rev)
-         VALUES (?1, 'event', 'ひみつの題名', 'w1', 'not-a-date', '15:00', '2026-10-27', '16:00', 1, 10, ?2, 1000, 1)`,
+           series_id, original_date, notify_enabled, notify_offset_min, next_notify_at, edited_at, rev)
+         VALUES (?1, 'event', 'ひみつの題名', 'w1', 'not-a-date', '15:00', '2026-10-27', '16:00',
+           ?3, ?4, 1, 10, ?2, 1000, 1)`,
       )
-      .bind(id, nextNotifyAt)
+      .bind(id, nextNotifyAt, seriesId, seriesId === null ? null : '2026-10-28')
       .run();
   }
 
@@ -801,6 +830,31 @@ describe('1 行で例外が起きても、ほかの行は続ける', () => {
     const discord = await run(NOTIFY_AT);
 
     expect(discord.calls).toHaveLength(2);
+  });
+
+  it('壊れた行が、枠（10 行）より多くても、時刻どおりの新しい通知は送る（壊れた行は、新しい行の後に回る）', async () => {
+    for (let index = 0; index < 12; index += 1) {
+      await insertBrokenRow(`broken${String(index)}`, NOTIFY_AT - 5 * MINUTE);
+    }
+    await save([timed({ id: 'a' }), timed({ id: 'b' }), timed({ id: 'c' })]);
+
+    const discord = await run(NOTIFY_AT);
+
+    expect(discord.calls).toHaveLength(3);
+    // 枠の残り 7 行は、壊れた行。1 行ずつ、ログに出る。
+    expect(failureLogs()).toHaveLength(7);
+  });
+
+  it('系列の中に壊れた行があると、その系列の、時刻が来た行は、すべて止まる（系列の読み直しが、壊れた行で失敗するため）', async () => {
+    await save([dailySeries()]);
+    await insertBrokenRow('broken-exception', null, 's');
+
+    const discord = await run(NOTIFY_AT);
+
+    expect(discord.calls).toHaveLength(0);
+    expect(await readNextNotifyAt(db())).toMatchObject({ s: NOTIFY_AT });
+    expect(failureLogs()).toHaveLength(1);
+    expect(failureLogs()[0]).toContain('（行の id: s）');
   });
 });
 
