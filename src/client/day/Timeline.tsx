@@ -50,11 +50,13 @@ function TimelineButton({ item, placement }: { item: TimelineItem; placement: Da
 }
 
 /**
- * 今の時刻の線。1 分ごとに動く。今日の日表示にだけ出す（呼び出し側が、今日のときだけ描く）。
+ * 今の時刻の線。1 分ごとに動く。今日の日表示にだけ出す。
+ * 今日かどうかは、この中で、線と同じ時刻（useNowMinute）で決める。Why not 呼び出し側が、useToday で決めて、
+ * 今日のときだけ描く: useToday は 60 秒ごとにしか見ないので、明日の日表示を開いたまま 0:00 を迎えると、
+ * 線が出るのが、最大 1 分遅れる。常に描いて、中で判定すれば、分が変わる瞬間に、線と同時に出る。
  */
 function NowLine({ date }: { date: DateStr }) {
   const nowMs = useNowMinute();
-  // 日付が変わった直後は、呼び出し側の「今日」の判定が、まだ前の日のことがある。別の日に、線を出さない。
   if (todayJst(nowMs) !== date) return null;
   return (
     <div
@@ -69,9 +71,8 @@ interface TimelineProps {
   items: readonly TimelineItem[];
   /** items と同じ順の、横の位置（layoutDay の結果）。 */
   placements: readonly DayPlacement[];
+  /** 見ている日。今日のときだけ、今の時刻の線を出す。 */
   date: DateStr;
-  /** 今日を見ているか。今日だけ、今の時刻の線を出す。 */
-  isToday: boolean;
   /**
    * 項目を並べる領域（時間軸の右側）を押したときの処理。押した位置の時刻は、この領域の上端
    * （event.currentTarget の getBoundingClientRect）からの距離で求める。項目と線の上の押下は、ここに届かない
@@ -89,7 +90,7 @@ interface TimelineProps {
  * 全面を覆う 1 つのボタンは、読み上げで「何のボタンか」を言えず、Tab でも項目の間に挟まって邪魔になる。
  * キーボードや読み上げからは、( + ) ボタンで、同じタイムブロックを作れる（設計書 11.3）。
  */
-export function Timeline({ items, placements, date, isToday, onTrackClick }: TimelineProps) {
+export function Timeline({ items, placements, date, onTrackClick }: TimelineProps) {
   return (
     <div className={styles.timeline}>
       <div className={styles.ruler} aria-hidden="true">
@@ -109,7 +110,7 @@ export function Timeline({ items, placements, date, isToday, onTrackClick }: Tim
             <TimelineButton key={item.key} item={item} placement={placement} />
           );
         })}
-        {isToday && <NowLine date={date} />}
+        <NowLine date={date} />
       </div>
     </div>
   );

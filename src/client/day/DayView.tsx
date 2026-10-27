@@ -15,7 +15,6 @@ import { createViewSelector } from '../stableRows';
 import { useSyncState } from '../sync/instance';
 import { SyncOverview } from '../sync/SyncStatus';
 import type { SyncState } from '../sync/state';
-import { useToday } from '../useToday';
 import { workspaceDisplayOf } from '../workspaceDisplay';
 import { BannerList } from './BannerList';
 import { DayHeader } from './DayHeader';
@@ -54,7 +53,6 @@ function topPixelsFor(date: DateStr, firstItemStart: number | null): number {
  * 上部の欄（終日・24 時間以上）、縦にスクロールするタイムライン、タイムブロックを作る ( + ) ボタン。
  */
 export function DayView({ date }: { date: DateStr }) {
-  const today = useToday();
   const ready = useSyncState(selectReady);
   // 行が変わっていなければ、同じ view が返る（受け取りのたびに、計算し直さないため。stableRows.ts）。
   // selector は、コンポーネントごとに 1 つ作って保つ（前の値を、selector の中に覚えているため）。
@@ -178,7 +176,6 @@ export function DayView({ date }: { date: DateStr }) {
             items={items.timeline}
             placements={placements}
             date={date}
-            isToday={date === today}
             onTrackClick={onTrackClick}
           />
         </div>
