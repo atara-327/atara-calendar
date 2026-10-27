@@ -281,7 +281,13 @@ describe('readChanges', () => {
 describe('applyWrite', () => {
   describe('SY-1: 書き込み', () => {
     it('新しい行を追加すると rev が 1 つ増え、読み直すと同じ行になる', async () => {
-      const entry = makeEntry({ id: 'a', title: '歯医者', rrule: { freq: 'daily' } });
+      // 通知の時刻は store.notify.test.ts で確かめる。ここは、通知を OFF にして、NULL にそろえる。
+      const entry = makeEntry({
+        id: 'a',
+        title: '歯医者',
+        rrule: { freq: 'daily' },
+        notifyEnabled: false,
+      });
 
       const result = await applyWrite(db(), { entries: [entry] });
 
@@ -333,62 +339,6 @@ describe('applyWrite', () => {
 
       expect(result).toEqual({ applied: true, rev: 1 });
       expect(await dump()).toEqual(before);
-    });
-
-    describe('next_notify_at（通知の時刻は、通知を作る実装 #11 が計算する）', () => {
-      const NOTIFY_AT = 1_760_000_000_000;
-
-      function nextNotifyAt() {
-        return db().prepare("SELECT next_notify_at FROM entries WHERE id = 'a'").first();
-      }
-
-      it('新しい行では、書かず、NULL のままにする', async () => {
-        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
-
-        expect(await nextNotifyAt()).toEqual({ next_notify_at: null });
-      });
-
-      it('行を更新したら、古い通知の時刻を残さず、NULL に戻す（変更した予定の通知が古い時刻に飛ばないように）', async () => {
-        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
-        await db()
-          .prepare("UPDATE entries SET next_notify_at = ?1 WHERE id = 'a'")
-          .bind(NOTIFY_AT)
-          .run();
-
-        await applyWrite(db(), {
-          entries: [makeEntry({ id: 'a', title: '変更', editedAt: 2000 })],
-        });
-
-        expect(await nextNotifyAt()).toEqual({ next_notify_at: null });
-      });
-
-      it('行を削除したときも、NULL に戻す（削除した予定の通知が飛ばないように）', async () => {
-        await applyWrite(db(), { entries: [makeEntry({ id: 'a' })] });
-        await db()
-          .prepare("UPDATE entries SET next_notify_at = ?1 WHERE id = 'a'")
-          .bind(NOTIFY_AT)
-          .run();
-
-        await applyWrite(db(), {
-          entries: [makeEntry({ id: 'a', editedAt: 2000, deletedAt: 2000 })],
-        });
-
-        expect(await nextNotifyAt()).toEqual({ next_notify_at: null });
-      });
-
-      it('古くて捨てられた依頼では、行を更新しないので、通知の時刻も残る', async () => {
-        await applyWrite(db(), { entries: [makeEntry({ id: 'a', editedAt: 2000 })] });
-        await db()
-          .prepare("UPDATE entries SET next_notify_at = ?1 WHERE id = 'a'")
-          .bind(NOTIFY_AT)
-          .run();
-
-        await applyWrite(db(), {
-          entries: [makeEntry({ id: 'a', title: '古い', editedAt: 1000 })],
-        });
-
-        expect(await nextNotifyAt()).toEqual({ next_notify_at: NOTIFY_AT });
-      });
     });
 
     describe('kind は作成後に変えられない（設計書 4.5）', () => {
@@ -471,6 +421,9 @@ describe('applyWrite', () => {
   });
 
   describe('1 回の書き込みの文の数（D1 の 1 回の呼び出しあたりのクエリ数の上限のため）', () => {
+    // 通知の時刻の UPDATE（store.notify.test.ts で確かめる）が入らないよう、makeEntry の日付（2026-10-19）より後の「今」を渡す。
+    const AFTER_ENTRIES = Date.UTC(2030, 0, 1);
+
     /** 渡された batch の文の数と、upsert に bind された値の大きさ（UTF-8 のバイト数）を、呼ばれた順に記録する db。 */
     function recordingDatabase() {
       const batchSizes: number[] = [];
@@ -502,21 +455,31 @@ describe('applyWrite', () => {
     it('予定とワークスペースを数百行書いても、書き込みの batch は rev・workspaces・entries の 3 文', async () => {
       const { database, batchSizes } = recordingDatabase();
 
-      await applyWrite(database, {
-        workspaces: [makeWorkspace({ id: 'w2' }), makeWorkspace({ id: 'w3' })],
-        entries: Array.from({ length: 300 }, (_, index) => makeEntry({ id: `e${String(index)}` })),
-      });
+      await applyWrite(
+        database,
+        {
+          workspaces: [makeWorkspace({ id: 'w2' }), makeWorkspace({ id: 'w3' })],
+          entries: Array.from({ length: 300 }, (_, index) =>
+            makeEntry({ id: `e${String(index)}` }),
+          ),
+        },
+        { nowMs: AFTER_ENTRIES },
+      );
 
-      // 1 つ目は edited_at の確認（表ごとに 1 文）、2 つ目が書き込み
-      expect(batchSizes).toEqual([2, 3]);
+      // 1 つ目は edited_at の確認（表ごとに 1 文と、通知の計算に使う系列の行の 1 文）、2 つ目が書き込み
+      expect(batchSizes).toEqual([3, 3]);
     });
 
     it('書く行がない表の文は、batch に入れない', async () => {
       const { database, batchSizes } = recordingDatabase();
 
-      await applyWrite(database, { entries: [makeEntry({ id: 'a' }), makeEntry({ id: 'b' })] });
+      await applyWrite(
+        database,
+        { entries: [makeEntry({ id: 'a' }), makeEntry({ id: 'b' })] },
+        { nowMs: AFTER_ENTRIES },
+      );
 
-      expect(batchSizes).toEqual([2, 2]);
+      expect(batchSizes).toEqual([3, 2]);
     });
 
     describe('upsert の値 1 つは、D1 の上限（約 2MB）に収まるように、約 1MB ごとのかたまりに分ける', () => {
@@ -533,12 +496,12 @@ describe('applyWrite', () => {
       it('大きな依頼でも、bind する値は 1 つ残らず上限以下で、かたまりごとの文が、同じ 1 回の batch に入る', async () => {
         const { database, batchSizes, upsertValueBytes } = recordingDatabase();
 
-        await applyWrite(database, { entries: bigEntries(8) });
+        await applyWrite(database, { entries: bigEntries(8) }, { nowMs: AFTER_ENTRIES });
 
         expect(upsertValueBytes).toHaveLength(3);
         expect(upsertValueBytes.every((bytes) => bytes <= MAX_UPSERT_VALUE_BYTES)).toBe(true);
         // 1 つ目は edited_at の確認、2 つ目が書き込み（rev の UPDATE ＋ かたまりごとの upsert）
-        expect(batchSizes).toEqual([2, 1 + 3]);
+        expect(batchSizes).toEqual([3, 1 + 3]);
       });
 
       it('大きさは、文字数ではなく UTF-8 のバイト数で数える（文字数の合計は上限未満でも、バイト数が超えるなら分ける）', async () => {
