@@ -61,7 +61,7 @@ describe('NT-1: 通知の文面（設計書 9.4）', () => {
     expect(buildNotifyMessage(timed({ location: '  ' }), ORIGIN)).not.toContain('📍');
   });
 
-  it('終日の予定は、日時の行を出さない（日付は 1 行目と、リンクにある）', () => {
+  it('終日の予定は、日時の行を出さない（1 日だけの終日は、日付が、リンクにだけある）', () => {
     expect(buildNotifyMessage(allDay(), ORIGIN)).toBe(
       ['🔔 今日: 帰省', 'https://calendar.ataraman.com/day/2026-10-19'].join('\n'),
     );

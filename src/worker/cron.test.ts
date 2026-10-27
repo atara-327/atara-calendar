@@ -682,7 +682,7 @@ describe('Discord のレート制限（同じ時刻の通知が多いとき）',
 });
 
 describe('DISCORD_WEBHOOK_URL が設定されていないとき', () => {
-  it('送らず、値は進める（設定する前の通知が、設定した瞬間にまとめて届かないように）', async () => {
+  it('送らず、値は進める（進めないと、同じ行が、毎分、見つかり続けるため）', async () => {
     await save([dailySeries()]);
 
     const discord = await run(NOTIFY_AT, fakeDiscord(), { DISCORD_WEBHOOK_URL: undefined });

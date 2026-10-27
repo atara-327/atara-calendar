@@ -16,8 +16,9 @@ import { nextNotifyTimes, occurrenceNotifiedAt } from './notify/nextNotifyAt';
 // 1 分ごとの定期実行（scheduled）。時刻が来た行を探して、Discord に送り、次の回の時刻に進める（設計書 9.3）。
 
 /**
- * 1 回の実行で処理する行数の上限。無料プランの CPU 時間は 1 回 10ms で、1 行の処理（系列の読み直し・計算・
- * 文面）が 0.2〜1.5ms ほどかかるため（設計書 付録 A.2）。残りは、次の分の実行が拾う。同じ時刻に 100 行より
+ * 1 回の実行で処理する行数の上限。無料プランの CPU 時間は 1 回 10ms で、1 行の処理（系列の読み直しの検証・
+ * 計算・文面）は、Node の実測で、普通の予定なら 0.02〜0.5ms（毎年の 2/29 で約 2ms。例外が 1,000 件ある
+ * 系列で約 3.7ms）で、10 行で 10ms に収まるため（設計書 9.3）。残りは、次の分の実行が拾う。同じ時刻に 100 行より
  * 多く重ならない限り、遅れは、10 分の決まり（LATE_NOTIFY_LIMIT_MS）に収まる。
  */
 export const MAX_DUE_ENTRIES_PER_RUN = 10;
@@ -123,7 +124,8 @@ export async function sendDueNotifications(
     liveWorkspaceIds: await readLiveWorkspaceIds(env.DB),
     deliver: async (occurrence) => {
       if (sender === undefined) {
-        // 設定する前の通知が、設定した瞬間にまとめて届かないように、送らずに、値は進める。
+        // 送らなくても、値は進める。進めないと、時刻が来た行が、毎分、同じ行として見つかり続けて、枠（10 行）を占め、
+        // 時刻どおりの新しい通知が、遅れる（設計書 9.3）。
         // ログは、1 回の実行で 1 回だけ。URL が未設定のときに、通知が出る行の数だけ出すと、うるさい。
         if (!missingWebhookLogged) {
           missingWebhookLogged = true;
