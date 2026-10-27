@@ -22,6 +22,9 @@
     "ACCESS_AUD": "91017dc6ea231374e8d3472e4268464d6481c5feb10f57155001dd9a24214454",
     "APP_ORIGIN": "https://calendar.ataraman.com",
   },
+  // 通知の定期実行（毎分。要件 NT-5。設計書 9.3）。無料プランの Cron Triggers は、アカウント全体で 5 個までで、
+  // これが 1 個目。毎分にするのは、通知を、指定した時刻から 1 分以内に届けるため。
+  "triggers": { "crons": ["* * * * *"] },
   // Workers Logs。過去のログをダッシュボードで探せるようにする（設計書 付録A.3 の「ダッシュボードで探す」のため）。
   "observability": { "enabled": true },
   "d1_databases": [
