@@ -427,7 +427,7 @@ describe('RP-1〜6: nextNotifyTimes（繰り返しの系列）', () => {
       expect(nextOfSeries([series], jst('2026-10-27', '23:30'))).toBeNull();
     });
 
-    it('untilDate より前の回は、その回の通知が残っていれば、これまでどおり返す（例外を移した先の回は、別の行）', () => {
+    it('後ろを切った系列の最後の回を、例外で untilDate より後へ移すと、系列は null で、例外の行は移した先の通知', () => {
       const moved = exception({
         id: 'x',
         originalDate: '2026-10-27',
