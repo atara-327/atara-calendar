@@ -1,9 +1,11 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Workspace } from '../../shared/schema';
+import { classNames } from '../classNames';
 import { EmojiText } from '../emoji/EmojiText';
 import { CloseIcon } from '../form/icons';
 import { unavailableMessage } from '../form/messages';
 import { getSyncEngine, useSyncState } from '../sync/instance';
+import { PHASE_NOTICE_MESSAGES, phaseNotice, type PhaseNotice } from '../sync/phaseNotice';
 import type { SyncState } from '../sync/state';
 import { closeSidebar, openWorkspaceEditor } from './instance';
 import styles from './SidebarMenu.module.css';
@@ -18,20 +20,18 @@ function selectWorkspaces(state: SyncState): SyncState['view']['workspaces'] {
   return state.view.workspaces;
 }
 
-function selectReady(state: SyncState): boolean {
-  return state.phase === 'ready';
-}
-
-function selectLoadFailed(state: SyncState): boolean {
-  return state.phase === 'loadFailed';
+function selectNotice(state: SyncState): PhaseNotice | null {
+  return phaseNotice(state.phase, state.takenOver);
 }
 
 export function SidebarMenu() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const ids = useId();
   const workspaces = useSyncState(selectWorkspaces);
-  const ready = useSyncState(selectReady);
-  const loadFailed = useSyncState(selectLoadFailed);
+  // 読み込み中・読み込めなかった・別のタブで開いたため止めた、のとき、その理由。動いているときは null。
+  // 理由があるあいだは、チェックボックスと［ワークスペースを編集］を押せない（エンジンが受け付けないため）。
+  const notice = useSyncState(selectNotice);
+  const ready = notice === null;
   const sections = useMemo(() => menuSections(workspaces.values()), [workspaces]);
   const [failure, setFailure] = useState<string | null>(null);
   // 背景を押したかを、押し始めた位置でも確かめる。メニューの中の文字を選ぼうとして、指（マウス）を背景まで動かして
@@ -137,29 +137,38 @@ export function SidebarMenu() {
           </p>
         )}
 
-        <section className={styles.section} aria-labelledby={`${ids}-workspaces`}>
-          <h3 id={`${ids}-workspaces`} className={styles.sectionTitle}>
-            ワークスペース
-          </h3>
-          {sections.workspaces.length > 0 ? (
-            <ul className={styles.list}>{sections.workspaces.map((item) => row(item, true))}</ul>
-          ) : (
-            <p className={styles.note}>
-              {ready
-                ? 'ワークスペースがありません'
-                : loadFailed
-                  ? '読み込めませんでした'
-                  : '読み込み中…'}
-            </p>
-          )}
-        </section>
+        {/* 月表示・日表示の読み込みの表示（SyncOverview）と同じ文言。読み込みの前は、一覧が空なので、見出しだけの
+            節は出さず、この 1 か所で伝える。読み込んだあとに止まったときは、一覧の上に、理由を出す。 */}
+        {notice !== null && (
+          <p
+            className={classNames(styles.notice, notice === 'loading' && styles.muted)}
+            role={notice === 'loading' ? 'status' : 'alert'}
+          >
+            {PHASE_NOTICE_MESSAGES[notice]}
+          </p>
+        )}
 
-        <section className={styles.section} aria-labelledby={`${ids}-builtins`}>
-          <h3 id={`${ids}-builtins`} className={styles.sectionTitle}>
-            祝日・記念日
-          </h3>
-          <ul className={styles.list}>{sections.builtins.map((item) => row(item, false))}</ul>
-        </section>
+        {(sections.workspaces.length > 0 || ready) && (
+          <section className={styles.section} aria-labelledby={`${ids}-workspaces`}>
+            <h3 id={`${ids}-workspaces`} className={styles.sectionTitle}>
+              ワークスペース
+            </h3>
+            {sections.workspaces.length > 0 ? (
+              <ul className={styles.list}>{sections.workspaces.map((item) => row(item, true))}</ul>
+            ) : (
+              <p className={styles.note}>ワークスペースがありません</p>
+            )}
+          </section>
+        )}
+
+        {sections.builtins.length > 0 && (
+          <section className={styles.section} aria-labelledby={`${ids}-builtins`}>
+            <h3 id={`${ids}-builtins`} className={styles.sectionTitle}>
+              祝日・記念日
+            </h3>
+            <ul className={styles.list}>{sections.builtins.map((item) => row(item, false))}</ul>
+          </section>
+        )}
 
         <button
           type="button"

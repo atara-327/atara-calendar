@@ -1,5 +1,6 @@
 import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from './instance';
+import { PHASE_NOTICE_MESSAGES, phaseNotice } from './phaseNotice';
 import { selectPendingCount } from './state';
 import styles from './SyncStatus.module.css';
 
@@ -26,21 +27,22 @@ export function PendingBadge() {
  * 親は、position: relative の領域にすること。
  */
 export function SyncOverview() {
-  const phase = useSyncState((state) => state.phase);
-  const takenOver = useSyncState((state) => state.takenOver);
+  const notice = useSyncState((state) => phaseNotice(state.phase, state.takenOver));
 
-  if (phase === 'stopped' && takenOver) {
+  if (notice === null) return null;
+  const message = PHASE_NOTICE_MESSAGES[notice];
+  if (notice === 'takenOver') {
     // 同じ端末で、別のタブを開いたので、このタブは動かさない（設計書 6.7。実装 #6 の確認 Q5）。
     return (
       <section className={styles.overview} role="alert">
-        <p>別のタブで開いたため、このタブは止めました</p>
+        <p>{message}</p>
       </section>
     );
   }
-  if (phase === 'loadFailed') {
+  if (notice === 'loadFailed') {
     return (
       <section className={styles.overview} role="alert">
-        <p>読み込めませんでした</p>
+        <p>{message}</p>
         <button
           type="button"
           className={styles.button}
@@ -53,14 +55,11 @@ export function SyncOverview() {
       </section>
     );
   }
-  if (phase !== 'ready') {
-    return (
-      <section className={classNames(styles.overview, styles.passive)} role="status">
-        <p className={styles.muted}>読み込み中…</p>
-      </section>
-    );
-  }
-  return null;
+  return (
+    <section className={classNames(styles.overview, styles.passive)} role="status">
+      <p className={styles.muted}>{message}</p>
+    </section>
+  );
 }
 
 /**

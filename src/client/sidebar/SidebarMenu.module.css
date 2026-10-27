@@ -112,6 +112,17 @@
   list-style: none;
 }
 
+/* 読み込みの状態の知らせ（読み込み中・読み込めなかった・止めた）。読み込み中だけ、薄く出す（SyncOverview と同じ）。 */
+.notice {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.muted {
+  color: var(--color-observance);
+}
+
 .note {
   margin: 0;
   padding: 8px 16px;
