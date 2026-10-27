@@ -13,6 +13,8 @@ import {
   newWorkspaceInput,
   reorderWorkspaces,
   toWorkspaceInput,
+  workspaceToSave,
+  type WorkspaceInput,
 } from './workspaceEdit';
 import { menuSections } from './workspaceList';
 
@@ -186,17 +188,31 @@ describe('並べ替え（↑ ↓）', () => {
   });
 });
 
+/** 編集のダイアログの［保存］と同じ手順（開いたときの行と、今の行と、入力の途中の値から、送る行を決める）。 */
+function saveEdited(
+  device: Device,
+  original: Workspace,
+  change: Partial<Pick<WorkspaceInput, 'name' | 'color'>>,
+) {
+  const plan = workspaceToSave({
+    original,
+    latest: device.state().view.workspaces.get(original.id),
+    draft: { ...toWorkspaceInput(original), ...change },
+  });
+  if (plan.kind === 'save' && device.engine.saveWorkspace(plan.workspace) === null) {
+    throw new Error('エンジンが受け付けませんでした');
+  }
+  return plan;
+}
+
 describe('8 色にない色のワークスペース（API から入ったもの）', () => {
   it('名前だけを変えて保存しても、色は、そのまま（16 進の大文字・小文字も書き換えない）', async () => {
     const device = await startedDevice();
-    await addWorkspace(device, 'legacy', 'レガシー');
+    await addWorkspace(device, 'legacy', '仕事');
     device.engine.saveWorkspace({ ...toWorkspaceInput(rowOf(device, 'legacy')), color: '#12ab34' });
     await device.engine.settled();
 
-    device.engine.saveWorkspace({
-      ...toWorkspaceInput(rowOf(device, 'legacy')),
-      name: 'レガシー2',
-    });
+    saveEdited(device, rowOf(device, 'legacy'), { name: 'レガシー2' });
     await device.engine.settled();
 
     expect(device.state().discarded.count).toBe(0);
@@ -204,6 +220,71 @@ describe('8 色にない色のワークスペース（API から入ったもの�
       name: 'レガシー2',
       color: '#12ab34',
     });
+  });
+});
+
+describe('編集のダイアログを開いている間に、ほかの端末が、同じワークスペースを変えたとき', () => {
+  async function twoDevices() {
+    const a = await startedDevice('a');
+    await addWorkspace(a, 'work', '仕事');
+    const b = await startedDevice('b');
+    // 時計は、手で進める偽物で、端末ごとに別。B の編集より後に、A が保存するよう、A の時計を進めておく
+    // （ダイアログを開いている間に、時間が過ぎたことにする）。
+    a.clock.advance(60_000);
+    return { a, b };
+  }
+
+  it('名前だけを変えて保存しても、ほかの端末が変えた、表示の OFF と並び順は、戻らない', async () => {
+    const { a, b } = await twoDevices();
+    // A が、名前と色の段を開く（この時点の行を覚える）。
+    const opened = rowOf(a, 'work');
+    // B が、表示を OFF にして、並び順を変える。A は、それを受け取る。
+    b.engine.saveWorkspace({ ...toWorkspaceInput(rowOf(b, 'work')), visible: false, sortOrder: 9 });
+    await b.engine.settled();
+    await a.engine.syncNow();
+    expect(rowOf(a, 'work')).toMatchObject({ visible: false, sortOrder: 9 });
+
+    saveEdited(a, opened, { name: '仕事（新）' });
+    await a.engine.settled();
+
+    expect(a.state().discarded.count).toBe(0);
+    expect((await readAllRows(testDatabase.db)).workspaces.get('work')).toMatchObject({
+      name: '仕事（新）',
+      visible: false,
+      sortOrder: 9,
+    });
+  });
+
+  it('色だけを変えて保存しても、ほかの端末が変えた名前は、戻らない', async () => {
+    const { a, b } = await twoDevices();
+    const opened = rowOf(a, 'work');
+    b.engine.saveWorkspace({ ...toWorkspaceInput(rowOf(b, 'work')), name: 'Bが付けた名前' });
+    await b.engine.settled();
+    await a.engine.syncNow();
+
+    saveEdited(a, opened, { color: WORKSPACE_COLORS[2]?.value ?? '' });
+    await a.engine.settled();
+
+    expect((await readAllRows(testDatabase.db)).workspaces.get('work')).toMatchObject({
+      name: 'Bが付けた名前',
+      color: WORKSPACE_COLORS[2]?.value,
+    });
+  });
+
+  it('ほかの端末が削除したワークスペースは、送らず（サーバーに、黙って捨てられないように）、削除されたとして扱う', async () => {
+    const { a, b } = await twoDevices();
+    const opened = rowOf(a, 'work');
+    b.engine.deleteWorkspace('work');
+    b.clock.advance(DELETE_UNDO_MS);
+    await b.engine.settled();
+    await a.engine.syncNow();
+    a.network.calls.length = 0;
+
+    const plan = saveEdited(a, opened, { name: '仕事（新）' });
+    await a.engine.settled();
+
+    expect(plan.kind).toBe('gone');
+    expect(a.network.writes).toEqual([]);
   });
 });
 

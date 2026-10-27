@@ -13,6 +13,8 @@ import {
   reorderWorkspaces,
   toWorkspaceInput,
   validateWorkspaceName,
+  workspaceToSave,
+  type WorkspaceInput,
 } from './workspaceEdit';
 
 function paletteColor(name: string): WorkspaceColor {
@@ -236,6 +238,155 @@ describe('名前の確認', () => {
 
   it('ふつうの名前は、通す', () => {
     expect(validateWorkspaceName('仕事')).toBeNull();
+  });
+});
+
+describe('既存のワークスペースの保存で送る行（workspaceToSave）', () => {
+  const original = makeWorkspace({
+    id: 'w1',
+    name: '仕事',
+    color: '#FF8A65',
+    sortOrder: 1,
+    visible: true,
+  });
+  const draftOf = (overrides: Partial<WorkspaceInput> = {}): WorkspaceInput => ({
+    ...toWorkspaceInput(original),
+    ...overrides,
+  });
+  const saved = (plan: ReturnType<typeof workspaceToSave>): WorkspaceInput => {
+    if (plan.kind !== 'save') throw new Error(`送る行がありません（${plan.kind}）`);
+    return plan.workspace;
+  };
+
+  it('名前も色も変えなければ、何も送らない', () => {
+    expect(workspaceToSave({ original, latest: original, draft: draftOf() })).toEqual({
+      kind: 'unchanged',
+    });
+  });
+
+  it('名前の前後の空白だけを変えたときも、何も送らない', () => {
+    const plan = workspaceToSave({
+      original,
+      latest: original,
+      draft: draftOf({ name: ' 仕事  ' }),
+    });
+
+    expect(plan).toEqual({ kind: 'unchanged' });
+  });
+
+  it('8 色の同じ色（16 進の大文字・小文字だけの違い）を選び直しても、何も送らない', () => {
+    const lower = makeWorkspace({ id: 'w1', color: '#ff8a65' });
+
+    const plan = workspaceToSave({
+      original: lower,
+      latest: lower,
+      draft: { ...toWorkspaceInput(lower), color: '#FF8A65' },
+    });
+
+    expect(plan).toEqual({ kind: 'unchanged' });
+  });
+
+  it('名前だけを変えたら、名前は前後の空白を除いた値になり、色は、保存してある文字列のまま', () => {
+    const lower = makeWorkspace({ id: 'w1', color: '#e57373' });
+
+    const plan = workspaceToSave({
+      original: lower,
+      latest: lower,
+      draft: { ...toWorkspaceInput(lower), name: '  趣味 ' },
+    });
+
+    expect(saved(plan)).toMatchObject({ name: '趣味', color: '#e57373' });
+  });
+
+  it('名前だけを変えたとき、8 色にない色（API から入った値）も、そのまま', () => {
+    const legacy = makeWorkspace({ id: 'w1', color: '#12AB34' });
+
+    const plan = workspaceToSave({
+      original: legacy,
+      latest: legacy,
+      draft: { ...toWorkspaceInput(legacy), name: '遊び' },
+    });
+
+    expect(saved(plan)).toMatchObject({ name: '遊び', color: '#12AB34' });
+  });
+
+  it('色だけを変えたら、色は選んだ値になり、名前は最新の行のまま', () => {
+    const latest = { ...original, name: 'ほかの端末で直した名前' };
+
+    const plan = workspaceToSave({ original, latest, draft: draftOf({ color: '#4FC3F7' }) });
+
+    expect(saved(plan)).toMatchObject({ name: 'ほかの端末で直した名前', color: '#4FC3F7' });
+  });
+
+  it('開いている間に、ほかの端末が表示と並び順を変えていても、触っていない項目は、最新の行の値になる', () => {
+    const latest = { ...original, visible: false, sortOrder: 7 };
+
+    const plan = workspaceToSave({ original, latest, draft: draftOf({ name: '仕事（新）' }) });
+
+    expect(saved(plan)).toEqual({
+      id: 'w1',
+      name: '仕事（新）',
+      color: '#FF8A65',
+      sortOrder: 7,
+      visible: false,
+      builtin: null,
+    });
+  });
+
+  it('名前も色も、ほかの端末が変えていて、自分は片方だけ変えたなら、変えていない方は、最新の行の値になる', () => {
+    const latest = { ...original, name: '別の名前', color: '#7986CB' };
+
+    const plan = workspaceToSave({ original, latest, draft: draftOf({ name: '自分の名前' }) });
+
+    expect(saved(plan)).toMatchObject({ name: '自分の名前', color: '#7986CB' });
+  });
+
+  it('開いたときの名前の前後に空白があり（API から入った値）、名前を触らなければ、色だけを変えても、名前は書き換えない', () => {
+    const spaced = makeWorkspace({ id: 'w1', name: ' 仕事 ' });
+
+    const plan = workspaceToSave({
+      original: spaced,
+      latest: spaced,
+      draft: { ...toWorkspaceInput(spaced), color: '#4FC3F7' },
+    });
+
+    expect(saved(plan)).toMatchObject({ name: ' 仕事 ', color: '#4FC3F7' });
+  });
+
+  it('最新の行がない（ほかの端末で削除されて、手元にも残っていない）ときは、何も送らない', () => {
+    const plan = workspaceToSave({
+      original,
+      latest: undefined,
+      draft: draftOf({ name: '直した' }),
+    });
+
+    expect(plan).toEqual({ kind: 'gone' });
+  });
+
+  it('最新の行が、削除済みのときも、何も送らない（サーバーは、削除済みの更新を、黙って捨てる）', () => {
+    const latest = { ...original, deletedAt: 5000 };
+
+    const plan = workspaceToSave({ original, latest, draft: draftOf({ name: '直した' }) });
+
+    expect(plan).toEqual({ kind: 'gone' });
+  });
+
+  it('何も変えていなくても、最新の行がなければ、「削除された」ことを知らせる（行が一覧から消えた理由が分かるように）', () => {
+    expect(workspaceToSave({ original, latest: undefined, draft: draftOf() })).toEqual({
+      kind: 'gone',
+    });
+  });
+
+  it('送る行に、editedAt・deletedAt は含めない（エンジンが決める）', () => {
+    const plan = workspaceToSave({
+      original,
+      latest: original,
+      draft: draftOf({ name: '直した' }),
+    });
+
+    expect(Object.keys(saved(plan)).sort()).toEqual(
+      ['builtin', 'color', 'id', 'name', 'sortOrder', 'visible'].sort(),
+    );
   });
 });
 

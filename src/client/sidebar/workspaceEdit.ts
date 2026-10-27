@@ -3,7 +3,7 @@ import { selectableWorkspaces } from '../form/workspaceChoices';
 import { WORKSPACE_COLORS, isSameColor, type WorkspaceColor } from '../workspaceColors';
 
 // ワークスペースの編集（設計書 11.5）の、画面に依存しない部分。並べ替え・新しいワークスペースの初期値・
-// 名前の確認・色の見本・削除の確認に出す件数・最後の 1 つの判定。
+// 名前の確認・保存する行の決め方・色の見本・削除の確認に出す件数・最後の 1 つの判定。
 
 /** エンジンの saveWorkspace に渡す形。editedAt と deletedAt は、エンジンが決める。 */
 export type WorkspaceInput = Omit<Workspace, 'editedAt' | 'deletedAt'>;
@@ -88,6 +88,53 @@ export function validateWorkspaceName(name: string): string | null {
     return `名前は ${String(INPUT_LIMITS.workspaceName)} 文字までにしてください`;
   }
   return null;
+}
+
+/** 既存のワークスペースの［保存］で、何を送るか。 */
+export type WorkspaceSave =
+  /** 名前も色も、開いたときから変えていない。何も送らない。 */
+  | { kind: 'unchanged' }
+  /** 最新の行がない（ほかの端末で削除された）。何も送らない。 */
+  | { kind: 'gone' }
+  | { kind: 'save'; workspace: WorkspaceInput };
+
+/**
+ * 既存のワークスペースの［保存］で、エンジンに渡す行を決める。
+ * original は、段 2 を開いたときの行、latest は、今の（同期のエンジンの view の）行、draft は、入力の途中の値。
+ * 土台は latest にして、利用者が、開いたときの値から変えた項目（名前・色）だけを、draft の値で上書きする。
+ * Why: ワークスペースは、行全体を put する（予定のフォームは、変えた項目だけを changes で送る）。開いたときの行を
+ * 土台にすると、段を開いている間に、ほかの端末が変えた、触っていない項目（表示の ON/OFF・並び順・名前・色）まで、
+ * 新しい編集時刻で送り、巻き戻してしまう。
+ * - 名前を変えたのは、前後の空白を除いた値が、開いたときの名前と違うとき。ただし、入力を触っていなければ（開いたときの
+ *   名前と同じなら）変えていない。API から入った、前後に空白のある名前を、色だけ変えたときに、書き換えないため。
+ * - 色を変えたのは、isSameColor で、開いたときの色と違うとき。8 色にない色（API から入った値）や、16 進の小文字の色は、
+ *   選び直さなければ、保存してある文字列のまま。
+ * - 最新の行がない（削除された）ときは、送らない。サーバーは、削除済みのワークスペースの更新を、黙って捨てる
+ *   （生き返らせない。設計書 5.1）ので、送ると、保存したつもりで、保存されない。呼び出し側が、理由を出す
+ *   （予定のフォームの、対象がもうないときと同じ）。
+ */
+export function workspaceToSave({
+  original,
+  latest,
+  draft,
+}: {
+  original: Workspace;
+  latest: Workspace | undefined;
+  draft: WorkspaceInput;
+}): WorkspaceSave {
+  if (latest === undefined || latest.deletedAt !== null) return { kind: 'gone' };
+  const name = draft.name.trim();
+  const nameChanged = draft.name !== original.name && name !== original.name;
+  const colorChanged = !isSameColor(draft.color, original.color);
+  if (!nameChanged && !colorChanged) return { kind: 'unchanged' };
+  return {
+    kind: 'save',
+    workspace: {
+      ...toWorkspaceInput(latest),
+      ...(nameChanged ? { name } : {}),
+      ...(colorChanged ? { color: draft.color } : {}),
+    },
+  };
 }
 
 /** 色の見本の読み上げの名前（8 色にないとき）。 */

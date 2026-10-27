@@ -18,6 +18,7 @@ import {
   reorderWorkspaces,
   toWorkspaceInput,
   validateWorkspaceName,
+  workspaceToSave,
   type MoveDirection,
   type WorkspaceInput,
 } from './workspaceEdit';
@@ -169,14 +170,37 @@ export function WorkspaceEditor() {
       dialogRef.current?.querySelector<HTMLElement>('[data-focus="name"]')?.focus();
       return;
     }
-    const saved = { ...edit.draft, name: edit.draft.name.trim() };
     const { original } = edit;
+    // 新しく作るときは、入力した値をそのまま保存する。
+    if (original === null) {
+      const created = { ...edit.draft, name: edit.draft.name.trim() };
+      if (submit('保存', () => getSyncEngine().saveWorkspace(created)) === null) return;
+      goTo({ kind: 'list' }, `row:${created.id}`);
+      return;
+    }
+    // 既存の行は、最新の行を土台に、変えた項目だけを送る（workspaceToSave）。段を開いたときの行全体を送ると、
+    // 開いている間に、ほかの端末が変えた、触っていない項目まで戻してしまう。
+    const plan = workspaceToSave({
+      original,
+      latest: getSyncEngine().store.getState().view.workspaces.get(original.id),
+      draft: edit.draft,
+    });
+    if (plan.kind === 'gone') {
+      // 段 2 に残しても、直せるものがない。一覧に戻って、理由を出す（goTo は、理由を消すので、あとで出す）。
+      pendingFocus.current = 'add';
+      setStep({ kind: 'list' });
+      setFailure('このワークスペースは、ほかの端末で削除されました');
+      return;
+    }
     // 何も変えていないなら、何も送らない。送ると、行の編集時刻と rev だけが進み、他の端末が受け取り直す
     // （予定のフォームと同じ）。
-    const unchanged =
-      original !== null && saved.name === original.name && isSameColor(saved.color, original.color);
-    if (!unchanged && submit('保存', () => getSyncEngine().saveWorkspace(saved)) === null) return;
-    goTo({ kind: 'list' }, `row:${saved.id}`);
+    if (
+      plan.kind === 'save' &&
+      submit('保存', () => getSyncEngine().saveWorkspace(plan.workspace)) === null
+    ) {
+      return;
+    }
+    goTo({ kind: 'list' }, `row:${original.id}`);
   }
 
   function confirmDelete(edit: EditState): void {
