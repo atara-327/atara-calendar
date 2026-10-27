@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { WEEKDAY_LABELS } from '../dateFormat';
 import { AddEntryButton } from '../form/AddEntryButton';
 import { PendingBadge, SyncOverview } from '../sync/SyncStatus';
-import { useToday } from '../useToday';
+import { useToday } from './useToday';
 import { MonthGrid } from './MonthGrid';
 import styles from './MonthView.module.css';
 import { headerTitle } from './labels';

@@ -111,7 +111,6 @@ atara-calendar/
 │     ├─ BottomNotices.tsx   画面の下の知らせ（同期の知らせと、削除の「元に戻す」）を、1 つの列に積む（[6.5](#65-電波がない間の動き)）
 │     ├─ dateFormat.ts   日付の表記（「2026年10月21日（水）」「10/19」）、時刻の表記（「9:00」）、曜日の表記
 │     ├─ color.ts        背景の上に出す文字の色（コントラスト比）。月表示と日表示が使う
-│     ├─ useToday.ts     日本時間の今日を読む hook（月表示の「今日」の印とボタン）
 │     ├─ stableRows.ts   同期のエンジンの view を、行が変わっていなければ同じ参照で返す selector。月表示と日表示が使う
 │     ├─ workspaceDisplay.ts   ワークスペースの行から、出すものの決まり（表示が ON の色・組み込みの「祝日」「記念日」の ON/OFF・削除されていない id）を決める。月表示と日表示が使う
 │     ├─ classNames.ts   CSS Modules のクラス名を、条件つきでつなぐ
@@ -132,7 +131,7 @@ atara-calendar/
 │     │  ├─ weekViewCache.ts   週ごとの情報を、描く週の分だけ計算して覚える（`occurrencesInPeriod`・`namedDatesBetween` を呼ぶ）
 │     │  ├─ sizing.ts          行の高さと、マスに入る予定の行数
 │     │  ├─ scrollMemory.ts    スクロールの位置の記憶（日表示から戻ったとき・作り直したとき）
-│     │  ├─ useElementHeight.ts   要素の高さを読む hook
+│     │  ├─ useElementHeight.ts・useToday.ts   要素の高さ、日本時間の今日を読む hook
 │     │  └─ *.module.css       CSS Modules
 │     ├─ day/            日表示（[11.3](#113-日表示dv-16)）
 │     │  ├─ DayView.tsx        日表示の全体。ヘッダー・上部の欄・タイムラインを組み、最初の位置・スワイプ・空いているところのタップを受ける

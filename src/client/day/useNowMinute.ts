@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-// 今の時刻の線（今日の日表示）を、1 分ごとに動かす。useToday（src/client/useToday.ts）と同じ考え方で、
+// 今の時刻の線（今日の日表示）を、1 分ごとに動かす。useToday（src/client/month/useToday.ts）と同じ考え方で、
 // タブが裏に回ったときに、ブラウザがタイマーを遅らせても、前面に戻ったときに、すぐ今の時刻に直す。
 const MS_PER_MINUTE = 60_000;
 
