@@ -5,7 +5,7 @@
 | 作成日 | 2026-10-28 |
 | 確認の対象 | main の `784685c`（実装 #12 まで。本番に出ている） |
 | 自動テスト | 2026-10-28 に `npm test` が全件成功（84 ファイル・2,990 件）。「済（自動テスト）」の根拠。テストを変えたら、ここも書き換える |
-| 元にした要件 | [要件定義書 v1.3](requirements/requirements.md) |
+| 元にした要件 | [要件定義書 v1.4](requirements/requirements.md) |
 
 ## 1. この文書について
 
@@ -40,7 +40,7 @@
 
 上から順にやれば終わります（そのあと 3 章も）。端末は、Android（Nothing Phone (3a)。幅 約 412px）と PC です。
 
-- **iPhone**: 要件から外すことに決めました（ユーザーの回答。受け入れ確認 Q1。2026-10-28）。要件定義書を直す PR で、この文書の iPhone の記述（下の「要確認」）も消します。
+- iPhone は、要件から外しました（ユーザーの回答。受け入れ確認 Q1。2026-10-28。[要件定義書 v1.4](requirements/requirements.md#10-変更履歴)）。
 - 確かめるために作った予定やワークスペースは、本番のデータです。もともとある予定・ワークスペースは、変えない・消さない。確かめるために作ったものだけを使い、確かめたあとに、自分で消してください。
   - **Why**: 本番のデータを守るため。
 - 重かった・押しにくかったなどは、そのまま教えてください。結果は、メインセッションが記録します。
@@ -54,14 +54,13 @@
   3. Android で、その予定の題名を変える。
   4. PC の画面を前面に出して、最大 60 秒待つ（[設計書 6.3](design/design.md#63-受け取るサーバー--端末)）。題名が変わる。
   5. 作った予定を消す。
-- iPhone: 同じことを、iPhone でも（要確認）。
 - **Why**: 本番の Access・Worker・D1 を通した動きは、本番でしか分からないため。自動テストは、手元の D1（Miniflare）で確かめている。
 - 結果: 未
 
 ### 2.2 月表示のスクロール
 
 - 要件: [NF-6](requirements/requirements.md#6-非機能要件)・[MV-1](requirements/requirements.md#51-月表示無限スクロール)
-- 端末: Android・PC（iPhone は要確認）
+- 端末: Android・PC
 - 手順: 月表示で、指（PC はホイール）で速く上下にスクロールし続ける。過去へ・未来へ、数か月ぶん行き来する。
 - 見るもの: 引っかかる・止まる・空白が見える・上の年月の切り替えが遅れる、が起きないか。
 - 重いとき: 先読み（スクロールの向きの先のまとまりを、空き時間に計算する）か、系列の展開を速くすることを考える。
@@ -82,13 +81,8 @@
 ### 2.4 絵文字
 
 - 要件: [NF-7](requirements/requirements.md#6-非機能要件)
-- 端末: Android・PC・iPhone（Safari。要確認）
-- 手順: 題名に絵文字（例: 🎂・👨‍👩‍👧・👍🏽・1️⃣）と国旗（🇯🇵）を入れた予定を作り、月表示と日表示で見る。見たあと、その予定を消す。
-- 見るもの:
-  - 絵文字が、Noto Color Emoji の画像で出る。欠ける・消える・形やグラデーションが崩れるものがない。Android は標準の絵文字も Noto なので、見た目では区別できない。iPhone では、Apple の絵文字とは形が違う（Noto の見た目）。
-  - 国旗は、画像にならず、端末の絵文字のまま（[設計書 11.1](design/design.md#111-共通)の「できないこと」）。
-- **Why**: 画像にした理由が、Safari でカラー絵文字のフォントを使えないことなのに、7b では、Chromium でしか確かめていないため。画像の SVG には、グラデーションや clipPath を使うものがあり、Safari での表示は、実機で見ないと分からない。
-- 結果: 未
+- **ユーザーの作業ではなくなりました**（2026-10-28）。iPhone を要件から外したため（受け入れ確認 Q1）、残る端末は Android と PC です。NF-7 は、4 章で、メインセッションがブラウザ（Chromium）で確かめます。
+- **Why**: 実機で確かめる理由は、iPhone の Safari での表示が、Chromium とは違うかもしれないことでした（画像の SVG には、グラデーションや clipPath を使うものがある）。Android の Chrome と、PC の Chrome は、メインセッションが確かめる Chromium と同じ描画の仕組みなので、実機で見直す必要がありません。
 
 ### 2.5 繰り返しの欄と、範囲を聞く段
 
@@ -254,7 +248,7 @@
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [ENV-1](requirements/requirements.md#4-利用環境) | 実機（[2.1](#21-pc-とスマホで同じ予定が見える)） | 未（iPhone は要確認） |
+| [ENV-1](requirements/requirements.md#4-利用環境) | 実機（[2.1](#21-pc-とスマホで同じ予定が見える)） | 未 |
 | [ENV-2](requirements/requirements.md#4-利用環境) | ブラウザ: 月表示・日表示・フォーム・サイドメニュー・知らせに、英語の文言がない。`index.html` は `lang="ja"`。フォームの誤りの文言: `src/client/form/validate.test.ts` | 未（自動テスト分は済） |
 | [ENV-3](requirements/requirements.md#4-利用環境) | `src/shared/date.test.ts`（UTC 15:00 で日付が変わる）、`src/client/form/schedule.test.ts`（今日は日本時間で決める） | 済（自動テスト） |
 | [ENV-4](requirements/requirements.md#4-利用環境) | `wrangler.jsonc` の `routes`（Custom Domain）を読む。`src/worker/index.test.ts` が確かめるのは、通知のリンクの頭だけ。実機（[2.1](#21-pc-とスマホで同じ予定が見える)）で URL を開く | 未（自動テスト分は済） |
@@ -384,7 +378,7 @@
 | [NF-4](requirements/requirements.md#6-非機能要件) | ブラウザ: ダークの配色だけ（OS をライトモードにしても暗い。`index.html` は `color-scheme: dark`）。レイアウト | 未 |
 | [NF-5](requirements/requirements.md#6-非機能要件) | `src/worker/api/changes.test.ts`・`entries.test.ts`・`workspaces.test.ts`・`occurrences.test.ts`・`errors.test.ts`（NF-5） | 済（自動テスト） |
 | [NF-6](requirements/requirements.md#6-非機能要件) | 実機（[2.2](#22-月表示のスクロール)） | 未 |
-| [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ、実機（[2.4](#24-絵文字)） | 未（自動テスト分は済） |
+| [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ（実機は不要。[2.4](#24-絵文字)） | 未（自動テスト分は済） |
 
 ## 5. 見つかった問題
 
