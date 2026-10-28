@@ -16,13 +16,16 @@
   2. 実機（スマホの実際の指・画面・電波、本番の Cloudflare・Discord）でしか確かめられないものは、ユーザーが 2章・3章の手順で確かめ、結果をメインセッションが記録します。
      - **Why**: ユーザーはコードを読まないので、ユーザーの作業を、実機でしか確かめられないものだけに絞るためです。
   3. 見つかった問題は 5章に書き、直し終えてからリリースします。
+- **リリースの条件**: 2〜4章に「未」「要確認」が残っていないこと（ユーザーがリリース後に回すと決めたものは、結果にそう書けばよい）と、5章の問題が、直っているか、[バックログ](BACKLOG.md)に記録してあること。
+  - **Why**: 確かめていない要件を残したまま使い始めると、困ったときに、作りの問題か、確かめ漏れか、区別できないためです。リリース後に回すものを、ユーザーが決めて書いておけば、確かめ漏れとは区別できます。
 - **結果の書き方**（4章の「結果」の列と、2章・3章の各項目の「結果」）:
   - **済（自動テスト）**: 自動テストが要件を確かめている。確かめ方の列のテストが、上の表の `npm test` で成功している。テスト名と、主なテストの中身を読んで、要件の振る舞いを確かめていることを確認した（ファイル名だけでは決めていない）。
-  - **済（ブラウザ）・済（実機）**: 確かめた。日付と、見たものを添える（例: 済（実機。2026-11-02。Android で…））。
+  - **済（ブラウザ）・済（実機）・済（コード）**: 確かめた。日付と、見たもの（コードなら、読んだファイル）を添える（例: 済（実機。2026-11-02。Android で…））。
   - **未（自動テスト分は済）**: 自動テストが確かめるのは一部で、残り（画面の見た目・操作・実機）が未。残りは、確かめ方に書いてある。
   - **未**: まだ確かめていない。
   - **要確認**: 確かめ方や扱いが決まっていない。理由を、括弧か確かめ方に書く。メインセッションかユーザーが決める。
-  - **対象外**: 優先度が「—」で、作らない（または、受け入れる）要件。作っていないことを、確かめ方に書く。
+  - **対象外**: 優先度が「—」で、作らない（または、受け入れる）要件と、優先度が W（あったら嬉しい。後回しでいい）で、今回は作っていない要件（[バックログ](BACKLOG.md)にある）。作っていないことを、確かめ方に書く。
+    - **Why W を対象外にするのか**: 要件定義書で、W は「後回しでいい」と決めてあり、最初のバージョン（v1.0）の条件ではないためです。
   - 結果には、日付と出典（テストのファイル・見た画面・ユーザーの回答）を添える。
 - 要件の文は、ここに書き写さず、ID のリンク（要件定義書の節）で参照します（[CLAUDE.md](../CLAUDE.md) の SSOT）。
 
@@ -171,8 +174,11 @@
 
 - 要件: [NF-1](requirements/requirements.md#6-非機能要件)
 - 手順: Cloudflare のダッシュボードで、請求が 0 円であることと、Workers のリクエスト数・D1 の読み取りと書き込みの行数が、無料枠に収まっていることを見る（見込みと無料枠は[設計書 付録 A.2](design/design.md#a2-無料枠の見積もりnf-1)）。
-- 見る画面: 要確認（文書に、画面の名前がない）。
-- **Why**: 費用は、本番の実際の使用量でしか分からないため。
+- 見る画面（Cloudflare の公式の文書を検索した結果。2026-10-28。画面の名前が違っていたら、教えてください。ここを直します）:
+  - Workers のリクエスト数: **Workers & Pages → atara-calendar → Metrics**
+  - D1 の読み取り・書き込みの行数: **D1 → atara-calendar** の Metrics（無料枠は 1 日あたり。日本時間の 9:00（UTC の 0:00）に戻る）
+  - 請求: ダッシュボードの請求（Billing）の画面
+- **Why**: 費用は、本番の実際の使用量でしか分からないため。D1 は、2026-09-01 から、無料プランで 1 日の上限を超えると、クエリが失敗するようになった（Cloudflare の変更履歴）ので、収まっていることを確かめておく。
 - 結果: 未
 
 ### 2.13 成功の基準
@@ -184,17 +190,35 @@
   2. 基準の 2 つ目（月表示と日表示の役割の分け方）
 - 結果: 1 つ目: 未／2 つ目: 未
 
+### 2.14 ほかの Google アカウントでは入れない
+
+- 要件: [AU-1](requirements/requirements.md#510-ログイン)・[NF-2](requirements/requirements.md#6-非機能要件)
+- 端末: PC
+- 手順: [setup.md の 8](setup.md#8-動作を確認する)の 3 と同じ。シークレットウィンドウで `https://calendar.ataraman.com` を開き、自分のもの以外の Google アカウントでログインする。
+- 見るもの: Google の画面で「アクセスをブロック」と出るか、Access の画面で弾かれる。カレンダーの画面は開かない。
+- すでに行っていれば、その日付を教えてください（記録がないため、ここに残しています）。
+- **Why**: 許可するアカウントを自分だけにする設定は、Cloudflare Access と Google の側にあり、自動テストは Worker の側（JWT とメールアドレスの確認）しか確かめていないため。
+- 結果: 未
+
 ## 3. 本番の CPU 時間
 
 無料プランの Worker は、CPU 時間が 1 回 10ms までです（[設計書 付録 A.2](design/design.md#a2-無料枠の見積もりnf-1)）。次の 6 つが、本番の CPU 時間（Cloudflare のダッシュボード）で収まっているかを確かめます。ユーザーの作業です。
 
 - **Why**: 無料プランの CPU 時間は 1 回 10ms までで、Node での実測だけでは、Worker で収まるかが分からないため。ローカルの workerd で測らないのは、Workers が安全のため、処理中の時刻の進み方を止めるので、ローカルでも CPU 時間を正確に測れないため。
 - 祝日の計算は、データがなくても測れます。残りは、本番に予定がないと測れません（予定を入れられるようになったのは、実装 8a から）。
-- ダッシュボードのどの画面で、リクエストごと・実行ごとの CPU 時間を見るかは、文書にありません（**要確認**。[setup.md](setup.md) にあるのは、ログ（Logs）と Cron Triggers の確認の画面だけです）。決まったら、ここに書きます。
+- **見る画面**（Cloudflare の公式の文書を検索した結果。2026-10-28。画面の名前が違っていたら、教えてください。ここを直します）:
+  - **まず見るもの**: **Workers & Pages → atara-calendar → Metrics** の、エラーの内訳（Invocation Statuses）に、**Exceeded CPU Time Limits**（CPU 時間の上限を超えた実行）が出ていないこと。出ていれば、どれかが上限を超えています。
+  - 同じ Metrics の **CPU Time per execution**（実行ごとの CPU 時間の分布）で、上のほう（p99 など）が 10ms に近くないこと。
+  - 1 回ずつの CPU 時間は、ログ（**Logs**。**Observability** という名前の画面もある。[setup.md の 8](setup.md#8-動作を確認する)と同じ画面）の、各実行の記録で見られます。`wrangler.jsonc` で `observability` を有効にしてあるので、記録は残っています。
+  - Metrics は、画面からの API と、毎分の定期実行をまとめて数えます（定期実行だけを分けては出ません）。分けて見るときは、ログで、定期実行（scheduled）の記録だけを見ます。
 - 実測に足りる件数（数千件）が溜まらないときに、本番に試験データを入れるかは、そのときユーザーに確認します。**Why**: 本番のデータを書く操作で、後で消す手順も要るため。
 
 1. **祝日の計算**: 起動直後で約 3〜5ms（Node での実測）。`GET /api/occurrences`（実装 #4c）と、保存したときの、次の通知時刻の計算（実装 11a）で使う。
-   - `GET /api/occurrences` は、画面から呼ばない（[設計書 5.1](design/design.md#51-エンドポイント)）。測るには、[setup.md の 8 の 2](setup.md#8-動作を確認する)と同じ方法（画面を開いた状態で、Console から呼ぶ）が使えるか、要確認。
+   - `GET /api/occurrences` は、画面から呼ばない（[設計書 5.1](design/design.md#51-エンドポイント)）。測るときは、[setup.md の 8 の 2](setup.md#8-動作を確認する)と同じく、`calendar.ataraman.com` の画面を開いた状態で、開発者ツール（F12）の Console で、次を実行してから、ログでその実行の CPU 時間を見る（期間は最大 31 日）。
+
+     ```js
+     await (await fetch('/api/occurrences?from=2026-11-01&to=2026-11-30')).json();
+     ```
    - 結果: 未
 2. **初回の全件読み込み**: Node の実測で、5000 件の検証が約 8ms ＋ JSON 化が約 5ms。`GET /api/changes?since=0`（[設計書 6.3](design/design.md#63-受け取るサーバー--端末)）。
    - 結果: 未
@@ -254,9 +278,9 @@
 | [EV-2](requirements/requirements.md#53-予定) | `src/client/form/build.test.ts`・`validate.test.ts`。ブラウザ: フォームに全項目の欄がある | 未（自動テスト分は済） |
 | [EV-3](requirements/requirements.md#53-予定) | `src/worker/api/entries.test.ts`（EV-3）、`src/client/form/entry.integration.test.ts` | 済（自動テスト） |
 | [EV-4](requirements/requirements.md#53-予定) | `src/worker/api/entries.test.ts`（EV-4）、`src/shared/recurrence.test.ts`（EV-4） | 済（自動テスト） |
-| [EV-5](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W なので、対象外としてよいか、確認する | 要確認（W。対象外か） |
-| [EV-6](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W なので、対象外としてよいか、確認する | 要確認（W。対象外か） |
-| [EV-7](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W なので、対象外としてよいか、確認する | 要確認（W。対象外か） |
+| [EV-5](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
+| [EV-6](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
+| [EV-7](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
 | [EV-8](requirements/requirements.md#53-予定) | 初期値の決め方: `src/client/form/workspaceChoices.test.ts`。記憶: `src/client/form/lastWorkspace.test.ts`。ブラウザ: フォームで、前回のワークスペースが選ばれる | 未（自動テスト分は済） |
 
 ### 4.5 タイムブロック（TB）
@@ -266,7 +290,7 @@
 | [TB-1](requirements/requirements.md#54-タイムブロック) | `src/client/form/entry.integration.test.ts`（作る）、`src/shared/recurrenceEdit.test.ts`（RP-6。変更・削除）。日表示から開いて編集・削除する入口: ブラウザ、実機（[2.6](#26-日表示の操作感)） | 未（自動テスト分は済） |
 | [TB-2](requirements/requirements.md#54-タイムブロック) | `src/client/form/build.test.ts`（タイムブロックの下書き）、`src/worker/api/entries.test.ts`（TB-2）。ブラウザ: フォームの欄 | 未（自動テスト分は済） |
 | [TB-3](requirements/requirements.md#54-タイムブロック) | `src/client/day/dayItems.test.ts`（OFF の影響を受けない）、`src/client/form/build.test.ts`（ワークスペースは null） | 済（自動テスト） |
-| [TB-4](requirements/requirements.md#54-タイムブロック) | `migrations/0001_init.sql` の `entries` に、予定とタイムブロックを結ぶ列がない（`series_id` は繰り返しの例外用）。コードを読んで確認 | 未 |
+| [TB-4](requirements/requirements.md#54-タイムブロック) | `migrations/0001_init.sql` の `entries` に、予定とタイムブロックを結ぶ列がない（`series_id` は繰り返しの例外用） | 済（コード。2026-10-28） |
 | [TB-5](requirements/requirements.md#54-タイムブロック) | 色を持たない: `src/client/day/dayItems.test.ts`。ブラウザ: すべて同じ 1 色で出る | 未（自動テスト分は済） |
 | [TB-6](requirements/requirements.md#54-タイムブロック) | `src/client/day/dayItems.test.ts`（日付をまたぐもの）、`src/shared/recurrence.test.ts`（TB-6）、`src/worker/api/entries.test.ts`（TB-2・TB-6） | 済（自動テスト） |
 
@@ -297,7 +321,7 @@
 | [HD-1](requirements/requirements.md#57-祝日記念日) | 日付と名前: `src/shared/holidays.test.ts`、`src/client/month/weekViewCache.test.ts`。赤い色・スマホの幅での名前: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（自動テスト分は済） |
 | [HD-2](requirements/requirements.md#57-祝日記念日) | 記念日の名前: `src/client/month/weekViewCache.test.ts`。控えめな色・名前だけ: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（自動テスト分は済） |
 | [HD-3](requirements/requirements.md#57-祝日記念日) | `src/shared/holidays.test.ts`（HD-3。13 件の名前と日付） | 済（自動テスト） |
-| [HD-4](requirements/requirements.md#57-祝日記念日) | 優先度 W。記念日が、日付の決め方の表（`src/shared/holidays.ts` の `OBSERVANCE_RULES`）として、コードの 1 か所にある（[設計書 8.3](design/design.md#83-記念日の計算hd-3)）。コードを読んで確認 | 未 |
+| [HD-4](requirements/requirements.md#57-祝日記念日) | 記念日が、日付の決め方の表（`src/shared/holidays.ts` の `OBSERVANCE_RULES`）として、コードの 1 か所にある。追加・削除は、この表を直す（[設計書 8.3](design/design.md#83-記念日の計算hd-3)） | 済（コード。2026-10-28） |
 | [HD-5](requirements/requirements.md#57-祝日記念日) | `src/shared/holidays.test.ts`（内閣府の一覧 1955〜2027 年との照合・上書き一覧）、`src/shared/solarTerms.test.ts`（国立天文台の暦要項 2004〜2027 年との照合） | 済（自動テスト） |
 
 ### 4.9 通知（NT）
@@ -324,7 +348,7 @@
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [AU-1](requirements/requirements.md#510-ログイン) | `src/worker/auth.test.ts`（JWT・許可するメールアドレス）、`src/worker/index.test.ts`。Access の設定（自分の Google アカウントだけ）: [setup.md の 8](setup.md#8-動作を確認する)の 3。これを行った記録が、文書にない（ロードマップのフェーズ 2 は「完了」） | 要確認（8 の 3 の記録がない） |
+| [AU-1](requirements/requirements.md#510-ログイン) | `src/worker/auth.test.ts`（JWT・許可するメールアドレス）、`src/worker/index.test.ts`。Access と Google の設定（自分の Google アカウントだけ）: 実機（[2.14](#214-ほかの-google-アカウントでは入れない)） | 未（自動テスト分は済） |
 | [AU-2](requirements/requirements.md#510-ログイン) | 実機（[2.11](#211-ログインが-1-か月続く)） | 未 |
 
 ### 4.12 その他（OT）
@@ -333,7 +357,7 @@
 | --- | --- | --- |
 | [OT-1](requirements/requirements.md#511-その他) | `src/client/form/undoNotices.test.ts`・`src/client/form/entry.integration.test.ts`（OT-1）・`src/client/sync/engine.test.ts`。ボタン: ブラウザ、実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（自動テスト分は済） |
 | [OT-2](requirements/requirements.md#511-その他) | 手順は[設計書 A.1](design/design.md#a1-データの復元ot-2)。復元後の全データの読み直し: `src/client/sync/sync.integration.test.ts`。復元そのもの（D1 Time Travel）は Cloudflare の機能。本番で復元を試すと、その時点より後のデータが戻る。確かめ方（例: 読み取りだけの `wrangler d1 time-travel info`）は、ユーザーが決める | 要確認（確かめ方が未定） |
-| [OT-3](requirements/requirements.md#511-その他) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W なので、対象外としてよいか、確認する | 要確認（W。対象外か） |
+| [OT-3](requirements/requirements.md#511-その他) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
 
 ### 4.13 非機能要件（NF）
 
@@ -341,7 +365,7 @@
 | --- | --- | --- |
 | [NF-1](requirements/requirements.md#6-非機能要件) | 実機（[2.12](#212-費用無料枠)） | 未 |
 | [NF-2](requirements/requirements.md#6-非機能要件) | `src/worker/auth.test.ts`・`src/worker/security.test.ts`・`src/worker/staticHeaders.test.ts`（API の拒否・ヘッダー・CSP）。画面を Access が守ること: AU-1 と同じ。`workers.dev` が無効なこと: `wrangler.jsonc`（`workers_dev: false`）を読む | 未（自動テスト分は済） |
-| [NF-3](requirements/requirements.md#6-非機能要件) | リポジトリに Webhook の URL・メールアドレスがない（`git grep` で確認）。登録先は Cloudflare の Secrets（[setup.md の 7・9.2](setup.md)） | 未 |
+| [NF-3](requirements/requirements.md#6-非機能要件) | リポジトリに Webhook の URL・メールアドレスがない（`git grep` で確認。見つかったのは、setup.md の URL の形の説明（`<数字>/<文字列>`）だけ）。登録先は Cloudflare の Secrets（[setup.md の 7・9.2](setup.md)） | 済（コード。2026-10-28） |
 | [NF-4](requirements/requirements.md#6-非機能要件) | ブラウザ: ダークの配色だけ（OS をライトモードにしても暗い。`index.html` は `color-scheme: dark`）。レイアウト | 未 |
 | [NF-5](requirements/requirements.md#6-非機能要件) | `src/worker/api/changes.test.ts`・`entries.test.ts`・`workspaces.test.ts`・`occurrences.test.ts`・`errors.test.ts`（NF-5） | 済（自動テスト） |
 | [NF-6](requirements/requirements.md#6-非機能要件) | 実機（[2.2](#22-月表示のスクロール)） | 未 |
