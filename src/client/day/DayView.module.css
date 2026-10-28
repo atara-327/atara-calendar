@@ -161,8 +161,8 @@
 /*
  * 上部の欄の 1 件。ブラウザの既定の見た目（枠・背景・文字の色・中央寄せ）を外す。
  * 背景と文字の色は、ワークスペースの色なので、style 属性（CSSOM）で与える。
- * 題名の省略（…）を、<button> の中身に直接かけず、中の span にかけるのは、
- * <button> の text-overflow が、ブラウザによって効かないため（月表示と同じ）。
+ * 題名の右端を薄くする（mask-image）のを、<button> に直接かけず、中の span にかけるのは、
+ * <button> にかけると、背景（予定の色）まで薄くなるため（月表示と同じ）。
  */
 .bannerItem {
   display: flex;
@@ -194,10 +194,12 @@
 }
 
 .bannerTitle {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 .bannerPeriod {

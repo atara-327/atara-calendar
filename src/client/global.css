@@ -10,6 +10,15 @@
   --color-today: #8ab4f8;
   --color-timeblock: #3d4a5c;
   --color-now: #f28b82;
+
+  /*
+   * はみ出た予定名の右端を、「…」ではなく、薄くして切るための、mask-image の値（予定名が見えるように）。
+   * 使う要素は、overflow: hidden にして、-webkit-mask-image と mask-image の両方に、この値を当てる。
+   * Why not 「…」（text-overflow: ellipsis）: 「…」が 1 文字ぶんの幅を取り、狭いマスでは、見える文字がさらに減るため。
+   * 薄くなるのは、要素の右の 1em だけ。要素の幅が、文字の幅ぴったりだと、はみ出さない短い名前の末尾まで薄くなるので、
+   * 使う要素は、空いている幅いっぱいに広げるか、右に 1em の余白（padding）を持たせる。
+   */
+  --fade-end: linear-gradient(to right, #000 calc(100% - 1em), transparent);
 }
 
 body {

@@ -94,13 +94,19 @@
   display: block;
   flex: none;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.itemTitle {
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
+}
+
+/* 時刻は、予定名ではないので、薄くせず、「…」のまま（ユーザーの要望は、予定名が見えること）。 */
 .itemTime {
   font-size: 11px;
   opacity: 0.85;
+  text-overflow: ellipsis;
 }
 
 /* 今の時刻の線（今日だけ）。左端の小さな丸は、::before。線の上のクリックは、下の空いているところに通す。 */

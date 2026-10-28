@@ -133,9 +133,12 @@
 .holidayName,
 .observanceName {
   min-width: 0;
+  /* 右の 1em は、薄くなる範囲。短い名前の末尾が薄くならないよう、空けておく（global.css の --fade-end）。 */
+  padding-right: 1em;
   overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 11px;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 .holidayName {
@@ -224,7 +227,8 @@
 .barText {
   display: block;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 .continuesBefore {
@@ -260,9 +264,11 @@
 }
 
 .timedText {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 /*
