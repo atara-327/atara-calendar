@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { changesResponseSchema, type ChangesResponse } from '../../src/shared/api';
 import type { Bindings } from '../../src/worker/env';
 import { app } from '../../src/worker/index';
+import { TEST_APP_ORIGIN } from './env';
 
 export interface ApiResponse {
   status: number;
@@ -26,7 +27,13 @@ export async function callApi(
   path: string,
   { body, rawBody }: CallOptions = {},
 ): Promise<ApiResponse> {
-  const env: Bindings = { DB: db, ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', AUTH_MODE: 'dev' };
+  const env: Bindings = {
+    DB: db,
+    ACCESS_TEAM_DOMAIN: '',
+    ACCESS_AUD: '',
+    APP_ORIGIN: TEST_APP_ORIGIN,
+    AUTH_MODE: 'dev',
+  };
   const payload = rawBody ?? (body === undefined ? undefined : JSON.stringify(body));
   const res = await app.request(
     path,

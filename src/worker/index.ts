@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { api } from './api';
 import { handleError } from './api/errors';
 import { accessAuth } from './auth';
-import type { AppEnv } from './env';
+import { scheduled } from './cron';
+import type { AppEnv, Bindings } from './env';
 import { apiSecurityHeaders, guardRequests } from './security';
 
 export const app = new Hono<AppEnv>();
@@ -17,4 +18,6 @@ app.route('/api', api);
 // 想定していない例外も、本文に中身を出さない 500 にする（Hono の既定は、本文が文字列の Internal Server Error）。
 app.onError(handleError);
 
-export default app;
+// scheduled は、wrangler.jsonc の triggers.crons（毎分）が呼ぶ。通知を探して Discord に送る（cron.ts）。
+// export default app にしないのは、Hono の app は fetch だけで、scheduled を持てないため。
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Bindings>;

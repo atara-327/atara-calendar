@@ -1,16 +1,25 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { unusedDb } from '../../test/helpers/env';
+import { TEST_APP_ORIGIN, unusedDb } from '../../test/helpers/env';
 import { apiErrorBodySchema } from '../shared/api';
 import type { Bindings } from './env';
-import { app } from './index';
+import { scheduled } from './cron';
+import worker, { app } from './index';
 
-const devEnv: Bindings = { DB: unusedDb, ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', AUTH_MODE: 'dev' };
+const devEnv: Bindings = {
+  DB: unusedDb,
+  ACCESS_TEAM_DOMAIN: '',
+  ACCESS_AUD: '',
+  APP_ORIGIN: TEST_APP_ORIGIN,
+  AUTH_MODE: 'dev',
+};
 
 // 本番と同じ設定（AUTH_MODE なし）。JWT のヘッダーを付けないので、鍵を取りに行く前に拒否される。
 const prodEnv: Bindings = {
   DB: unusedDb,
   ACCESS_TEAM_DOMAIN: 'example-team.cloudflareaccess.com',
   ACCESS_AUD: 'test-audience',
+  APP_ORIGIN: TEST_APP_ORIGIN,
   ALLOWED_EMAIL: 'me@example.com',
 };
 
@@ -178,5 +187,40 @@ describe('/api/ の下の、存在しないパスと、違うメソッド', () =
     expect(res.status).toBe(404);
     expect(res.headers.get('Content-Type')).toContain('text/plain');
     expect(await res.text()).toBe('404 Not Found');
+  });
+});
+
+describe('Worker の入口（fetch と scheduled。設計書 1章）', () => {
+  it('入口は、fetch（API と画面の応答）と、scheduled（定期実行）を持つ', () => {
+    expect(worker.fetch).toBe(app.fetch);
+    expect(worker.scheduled).toBe(scheduled);
+  });
+
+  it('入口の fetch は、これまでどおり、app の応答を返す', async () => {
+    const res = await worker.fetch(
+      new Request('http://localhost/api/health', { headers: sameOrigin }),
+      devEnv,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+});
+
+describe('wrangler.jsonc の通知の設定', () => {
+  // jsonc（コメントと、末尾のカンマがある JSON）を、JSON として読む。コメントは、行の先頭の // だけを消す
+  // （値の中の https:// を消さないため）。
+  const config = JSON.parse(
+    readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8')
+      .replace(/^\s*\/\/.*$/gm, '')
+      .replace(/,(\s*[}\]])/g, '$1'),
+  ) as { triggers?: { crons?: string[] }; vars?: Record<string, string> };
+
+  it('NT-5: 定期実行は、毎分（通知を、指定した時刻から 1 分以内に届けるため）', () => {
+    expect(config.triggers?.crons).toEqual(['* * * * *']);
+  });
+
+  it('ENV-4: 通知のリンクの頭は、本番の URL（calendar.ataraman.com）', () => {
+    expect(config.vars?.['APP_ORIGIN']).toBe('https://calendar.ataraman.com');
   });
 });

@@ -9,6 +9,11 @@ export type Bindings = Env & {
   /** 許可するサービストークンの Client ID（Secrets）。MCP を作るまでは空。 */
   ALLOWED_SERVICE_TOKEN_ID?: string;
   /**
+   * 通知の送り先の Discord Webhook の URL（Secrets）。知っていれば、誰でもそのチャンネルに投稿できるので、
+   * ログに出さない。未設定なら、通知は送らない（定期実行は、値だけ進める。設計書 9.3）。
+   */
+  DISCORD_WEBHOOK_URL?: string;
+  /**
    * 'dev' で、リクエストの宛先が localhost・127.0.0.1 のときだけ JWT の確認を省略する（.dev.vars）。
    * 本番には設定しない。
    */

@@ -11,3 +11,10 @@ ALLOWED_EMAIL=
 
 # 許可するサービストークンの Client ID（MCP を作るまでは空）
 ALLOWED_SERVICE_TOKEN_ID=
+
+# 通知の送り先の Discord Webhook の URL（実際の URL は書かない。知っていれば、誰でも、そのチャンネルに投稿できる）。
+# 空のままなら、通知は送らず、通知の時刻だけが進む。
+DISCORD_WEBHOOK_URL=
+
+# 通知の文面のリンクの頭を差し替えるとき（本番の値は wrangler.jsonc の vars）。
+# APP_ORIGIN=http://localhost:5173

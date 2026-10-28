@@ -15,10 +15,16 @@
   // Access の設定（秘密ではない）。値の出どころは docs/setup.md の 2.1・3。
   // ACCESS_TEAM_DOMAIN は <チーム名>.cloudflareaccess.com の形で書く（https:// や / は付けない）。
   // 空のままか、書式が違うと、Worker は API を拒否する（設定漏れで認証が素通りしないように）。
+  // APP_ORIGIN は、通知の文面のリンクの頭（秘密ではない）。コードに書き込むと、ドメインを変えたときに直し忘れる。
+  // 手元の開発では、.dev.vars で差し替えられる。
   "vars": {
     "ACCESS_TEAM_DOMAIN": "ataraman.cloudflareaccess.com",
     "ACCESS_AUD": "91017dc6ea231374e8d3472e4268464d6481c5feb10f57155001dd9a24214454",
+    "APP_ORIGIN": "https://calendar.ataraman.com",
   },
+  // 通知の定期実行（毎分。要件 NT-5。設計書 9.3）。無料プランの Cron Triggers は、アカウント全体で 5 個までで、
+  // これが 1 個目。毎分にするのは、通知を、指定した時刻から 1 分以内に届けるため。
+  "triggers": { "crons": ["* * * * *"] },
   // Workers Logs。過去のログをダッシュボードで探せるようにする（設計書 付録A.3 の「ダッシュボードで探す」のため）。
   "observability": { "enabled": true },
   "d1_databases": [

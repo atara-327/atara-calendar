@@ -3,7 +3,7 @@ import { addDays } from '../../shared/date';
 import type { Entry } from '../../shared/schema';
 import { deepFreeze, makeEntry } from '../../../test/helpers/entries';
 import { jst } from '../../../test/helpers/time';
-import { nextNotifyTimes, notifyAtMs } from './nextNotifyAt';
+import { nextNotifyTimes, notifyAtMs, occurrenceNotifiedAt } from './nextNotifyAt';
 
 /** 時間指定の予定（15:00〜16:00、10 分前に通知）。繰り返さない。 */
 function timed(overrides: Partial<Entry> & Pick<Entry, 'id'>): Entry {
@@ -604,5 +604,396 @@ describe('RP-1〜6: nextNotifyTimes（繰り返しの系列）', () => {
       expect(result.get('x')).toBe(jst('2026-10-30', '14:50'));
       expect(result.get('s')).toBe(jst('2026-10-29', '14:50'));
     });
+  });
+});
+
+describe('occurrenceNotifiedAt（通知の時刻がちょうどその値になる、その行の回）', () => {
+  const occurrenceOf = (family: Entry[], rowId: string, notifyAt: number) =>
+    occurrenceNotifiedAt({ family, rowId, notifyAt });
+
+  describe('繰り返さない予定', () => {
+    const entry = timed({
+      id: 'e',
+      title: '歯医者',
+      location: '○○歯科',
+      startDate: '2026-10-27',
+      startTime: '15:00',
+      endTime: '16:00',
+    });
+
+    it('通知の時刻が一致すれば、その予定の回（題名・日時・場所）を返す', () => {
+      const occurrence = occurrenceOf([entry], 'e', jst('2026-10-27', '14:50'));
+
+      expect(occurrence).toMatchObject({
+        entryId: 'e',
+        seriesId: 'e',
+        title: '歯医者',
+        location: '○○歯科',
+        startDate: '2026-10-27',
+        startTime: '15:00',
+        endTime: '16:00',
+        isException: false,
+        recurring: false,
+      });
+    });
+
+    it('1 ミリ秒でもずれていれば、null', () => {
+      expect(occurrenceOf([entry], 'e', jst('2026-10-27', '14:50') + 1)).toBeNull();
+      expect(occurrenceOf([entry], 'e', jst('2026-10-27', '14:50') - 1)).toBeNull();
+    });
+
+    it('通知の時刻を変えた予定の、変える前の時刻は、null', () => {
+      const moved = { ...entry, startTime: '16:00' as const, endTime: '17:00' as const };
+
+      expect(occurrenceOf([moved], 'e', jst('2026-10-27', '14:50'))).toBeNull();
+      expect(occurrenceOf([moved], 'e', jst('2026-10-27', '15:50'))).not.toBeNull();
+    });
+
+    it('削除された予定は、null', () => {
+      expect(
+        occurrenceOf([{ ...entry, deletedAt: 5000 }], 'e', jst('2026-10-27', '14:50')),
+      ).toBeNull();
+    });
+
+    it('通知が OFF の予定は、null', () => {
+      expect(
+        occurrenceOf([{ ...entry, notifyEnabled: false }], 'e', jst('2026-10-27', '14:50')),
+      ).toBeNull();
+    });
+
+    it('family に行がなければ、null', () => {
+      expect(occurrenceOf([entry], 'none', jst('2026-10-27', '14:50'))).toBeNull();
+    });
+
+    it('遠い先の予定でも、通知の時刻が一致すれば、その回を返す', () => {
+      const far = timed({ id: 'f', startDate: '2090-05-01' });
+
+      expect(occurrenceOf([far], 'f', jst('2090-05-01', '14:50'))).toMatchObject({
+        startDate: '2090-05-01',
+      });
+    });
+  });
+
+  describe('繰り返しの系列', () => {
+    const daily = timed({
+      id: 's',
+      title: 'ジム',
+      rrule: { freq: 'daily' },
+      startDate: '2026-10-19',
+    });
+
+    it('通知の時刻が一致すれば、その日の回を返す（系列の行の回。例外ではない）', () => {
+      const occurrence = occurrenceOf([daily], 's', jst('2026-10-27', '14:50'));
+
+      expect(occurrence).toMatchObject({
+        entryId: 's',
+        seriesId: 's',
+        title: 'ジム',
+        startDate: '2026-10-27',
+        occurrenceDate: '2026-10-27',
+        isException: false,
+        recurring: true,
+      });
+    });
+
+    it('どの回の通知の時刻にも当たらなければ、null（1 分ずれている）', () => {
+      expect(occurrenceOf([daily], 's', jst('2026-10-27', '14:51'))).toBeNull();
+    });
+
+    it('系列の時刻を変えたあとの、変える前の通知の時刻は、null', () => {
+      const changed = { ...daily, startTime: '16:00' as const, endTime: '17:00' as const };
+
+      expect(occurrenceOf([changed], 's', jst('2026-10-27', '14:50'))).toBeNull();
+      expect(occurrenceOf([changed], 's', jst('2026-10-27', '15:50'))).not.toBeNull();
+    });
+
+    it('開始日より前の通知の時刻は、null', () => {
+      expect(occurrenceOf([daily], 's', jst('2026-10-18', '14:50'))).toBeNull();
+    });
+
+    it('untilDate より後の回の通知の時刻は、null。untilDate の回は返す', () => {
+      const cut = { ...daily, untilDate: '2026-10-27' };
+
+      expect(occurrenceOf([cut], 's', jst('2026-10-27', '14:50'))).not.toBeNull();
+      expect(occurrenceOf([cut], 's', jst('2026-10-28', '14:50'))).toBeNull();
+    });
+
+    it('毎週 月: 月曜の通知の時刻は回を返し、火曜の通知の時刻は null', () => {
+      const weekly = timed({
+        id: 's',
+        rrule: { freq: 'weekly', days: [1] },
+        startDate: '2026-10-19',
+      });
+
+      expect(occurrenceOf([weekly], 's', jst('2026-10-26', '14:50'))).not.toBeNull();
+      expect(occurrenceOf([weekly], 's', jst('2026-10-27', '14:50'))).toBeNull();
+    });
+
+    it('終日（-360）は、当日の朝 6 時の通知の時刻から、その日の回を返す', () => {
+      const series = allDay({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+
+      expect(occurrenceOf([series], 's', jst('2026-10-28', '06:00'))).toMatchObject({
+        allDay: true,
+        startDate: '2026-10-28',
+      });
+    });
+
+    it('開始の後に通知する回（-1440）は、通知の時刻（開始の翌日）から、開始の日の回を返す', () => {
+      const series = timed({
+        id: 's',
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-19',
+        notifyOffsetMin: -1440,
+      });
+
+      expect(occurrenceOf([series], 's', jst('2026-10-28', '15:00'))).toMatchObject({
+        startDate: '2026-10-27',
+      });
+    });
+
+    it('通知の分が 10080（1 週間前）なら、通知の時刻の 1 週間後の回を返す', () => {
+      const series = timed({
+        id: 's',
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-19',
+        notifyOffsetMin: 10_080,
+      });
+
+      expect(occurrenceOf([series], 's', jst('2026-10-27', '15:00'))).toMatchObject({
+        startDate: '2026-11-03',
+      });
+    });
+
+    it('2 日にまたがる毎日の系列は、前日に始まった回と取り違えず、通知の時刻の日に始まる回を返す', () => {
+      const series = timed({
+        id: 's',
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-19',
+        endDate: '2026-10-20',
+      });
+
+      expect(occurrenceOf([series], 's', jst('2026-10-27', '14:50'))).toMatchObject({
+        startDate: '2026-10-27',
+        endDate: '2026-10-28',
+      });
+    });
+
+    it('平日・休日の系列も、その日の回を返す（祝日の判定を使う）', () => {
+      const weekday = timed({ id: 'w', rrule: { freq: 'weekday' }, startDate: '2026-10-19' });
+      const holiday = timed({ id: 'h', rrule: { freq: 'holiday' }, startDate: '2026-10-19' });
+
+      // 2026-10-24 は土曜。2026-10-26 は月曜。
+      expect(occurrenceOf([weekday], 'w', jst('2026-10-24', '14:50'))).toBeNull();
+      expect(occurrenceOf([weekday], 'w', jst('2026-10-26', '14:50'))).not.toBeNull();
+      expect(occurrenceOf([holiday], 'h', jst('2026-10-24', '14:50'))).not.toBeNull();
+      expect(occurrenceOf([holiday], 'h', jst('2026-10-26', '14:50'))).toBeNull();
+    });
+
+    it('その回を、例外で別の日に移した・削除したら、元の回の通知の時刻は、null', () => {
+      const moved = exception({ id: 'x', originalDate: '2026-10-27', startDate: '2026-10-29' });
+      const cancelled = exception({
+        id: 'c',
+        originalDate: '2026-10-28',
+        startDate: '2026-10-28',
+        cancelled: true,
+      });
+
+      expect(occurrenceOf([daily, moved, cancelled], 's', jst('2026-10-27', '14:50'))).toBeNull();
+      expect(occurrenceOf([daily, moved, cancelled], 's', jst('2026-10-28', '14:50'))).toBeNull();
+      expect(
+        occurrenceOf([daily, moved, cancelled], 's', jst('2026-10-29', '14:50')),
+      ).not.toBeNull();
+    });
+
+    it('その回の例外が、別の日の同じ時刻にある回は、例外の行の回で、系列の行の回ではない', () => {
+      const moved = exception({ id: 'x', originalDate: '2026-10-27', startDate: '2026-10-29' });
+
+      // 10/29 の 14:50 は、系列の 10/29 の回の通知の時刻（系列の行の回）。例外の行の回ではない。
+      expect(occurrenceOf([daily, moved], 's', jst('2026-10-29', '14:50'))).toMatchObject({
+        entryId: 's',
+        isException: false,
+      });
+    });
+
+    it('削除された系列は、null', () => {
+      expect(
+        occurrenceOf([{ ...daily, deletedAt: 5000 }], 's', jst('2026-10-27', '14:50')),
+      ).toBeNull();
+    });
+
+    it('通知が OFF の系列は、null', () => {
+      expect(
+        occurrenceOf([{ ...daily, notifyEnabled: false }], 's', jst('2026-10-27', '14:50')),
+      ).toBeNull();
+    });
+  });
+
+  describe('例外の行', () => {
+    const daily = timed({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' });
+
+    it('例外の行の開始から求めた通知の時刻が一致すれば、例外の行の回（内容は例外のもの）を返す', () => {
+      const moved = exception({
+        id: 'x',
+        title: '歯医者（変更）',
+        originalDate: '2026-10-27',
+        startDate: '2026-10-29',
+        startTime: '16:00',
+        endTime: '17:00',
+      });
+
+      expect(occurrenceOf([daily, moved], 'x', jst('2026-10-29', '15:50'))).toMatchObject({
+        entryId: 'x',
+        seriesId: 's',
+        title: '歯医者（変更）',
+        startDate: '2026-10-29',
+        startTime: '16:00',
+        occurrenceDate: '2026-10-27',
+        isException: true,
+        recurring: true,
+      });
+    });
+
+    it('通知の時刻が違えば（元の回の時刻・例外を直す前の時刻）、null', () => {
+      const moved = exception({ id: 'x', originalDate: '2026-10-27', startDate: '2026-10-29' });
+
+      expect(occurrenceOf([daily, moved], 'x', jst('2026-10-27', '14:50'))).toBeNull();
+    });
+
+    it('その回を削除した例外（cancelled）は、null', () => {
+      const cancelled = exception({
+        id: 'x',
+        originalDate: '2026-10-27',
+        startDate: '2026-10-27',
+        cancelled: true,
+      });
+
+      expect(occurrenceOf([daily, cancelled], 'x', jst('2026-10-27', '14:50'))).toBeNull();
+    });
+
+    it('削除された例外の行は、null', () => {
+      const deleted = exception({
+        id: 'x',
+        originalDate: '2026-10-27',
+        startDate: '2026-10-29',
+        deletedAt: 5000,
+      });
+
+      expect(occurrenceOf([daily, deleted], 'x', jst('2026-10-29', '14:50'))).toBeNull();
+    });
+
+    it('系列が削除されている・見つからない例外の行は、画面に出ないので null', () => {
+      const orphan = exception({ id: 'x', originalDate: '2026-10-27', startDate: '2026-10-29' });
+
+      expect(
+        occurrenceOf([{ ...daily, deletedAt: 5000 }, orphan], 'x', jst('2026-10-29', '14:50')),
+      ).toBeNull();
+      expect(occurrenceOf([orphan], 'x', jst('2026-10-29', '14:50'))).toBeNull();
+    });
+
+    it('同じ回の例外の行が 2 つあるときは、画面に出る新しい方だけを返す', () => {
+      const older = exception({
+        id: 'x1',
+        originalDate: '2026-10-28',
+        startDate: '2026-10-28',
+        editedAt: 2000,
+      });
+      const newer = exception({
+        id: 'x2',
+        originalDate: '2026-10-28',
+        startDate: '2026-10-28',
+        editedAt: 3000,
+      });
+      const family = [daily, older, newer];
+
+      expect(occurrenceOf(family, 'x1', jst('2026-10-28', '14:50'))).toBeNull();
+      expect(occurrenceOf(family, 'x2', jst('2026-10-28', '14:50'))).toMatchObject({
+        entryId: 'x2',
+      });
+    });
+
+    it('通知が OFF の例外の行は、null', () => {
+      const off = exception({
+        id: 'x',
+        originalDate: '2026-10-27',
+        startDate: '2026-10-29',
+        notifyEnabled: false,
+      });
+
+      expect(occurrenceOf([daily, off], 'x', jst('2026-10-29', '14:50'))).toBeNull();
+    });
+  });
+
+  describe('nextNotifyTimes との一致（どちらも、画面の展開と同じ回を見る）', () => {
+    // 毎日の系列に、別の日に移した例外・削除した例外・同じ回の新旧の例外・通知の分が違う例外を足した family。
+    const family: Entry[] = [
+      timed({
+        id: 's',
+        rrule: { freq: 'daily' },
+        startDate: '2026-10-19',
+        untilDate: '2026-11-10',
+      }),
+      exception({ id: 'moved', originalDate: '2026-10-27', startDate: '2026-10-29' }),
+      exception({
+        id: 'gone',
+        originalDate: '2026-10-28',
+        startDate: '2026-10-28',
+        cancelled: true,
+      }),
+      exception({
+        id: 'old',
+        originalDate: '2026-11-02',
+        startDate: '2026-11-02',
+        editedAt: 2000,
+      }),
+      exception({
+        id: 'new',
+        originalDate: '2026-11-02',
+        startDate: '2026-11-03',
+        editedAt: 3000,
+        notifyOffsetMin: 30,
+      }),
+      exception({
+        id: 'off',
+        originalDate: '2026-11-05',
+        startDate: '2026-11-05',
+        notifyEnabled: false,
+      }),
+    ];
+
+    it('どの行・どの通知の時刻でも、「その回がある」と「次の通知の時刻がその値になる」が一致する', () => {
+      const candidates = new Set<number>();
+      for (const row of family) {
+        for (let day = 0; day < 30; day++) {
+          const at = notifyAtMs({ ...row, startDate: addDays('2026-10-19', day) });
+          candidates.add(at);
+          candidates.add(at + 60_000);
+        }
+      }
+      // 例外の行は、自分の開始から決まる通知の時刻（行の startDate のまま）も入れる。
+      for (const row of family) candidates.add(notifyAtMs(row));
+
+      let found = 0;
+      for (const row of family) {
+        for (const at of candidates) {
+          const expected = nextNotifyTimes({ family, afterMs: at - 1 }).get(row.id) === at;
+          const actual = occurrenceNotifiedAt({ family, rowId: row.id, notifyAt: at }) !== null;
+          expect(actual, `${row.id} ${String(at)}`).toBe(expected);
+          if (actual) found += 1;
+        }
+      }
+      // 何も見つからないテストにならないように、見つかった回があることを確かめる。
+      expect(found).toBeGreaterThan(20);
+    });
+  });
+
+  it('入力の行を書き換えない', () => {
+    const family = deepFreeze([
+      timed({ id: 's', rrule: { freq: 'daily' }, startDate: '2026-10-19' }),
+      exception({ id: 'x', originalDate: '2026-10-21', startDate: '2026-10-22' }),
+    ]);
+
+    expect(() =>
+      occurrenceNotifiedAt({ family, rowId: 's', notifyAt: jst('2026-10-27', '14:50') }),
+    ).not.toThrow();
   });
 });
