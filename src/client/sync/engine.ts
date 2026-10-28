@@ -145,6 +145,16 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     store.setState({ ...patch, view: computeView(next.base, next.confirming, next.queue) });
   }
 
+  /**
+   * サーバーが失敗を返した知らせ（設計書 6.5）を、向きごとに更新する。値が同じなら、何もしない（購読している画面を、無駄に動かさない）。
+   * 通信の失敗（status が null）では、呼ばない。Why not 消す: 電波が切れただけで、サーバーが直ったかは分からない。
+   */
+  function setServerFailure(direction: 'send' | 'receive', status: number | null): void {
+    const current = store.getState().serverFailure;
+    if (current[direction] === status) return;
+    update({ serverFailure: { ...current, [direction]: status } });
+  }
+
   /** 失敗しうる非同期の処理を、投げっぱなしにするときに使う。握りつぶさず、ログに残す。 */
   function run(task: Promise<unknown>): void {
     task.catch((error: unknown) => {
@@ -208,12 +218,15 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         // 錠を奪われた・止めた後の応答は、読まずに捨てる。列にも IndexedDB にも触らない。
         // 列の依頼は、IndexedDB に残っているので、引き継いだタブが送り直す（サーバーは 2 回目を捨てる）。
         if (!isActive()) break;
-        if (outcome.kind === 'auth') {
-          update({ authRequired: true });
+        if (outcome.kind === 'retry') {
+          if (outcome.status !== null) setServerFailure('send', outcome.status);
           stalled = true;
           break;
         }
-        if (outcome.kind === 'retry') {
+        // サーバーが、失敗でない応答を返した（認証の失敗と、4xx の断りも含む）。
+        setServerFailure('send', null);
+        if (outcome.kind === 'auth') {
+          update({ authRequired: true });
           stalled = true;
           break;
         }
@@ -361,6 +374,13 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     for (;;) {
       const outcome = await fetchChanges(env.fetch, since);
       if (!isActive()) return 'skipped';
+      if (outcome.kind === 'failed') {
+        if (outcome.status !== null) setServerFailure('receive', outcome.status);
+        return 'failed';
+      }
+      // サーバーが、失敗でない応答を返した（認証の失敗も含む）。読めない形の応答（invalid）も消すのは、
+      // 別に、syncError の知らせが出るため（同じことを 2 つの知らせで言わない）。
+      setServerFailure('receive', null);
       if (outcome.kind === 'auth') {
         update({ authRequired: true });
         return 'auth';
@@ -371,7 +391,6 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         update({ syncError: true });
         return 'invalid';
       }
-      if (outcome.kind === 'failed') return 'failed';
 
       const state = store.getState();
       const { changes } = outcome;

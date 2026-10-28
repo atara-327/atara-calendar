@@ -40,8 +40,12 @@ export type WriteOutcome =
   | { kind: 'rejected'; clockSkew: boolean }
   /** ログインが切れている、または許可されていない。依頼は捨てずに、送信を止める。 */
   | { kind: 'auth' }
-  /** 5xx・通信の失敗・API のエラーの形でない 4xx など。外さずに止めて、次のきっかけで再び試す。 */
-  | { kind: 'retry' };
+  /**
+   * 5xx・通信の失敗・API のエラーの形でない 4xx など。外さずに止めて、次のきっかけで再び試す。
+   * status は、応答が返ってきたときのその HTTP の状態。通信の失敗（電波がない・タイムアウトなど。応答がない）は null。
+   * 画面は、応答が返ってきたのに失敗したときだけ知らせる（設計書 6.5）。電波がないのは、電車の中などで普通に起きる。
+   */
+  | { kind: 'retry'; status: number | null };
 
 // 4xx は、依頼の中身が原因なので、何度送っても同じ結果になり、捨てる（設計書 6.2）。ただし、次の 2 つは捨てない。
 // - 408（タイムアウト）と 429（回数の制限）。時間がたてば通る。Worker は返さないが、Cloudflare の前段が返しうる。
@@ -51,7 +55,7 @@ export type WriteOutcome =
 //   4xx を必ずこの形で返す。リクエストの確認（security.ts。設計書 10.3）の 403・415 は別の形で、403 は、上の、止める側に入る。
 //   415 は、端末が必ず Content-Type を付けるので起きない（起きても、再び試すだけ）。
 //   それ以外は、Cloudflare の前段の 400 や、配信の設定ミスの 404 など、依頼の中身ではなく、経路が原因なので、
-//   捨てると、送信待ちが全部消える。再び試し続けても、「未送信 N件」で気づける。
+//   捨てると、送信待ちが全部消える。再び試し続けても、「未送信 N件」と、画面の下の知らせ（設計書 6.5）で気づける。
 const TRANSIENT_CLIENT_ERRORS: ReadonlySet<number> = new Set([408, 429]);
 
 /** 書き込みの応答を、端末の次の動きに直す。 */
@@ -61,7 +65,7 @@ export async function classifyWriteResponse(response: FetchResponse): Promise<Wr
     // 200 でも、書き込みの応答の形でなければ、外さない。ログイン前の案内ページや、通信業者の中継ページが、
     // 200 の HTML を返すことがあり、それを成功として扱うと、送れていない変更が消える。
     return (await readJson(response, writeResponseSchema)) === undefined
-      ? { kind: 'retry' }
+      ? { kind: 'retry', status: response.status }
       : { kind: 'done' };
   }
   if (
@@ -70,10 +74,10 @@ export async function classifyWriteResponse(response: FetchResponse): Promise<Wr
     !TRANSIENT_CLIENT_ERRORS.has(response.status)
   ) {
     const body = await readJson(response, apiErrorBodySchema);
-    if (body === undefined) return { kind: 'retry' };
+    if (body === undefined) return { kind: 'retry', status: response.status };
     return { kind: 'rejected', clockSkew: body.error === 'edited_at_in_future' };
   }
-  return { kind: 'retry' };
+  return { kind: 'retry', status: response.status };
 }
 
 /** 応答の本文を、スキーマで確かめて返す。JSON として読めない、または形が合わなければ undefined。 */
@@ -108,7 +112,7 @@ export async function sendRequest(
   } catch {
     // 電波がない・タイムアウトなど。送れたかどうかは分からないが、同じ依頼を何度送っても結果は変わらない
     // （サーバーが、2 回目を反映済みとして捨てる。設計書 6.2）ので、そのまま再送してよい。
-    return { kind: 'retry' };
+    return { kind: 'retry', status: null };
   }
   return classifyWriteResponse(response);
 }
@@ -118,8 +122,8 @@ export type ReadOutcome =
   | { kind: 'auth' }
   /** 200 だが、応答が、読める形でない。当てずに、同期のエラーとして知らせる（設計書 6.3）。 */
   | { kind: 'invalid' }
-  /** 5xx・通信の失敗など。次のきっかけで再び試す。 */
-  | { kind: 'failed' };
+  /** 200 でない応答（認証の失敗を除く）・通信の失敗。次のきっかけで再び試す。status は、通信の失敗なら null。 */
+  | { kind: 'failed'; status: number | null };
 
 /**
  * GET /api/changes。応答は、構造だけを見るスキーマで確かめる（shared/structure.ts）。
@@ -134,10 +138,10 @@ export async function fetchChanges(fetchFn: FetchFn, since: number): Promise<Rea
       redirect: 'manual',
     });
   } catch {
-    return { kind: 'failed' };
+    return { kind: 'failed', status: null };
   }
   if (isAuthFailure(response)) return { kind: 'auth' };
-  if (response.status !== 200) return { kind: 'failed' };
+  if (response.status !== 200) return { kind: 'failed', status: response.status };
   const changes = await readJson(response, structuralChangesResponseSchema);
   return changes === undefined ? { kind: 'invalid' } : { kind: 'ok', changes };
 }

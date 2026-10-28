@@ -71,6 +71,13 @@ export interface SyncState {
   authRequired: boolean;
   /** 受け取りの応答が、読める形でなかった（設計書 6.3）。 */
   syncError: boolean;
+  /**
+   * サーバーが失敗を返した（応答は返ってきたが、5xx など。設計書 6.5）。最後に返ってきた応答が失敗だったときの HTTP の状態。
+   * 失敗でなければ null。通信の失敗（電波がない。応答がない）では変えない。
+   * Why 送信と受け取りで分けて持つのか: 片方の成功で、もう片方の止まった失敗の知らせを消さないため。
+   * たとえば、壊れた行を書き直す依頼が 500 で止まっている間も、受け取りは成功する。
+   */
+  serverFailure: { send: number | null; receive: number | null };
   /** この端末では、送信待ちを IndexedDB に保存できない。 */
   storageFailed: boolean;
 }
@@ -102,6 +109,7 @@ export function initialState(): SyncState {
     discarded: { count: 0, clockSkew: false },
     authRequired: false,
     syncError: false,
+    serverFailure: { send: null, receive: null },
     storageFailed: false,
   };
 }
