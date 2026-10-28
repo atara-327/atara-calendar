@@ -10,6 +10,7 @@ import { readAllRows } from '../../../test/helpers/rows';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import type { Entry } from '../../shared/schema';
 import { DELETE_UNDO_MS, POLL_INTERVAL_MS } from './engine';
+import type { FetchResponse } from './http';
 import { editedAtOf } from './requests';
 import { selectPendingCount } from './state';
 
@@ -468,7 +469,7 @@ describe('編集と送信（設計書 6.2）', () => {
     );
 
     it.each([500, 502, 503, 408, 429])(
-      '%i は、依頼を外さずに止め、次のきっかけで再び試す（知らせない）',
+      '%i は、依頼を外さずに止め、次のきっかけで再び試す（保存できなかった変更には数えない）',
       async (status) => {
         const device = await startedDevice();
         device.network.override = ({ method }) =>
@@ -1015,6 +1016,303 @@ describe('受け取る（設計書 6.3）', () => {
       expect(device.state().base.epoch).not.toBe('restored');
       expect(entryIn(device, created?.entryId ?? '')?.title).toBe('残る');
     });
+  });
+});
+
+describe('サーバーが失敗を返したときの知らせ（設計書 6.5。リリース前の確認 Q1）', () => {
+  const noFailure = { send: null, receive: null };
+
+  /** 書き込みだけ、指定した応答にする（受け取りは通す）。 */
+  function failWrites(device: Device, respond: () => FetchResponse): void {
+    device.network.override = ({ method }) => (method === 'GET' ? undefined : respond());
+  }
+
+  /** 受け取りだけ、指定した応答にする（書き込みは通す）。 */
+  function failReads(device: Device, respond: () => FetchResponse): void {
+    device.network.override = ({ method }) => (method === 'GET' ? respond() : undefined);
+  }
+
+  describe('送信', () => {
+    it.each([
+      { name: '500', respond: () => fakeResponse(500, { error: 'internal_error' }), status: 500 },
+      { name: '503', respond: () => fakeResponse(503, { error: 'internal_error' }), status: 503 },
+      { name: '408', respond: () => fakeResponse(408, { error: 'x' }), status: 408 },
+      { name: '429', respond: () => fakeResponse(429, { error: 'x' }), status: 429 },
+      {
+        name: 'API のエラーの形でない 404',
+        respond: () => fakeResponse(404, '<html>Not Found</html>'),
+        status: 404,
+      },
+      {
+        name: '200 で、書き込みの応答の形でない本文（ログイン前の案内ページなど）',
+        respond: () => fakeResponse(200, '<html>login</html>'),
+        status: 200,
+      },
+    ])('$name が返ると、送信の失敗として、その HTTP の状態を持つ', async ({ respond, status }) => {
+      const device = await startedDevice();
+      failWrites(device, respond);
+
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      expect(device.state().serverFailure).toEqual({ send: status, receive: null });
+    });
+
+    it('電波がなくて送れないとき（通信の失敗）は、知らせない', async () => {
+      const device = await startedDevice();
+      device.network.online = false;
+
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      expect(pendingOf(device)).toBe(1);
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('サーバーの失敗の後に、通信の失敗があっても、知らせは変わらない（電波が切れただけで、サーバーが直ったかは分からない）', async () => {
+      const device = await startedDevice();
+      failWrites(device, () => fakeResponse(500, { error: 'internal_error' }));
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      device.network.override = null;
+      device.network.online = false;
+      await device.engine.syncNow();
+
+      expect(device.network.writes).toHaveLength(2);
+      expect(device.state().serverFailure).toEqual({ send: 500, receive: null });
+    });
+
+    it('次に、200 で送れたら、知らせは消える', async () => {
+      const device = await startedDevice();
+      failWrites(device, () => fakeResponse(500, { error: 'internal_error' }));
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+      expect(device.state().serverFailure.send).toBe(500);
+
+      device.network.override = null;
+      await device.engine.syncNow();
+
+      expect(pendingOf(device)).toBe(0);
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('次に、API のエラーの形の 4xx で断られても、サーバーが応答しているので、知らせは消える', async () => {
+      const device = await startedDevice();
+      failWrites(device, () => fakeResponse(500, { error: 'internal_error' }));
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      failWrites(device, () => fakeResponse(400, { error: 'invalid_request', message: 'm' }));
+      await device.engine.syncNow();
+
+      expect(device.state().discarded.count).toBe(1);
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('次に、認証の失敗（403）が返っても、知らせは消える（ログインし直す知らせが出る）', async () => {
+      const device = await startedDevice();
+      failWrites(device, () => fakeResponse(500, { error: 'internal_error' }));
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      // 編集で送信を起こす。syncNow は、送った後に受け取るので、受け取りの成功が authRequired を戻してしまう。
+      failWrites(device, () => fakeResponse(403, { error: 'forbidden' }));
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      expect(device.state().authRequired).toBe(true);
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('止めた後に届いた応答は、読まずに捨てる（知らせも変えない）', async () => {
+      const device = await startedDevice();
+      let respond: (response: FetchResponse) => void = () => undefined;
+      device.network.override = ({ method }) =>
+        method === 'GET'
+          ? undefined
+          : new Promise((resolve) => {
+              respond = resolve;
+            });
+      device.engine.createEntry(makeDraft());
+      await vi.waitFor(() => {
+        expect(device.network.writes).toHaveLength(1);
+      });
+
+      device.engine.stop();
+      respond(fakeResponse(500, { error: 'internal_error' }));
+      await device.engine.settled();
+
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+  });
+
+  describe('受け取り', () => {
+    it('止めた後に届いた応答は、読まずに捨てる（知らせも変えない）', async () => {
+      const device = await startedDevice();
+      let respond: (response: FetchResponse) => void = () => undefined;
+      device.network.override = ({ method }) =>
+        method === 'GET'
+          ? new Promise((resolve) => {
+              respond = resolve;
+            })
+          : undefined;
+      const readsBefore = device.network.reads.length;
+      const syncing = device.engine.syncNow();
+      await vi.waitFor(() => {
+        expect(device.network.reads.length).toBeGreaterThan(readsBefore);
+      });
+
+      device.engine.stop();
+      respond(fakeResponse(500, { error: 'internal_error' }));
+      await syncing;
+      await device.engine.settled();
+
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it.each([500, 503, 404])(
+      '%i が返ると、受け取りの失敗として、その HTTP の状態を持つ',
+      async (status) => {
+        const device = await startedDevice();
+        failReads(device, () => fakeResponse(status, null));
+
+        await device.engine.syncNow();
+
+        expect(device.state().serverFailure).toEqual({ send: null, receive: status });
+      },
+    );
+
+    it('最初の全データの読み込みが失敗したときも、知らせる', async () => {
+      const device = createDevice({ db: db() });
+      failReads(device, () => fakeResponse(500, { error: 'internal_error' }));
+
+      await device.engine.start();
+
+      expect(device.state().phase).toBe('loadFailed');
+      expect(device.state().serverFailure).toEqual({ send: null, receive: 500 });
+    });
+
+    it('電波がなくて受け取れないとき（通信の失敗）は、知らせない', async () => {
+      const device = createDevice({ db: db() });
+      device.network.online = false;
+
+      await device.engine.start();
+
+      expect(device.state().phase).toBe('loadFailed');
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('サーバーの失敗の後に、通信の失敗があっても、知らせは変わらない', async () => {
+      const device = await startedDevice();
+      failReads(device, () => fakeResponse(500, { error: 'internal_error' }));
+      await device.engine.syncNow();
+
+      device.network.override = null;
+      device.network.online = false;
+      await device.engine.syncNow();
+
+      expect(device.network.reads).toHaveLength(3);
+      expect(device.state().serverFailure).toEqual({ send: null, receive: 500 });
+    });
+
+    it('次に、受け取れたら、知らせは消える', async () => {
+      const device = await startedDevice();
+      failReads(device, () => fakeResponse(500, { error: 'internal_error' }));
+      await device.engine.syncNow();
+      expect(device.state().serverFailure.receive).toBe(500);
+
+      device.network.override = null;
+      await device.engine.syncNow();
+
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('次に、読める形でない応答が返っても、知らせは消える（同期のエラーの知らせが出る）', async () => {
+      const device = await startedDevice();
+      failReads(device, () => fakeResponse(500, { error: 'internal_error' }));
+      await device.engine.syncNow();
+
+      failReads(device, () => fakeResponse(200, { rev: 'x' }));
+      await device.engine.syncNow();
+
+      expect(device.state().syncError).toBe(true);
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
+    it('次に、認証の失敗（403）が返っても、知らせは消える（ログインし直す知らせが出る）', async () => {
+      const device = await startedDevice();
+      failReads(device, () => fakeResponse(500, { error: 'internal_error' }));
+      await device.engine.syncNow();
+
+      failReads(device, () => fakeResponse(403, { error: 'forbidden' }));
+      await device.engine.syncNow();
+
+      expect(device.state().authRequired).toBe(true);
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+  });
+
+  describe('送信と受け取りの両方', () => {
+    it('送信が失敗で止まっている間に、受け取りが成功しても、送信の知らせは消えない', async () => {
+      const device = await startedDevice();
+      failWrites(device, () => fakeResponse(500, { error: 'internal_error' }));
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      await device.engine.syncNow();
+
+      expect(device.network.reads.length).toBeGreaterThan(1);
+      expect(device.state().serverFailure).toEqual({ send: 500, receive: null });
+    });
+
+    it('受け取りが失敗で止まっている間に、送信が成功しても、受け取りの知らせは消えない', async () => {
+      const device = await startedDevice();
+      failReads(device, () => fakeResponse(503, { error: 'internal_error' }));
+      await device.engine.syncNow();
+      // 送信の後の受け取りが、503 を返して、知らせを設定し直さないように、通信の失敗にする（通信の失敗は、知らせを変えない）。
+      device.network.override = ({ method }) =>
+        method === 'GET' ? Promise.reject(new TypeError('Failed to fetch')) : undefined;
+
+      device.engine.createEntry(makeDraft());
+      await device.engine.settled();
+
+      expect(pendingOf(device)).toBe(0);
+      expect(device.state().serverFailure).toEqual({ send: null, receive: 503 });
+    });
+
+    it('両方が失敗しているとき、それぞれの HTTP の状態を持つ', async () => {
+      const device = await startedDevice();
+      device.network.override = ({ method }) =>
+        fakeResponse(method === 'GET' ? 503 : 500, { error: 'internal_error' });
+      device.engine.createEntry(makeDraft());
+      await device.engine.syncNow();
+
+      expect(device.state().serverFailure).toEqual({ send: 500, receive: 503 });
+    });
+  });
+
+  it('知らせが変わらない失敗が続いても、状態を更新しない。知らせが変わっても、画面に出すデータは作り直さない', async () => {
+    const device = await startedDevice();
+    // 受け取りも失敗させる。受け取りが成功すると、受け取った内容に置き換わり、画面に出すデータを作り直すため。
+    const failAll = (status: number) => {
+      device.network.override = () => fakeResponse(status, { error: 'internal_error' });
+    };
+    failAll(500);
+    device.engine.createEntry(makeDraft());
+    await device.engine.syncNow();
+    const viewBefore = device.state().view;
+    const failureBefore = device.state().serverFailure;
+    expect(failureBefore).toEqual({ send: 500, receive: 500 });
+
+    await device.engine.syncNow();
+    expect(device.state().serverFailure).toBe(failureBefore);
+    expect(device.state().view).toBe(viewBefore);
+
+    failAll(503);
+    await device.engine.syncNow();
+    expect(device.state().serverFailure).toEqual({ send: 503, receive: 503 });
+    expect(device.state().view).toBe(viewBefore);
   });
 });
 

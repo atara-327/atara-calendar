@@ -906,7 +906,7 @@ describe('1 行で例外が起きても、ほかの行は続ける', () => {
     expect(text).not.toContain('ひみつの題名');
   });
 
-  it('壊れた行の値は進まない。次の分も、同じ例外のログが出る（それで気づける）', async () => {
+  it('壊れた行の値は進まない。次の分も、同じ例外のログが出る', async () => {
     await insertBrokenRow('broken', NOTIFY_AT - 1);
 
     await run(NOTIFY_AT);

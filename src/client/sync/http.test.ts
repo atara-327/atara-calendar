@@ -73,17 +73,33 @@ describe('書き込みの応答の扱い（設計書 6.2）', () => {
   // 捨てると、送信待ちが全部消える（実装 #6 の確認 Q12）。リクエストの確認の 415（設計書 10.3）も、別の形。端末は必ず
   // Content-Type を付けるので、起きないが、起きても、再び試すだけ。
   it.each([
-    { name: '本文が JSON でない 400（前段のエラーページなど）', res: htmlResponse(400) },
-    { name: '本文が JSON でない 404（配信の設定ミス）', res: htmlResponse(404) },
-    { name: '知らない種類の error', res: response(400, { error: 'x', message: 'm' }) },
-    { name: 'API のエラーの形でない JSON', res: response(413, { detail: 'too large' }) },
+    {
+      name: '本文が JSON でない 400（前段のエラーページなど）',
+      res: htmlResponse(400),
+      status: 400,
+    },
+    { name: '本文が JSON でない 404（配信の設定ミス）', res: htmlResponse(404), status: 404 },
+    {
+      name: '知らない種類の error',
+      res: response(400, { error: 'x', message: 'm' }),
+      status: 400,
+    },
+    {
+      name: 'API のエラーの形でない JSON',
+      res: response(413, { detail: 'too large' }),
+      status: 413,
+    },
     {
       name: 'API の形でない、リクエストの確認の 415',
       res: response(415, { error: 'unsupported_media_type' }),
+      status: 415,
     },
-  ])('$name の 4xx は、捨てずに、外さずに再び試す', async ({ res }) => {
-    expect(await classifyWriteResponse(res)).toEqual({ kind: 'retry' });
-  });
+  ])(
+    '$name の 4xx は、捨てずに、外さずに再び試す。HTTP の状態は、画面に知らせるために添える',
+    async ({ res, status }) => {
+      expect(await classifyWriteResponse(res)).toEqual({ kind: 'retry', status });
+    },
+  );
 
   it.each([
     { name: '401', res: response(401, { error: 'unauthorized' }) },
@@ -96,23 +112,31 @@ describe('書き込みの応答の扱い（設計書 6.2）', () => {
     expect(await classifyWriteResponse(res)).toEqual({ kind: 'auth' });
   });
 
-  it.each([500, 502, 503, 504])('%i は、外さずに、次のきっかけで再び試す', async (status) => {
-    expect(await classifyWriteResponse(response(status, { error: 'internal_error' }))).toEqual({
-      kind: 'retry',
-    });
-  });
+  it.each([500, 502, 503, 504])(
+    '%i は、外さずに、次のきっかけで再び試す。HTTP の状態を添える',
+    async (status) => {
+      expect(await classifyWriteResponse(response(status, { error: 'internal_error' }))).toEqual({
+        kind: 'retry',
+        status,
+      });
+    },
+  );
 
-  it.each([408, 429])('%i は、時間がたてば通るので、4xx でも外さずに再び試す', async (status) => {
-    expect(await classifyWriteResponse(response(status, { error: 'x' }))).toEqual({
-      kind: 'retry',
-    });
-  });
+  it.each([408, 429])(
+    '%i は、時間がたてば通るので、4xx でも外さずに再び試す。HTTP の状態を添える',
+    async (status) => {
+      expect(await classifyWriteResponse(response(status, { error: 'x' }))).toEqual({
+        kind: 'retry',
+        status,
+      });
+    },
+  );
 
   it.each([
     { name: '書き込みの応答の形でない JSON', res: response(200, { ok: true }) },
     { name: 'JSON でない本文（中継ページの HTML など）', res: htmlResponse(200) },
-  ])('200 でも、$name は、成功として扱わず、外さずに再び試す', async ({ res }) => {
-    expect(await classifyWriteResponse(res)).toEqual({ kind: 'retry' });
+  ])('200 でも、$name は、成功として扱わず、外さずに再び試す（状態は 200）', async ({ res }) => {
+    expect(await classifyWriteResponse(res)).toEqual({ kind: 'retry', status: 200 });
   });
 });
 
@@ -218,10 +242,11 @@ describe('依頼の送信', () => {
     expect(calls[0]).toMatchObject({ url, init: { method } });
   });
 
-  it('通信の失敗（電波がない・タイムアウトなど）は、外さずに再び試す', async () => {
+  it('通信の失敗（電波がない・タイムアウトなど）は、外さずに再び試す。応答がないので、HTTP の状態は null', async () => {
     const { fetchFn } = recordingFetch(new TypeError('Failed to fetch'));
     expect(await sendRequest(fetchFn, deleteWorkspaceRequest, { keepalive: false })).toEqual({
       kind: 'retry',
+      status: null,
     });
   });
 });
@@ -279,16 +304,20 @@ describe('差分の受け取りの応答の扱い（設計書 6.3）', () => {
     },
   );
 
-  it.each([response(500, null), response(503, null), response(404, null)])(
-    '200 でない応答（%o）は、失敗として返す（次のきっかけで再び試す）',
-    async (res) => {
-      expect(await fetchChanges(fetching(res).fetchFn, 0)).toEqual({ kind: 'failed' });
+  it.each([500, 503, 404])(
+    '%i の応答は、その HTTP の状態を添えて、失敗として返す（次のきっかけで再び試す）',
+    async (status) => {
+      expect(await fetchChanges(fetching(response(status, null)).fetchFn, 0)).toEqual({
+        kind: 'failed',
+        status,
+      });
     },
   );
 
-  it('通信の失敗は、失敗として返す', async () => {
+  it('通信の失敗は、HTTP の状態を null にして、失敗として返す', async () => {
     expect(await fetchChanges(fetching(new TypeError('Failed to fetch')).fetchFn, 0)).toEqual({
       kind: 'failed',
+      status: null,
     });
   });
 });

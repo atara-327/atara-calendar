@@ -1,6 +1,7 @@
 import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from './instance';
 import { PHASE_NOTICE_MESSAGES, phaseNotice } from './phaseNotice';
+import { serverFailureMessage } from './serverFailure';
 import { selectPendingCount } from './state';
 import styles from './SyncStatus.module.css';
 
@@ -69,6 +70,7 @@ export function SyncOverview() {
 export function SyncNotices() {
   const discarded = useSyncState((state) => state.discarded);
   const authRequired = useSyncState((state) => state.authRequired);
+  const serverFailure = useSyncState((state) => serverFailureMessage(state.serverFailure));
   const syncError = useSyncState((state) => state.syncError);
   const storageFailed = useSyncState((state) => state.storageFailed);
 
@@ -104,6 +106,12 @@ export function SyncNotices() {
           >
             開き直す
           </button>
+        </p>
+      )}
+      {serverFailure !== null && (
+        // 閉じるボタンは付けない。今の状態を表す知らせで、直れば（次に成功すれば）自分で消える。
+        <p className={styles.notice} role="alert">
+          {serverFailure}
         </p>
       )}
       {syncError && (
