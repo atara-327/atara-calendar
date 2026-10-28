@@ -1148,6 +1148,29 @@ describe('サーバーが失敗を返したときの知らせ（設計書 6.5。
   });
 
   describe('受け取り', () => {
+    it('止めた後に届いた応答は、読まずに捨てる（知らせも変えない）', async () => {
+      const device = await startedDevice();
+      let respond: (response: FetchResponse) => void = () => undefined;
+      device.network.override = ({ method }) =>
+        method === 'GET'
+          ? new Promise((resolve) => {
+              respond = resolve;
+            })
+          : undefined;
+      const readsBefore = device.network.reads.length;
+      const syncing = device.engine.syncNow();
+      await vi.waitFor(() => {
+        expect(device.network.reads.length).toBeGreaterThan(readsBefore);
+      });
+
+      device.engine.stop();
+      respond(fakeResponse(500, { error: 'internal_error' }));
+      await syncing;
+      await device.engine.settled();
+
+      expect(device.state().serverFailure).toEqual(noFailure);
+    });
+
     it.each([500, 503, 404])(
       '%i が返ると、受け取りの失敗として、その HTTP の状態を持つ',
       async (status) => {
@@ -1247,6 +1270,9 @@ describe('サーバーが失敗を返したときの知らせ（設計書 6.5。
       const device = await startedDevice();
       failReads(device, () => fakeResponse(503, { error: 'internal_error' }));
       await device.engine.syncNow();
+      // 送信の後の受け取りが、503 を返して、知らせを設定し直さないように、通信の失敗にする（通信の失敗は、知らせを変えない）。
+      device.network.override = ({ method }) =>
+        method === 'GET' ? Promise.reject(new TypeError('Failed to fetch')) : undefined;
 
       device.engine.createEntry(makeDraft());
       await device.engine.settled();
