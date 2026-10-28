@@ -100,7 +100,9 @@ async function processDueEntry(context: RunContext, due: DueEntry): Promise<void
 /**
  * 通知の時刻が来た行を送り、次の回の時刻に進める。now は、定期実行の予定の時刻（controller.scheduledTime）。
  * 1 行で例外が起きても、ほかの行は続ける。ログに出すのは、行の id と例外だけで、題名などの中身は出さない。
- * 壊れた行（CorruptRowError）で、その行の値が進まないときは、毎分、同じ例外のログが出る。それで気づける（付録 A.3）。
+ * 壊れた行（CorruptRowError）で、その行の値が進まないときは、毎分、同じ例外のログが出る（直し方は付録 A.3）。
+ * 失敗を知らせる仕組みは作らない（設計書 9.3）。ログを見に行かなければ気づけないが、画面を開けば、多くの場合、
+ * 全データの読み込みの失敗の知らせ（設計書 6.5）で気づける。
  */
 export async function sendDueNotifications(
   env: Bindings,
