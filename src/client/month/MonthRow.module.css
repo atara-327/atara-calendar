@@ -21,6 +21,15 @@
   text-decoration: none;
 }
 
+/*
+ * 左端（日曜）のマスだけ、左にも線を持つ。右端（土曜）のマスは、右の線を持つので、左右の外枠がそろう。
+ * 外枠のない左端だけが空いて見えると、外側の余白が、右にだけあるように見えるため。
+ * 幅は、列の幅（1/7）のまま（box-sizing: border-box）なので、曜日の見出しと列がずれない。
+ */
+.cell:first-child {
+  border-left: 1px solid var(--color-grid);
+}
+
 /* 範囲（1900〜2199 年）の外の日。リンクではなく、日付の数字だけを薄く出す。 */
 .outOfRange {
   color: var(--color-observance);

@@ -1,4 +1,10 @@
 .screen {
+  /*
+   * 曜日の見出しと日付のマスの、左右の余白。マスの外枠（1px）より、2px 大きい。
+   * 2 か所に別々の値を書かないのは、片方だけ変えると、曜日と日付の列がずれるため。
+   */
+  --month-side-margin: 3px;
+
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -55,7 +61,7 @@
   flex: none;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  padding-bottom: 4px;
+  padding: 0 var(--month-side-margin) 4px;
   border-bottom: 1px solid var(--color-grid);
   font-size: 12px;
   text-align: center;
@@ -90,6 +96,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 0 var(--month-side-margin);
   scrollbar-width: none;
 }
 
