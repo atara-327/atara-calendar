@@ -21,7 +21,7 @@
 - **結果の書き方**（4章の「結果」の列と、2章・3章の各項目の「結果」）:
   - **済（自動テスト）**: 自動テストが要件を確かめている。確かめ方の列のテストが、上の表の `npm test` で成功している。テスト名と、主なテストの中身を読んで、要件の振る舞いを確かめていることを確認した（ファイル名だけでは決めていない）。
   - **済（ブラウザ）・済（実機）・済（コード）**: 確かめた。日付と、見たもの（コードなら、読んだファイル）を添える（例: 済（実機。2026-11-02。Android で…））。
-  - **済（自動テスト・ブラウザ）・済（自動テスト・実機）**: 自動テスト（上の「済（自動テスト）」と同じ基準）と、ブラウザまたは実機の両方で確かめた。日付を添える。
+  - **済（自動テスト・ブラウザ）・済（自動テスト・実機）**: 自動テスト（上の「済（自動テスト）」と同じ基準）と、ブラウザまたは実機の両方で確かめた。日付と、見たものを添える。
   - **済（手順の確認のみ）**: 手順が文書にあることだけを確かめた（実行はしていない）。日付を添える。
   - **未（実機の分が残る）**: 自動テスト・ブラウザ・コードで確かめられる分は済んでいて、実機の分（2章・3章）だけが残る。残りは、確かめ方の列のリンク先にある。
   - **未**: まだ確かめていない。
@@ -379,12 +379,12 @@
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
 | [NF-1](requirements/requirements.md#6-非機能要件) | 実機（[2.12](#212-費用無料枠)） | 未 |
-| [NF-2](requirements/requirements.md#6-非機能要件) | `src/worker/auth.test.ts`・`src/worker/security.test.ts`・`src/worker/staticHeaders.test.ts`（API の拒否・ヘッダー・CSP）。画面を Access が守ること: AU-1 と同じ。`workers.dev` とプレビュー URL が無効なこと: `wrangler.jsonc`（`workers_dev: false`・`preview_urls: false`）を読む | 未（実機の分が残る） |
+| [NF-2](requirements/requirements.md#6-非機能要件) | `src/worker/auth.test.ts`・`src/worker/security.test.ts`・`src/worker/staticHeaders.test.ts`（API の拒否・ヘッダー・CSP）。画面を Access が守ること: AU-1 と同じ（実機: [2.14](#214-ほかの-google-アカウントでは入れない)）。`workers.dev` とプレビュー URL が無効なこと: `wrangler.jsonc`（`workers_dev: false`・`preview_urls: false`）を読む | 未（実機の分が残る） |
 | [NF-3](requirements/requirements.md#6-非機能要件) | リポジトリに Webhook の URL・メールアドレスがない（`git grep` で確認。見つかったのは、setup.md の URL の形の説明（`<数字>/<文字列>`）と、テストの example.com のダミーのアドレスだけ。履歴（`git log -p --all`）にもない）。登録先は Cloudflare の Secrets（[setup.md の 7・9.2](setup.md)） | 済（コード。2026-10-28） |
 | [NF-4](requirements/requirements.md#6-非機能要件) | ブラウザ: ダークの配色だけ（OS をライトモードにしても暗い。`index.html` は `color-scheme: dark`）。**ブラウザ（2026-10-29）**: OS をライトモードにしても、画面はダークのまま（月表示・日表示・フォーム・サイドメニューのスクリーンショットが、ダークのときと同一）。レイアウト（Google カレンダーを参考に、一般的なベストプラクティスに沿う）は、見た目と使いやすさの判断なので、ユーザーが使いながら判断する（[2.13](#213-成功の基準)） | 未（実機の分が残る） |
 | [NF-5](requirements/requirements.md#6-非機能要件) | `src/worker/api/changes.test.ts`・`entries.test.ts`・`workspaces.test.ts`・`occurrences.test.ts`・`errors.test.ts`（NF-5） | 済（自動テスト） |
 | [NF-6](requirements/requirements.md#6-非機能要件) | 実機（[2.2](#22-月表示のスクロール)） | 未 |
-| [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ（実機は不要。[2.4](#24-絵文字)）。**ブラウザ（2026-10-29）**: 絵文字（ZWJ の組み合わせ・肌の色・キーキャップを含む）は画像で出て、欠け・崩れがない。国旗は端末の文字（国旗の画像がないため。設計書 11.1 の「できないこと」のとおり）。文字は Noto Sans JP | 済（自動テスト・ブラウザ。2026-10-29） |
+| [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ（実機は不要。[2.4](#24-絵文字)）。**ブラウザ（2026-10-29）**: 絵文字（ZWJ の組み合わせ・肌の色・キーキャップを含む）は画像で出て、欠け・崩れがない。国旗は端末の文字（国旗の画像がないため。設計書 11.1 の「できないこと」のとおりで、ユーザーに説明し、了承された（7b の確認））。文字は Noto Sans JP | 済（自動テスト・ブラウザ。2026-10-29） |
 
 ## 5. 見つかった問題
 
