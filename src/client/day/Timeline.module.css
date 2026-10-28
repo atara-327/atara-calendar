@@ -5,6 +5,7 @@
 .timeline {
   display: flex;
   height: 1440px;
+  padding-right: 3px;
 }
 
 .ruler {
