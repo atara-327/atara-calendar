@@ -5,6 +5,7 @@ Cloudflare（Workers + D1 + Access）に載せ、通知は Discord に送る。
 
 - 要件: [docs/requirements/requirements.md](docs/requirements/requirements.md)（何を作るか）
 - 設計: [docs/design/design.md](docs/design/design.md)（どう作るか）
+- 受け入れ確認: [docs/acceptance.md](docs/acceptance.md)（リリース前に、要件を満たしているかを確かめた記録）
 - 後でやること: [docs/BACKLOG.md](docs/BACKLOG.md)
 
 設計書に書いていないことを実装で決める必要が出たら、勝手に決めずにユーザーに確認する。決めた内容は設計書に追記する。
@@ -21,7 +22,7 @@ Cloudflare（Workers + D1 + Access）に載せ、通知は Discord に送る。
   - Why: 文書が実装や最新の指示とずれると、文書を信じて作業したとき（サブエージェントや後のセッションを含む）に間違えるため。
 - **SSOT（Single Source of Truth）**: 同じ情報を複数の文書に書かない。ほかの文書の内容に触れるときは、要約や一覧を書き写さず、リンクで参照する。
   - Why: 書き写すと、片方だけが更新されて食い違うため。
-  - 情報の置き場所: 何を作るか → 要件定義書／どう作るか（技術スタック・ディレクトリ構成を含む）→ 設計書／作る順番 → ロードマップ／後でやること → バックログ／開発の進め方 → この CLAUDE.md
+  - 情報の置き場所: 何を作るか → 要件定義書／どう作るか（技術スタック・ディレクトリ構成を含む）→ 設計書／作る順番 → ロードマップ／受け入れ確認の記録 → acceptance.md／後でやること → バックログ／開発の進め方 → この CLAUDE.md
 
 ## 役割分担（メインセッションとサブエージェント）
 
