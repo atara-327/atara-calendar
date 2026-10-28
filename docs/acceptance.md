@@ -20,11 +20,10 @@
   - **Why**: 確かめていない要件を残したまま使い始めると、困ったときに、作りの問題か、確かめ漏れか、区別できないためです。リリース後に回すものを、ユーザーが決めて書いておけば、確かめ漏れとは区別できます。
 - **結果の書き方**（4章の「結果」の列と、2章・3章の各項目の「結果」）:
   - **済（自動テスト）**: 自動テストが要件を確かめている。確かめ方の列のテストが、上の表の `npm test` で成功している。テスト名と、主なテストの中身を読んで、要件の振る舞いを確かめていることを確認した（ファイル名だけでは決めていない）。
-  - **済（ブラウザ）・済（実機）・済（コード）・済（自動テスト・ブラウザ）**: 確かめた。日付と、見たもの（コードなら、読んだファイル）を添える（例: 済（実機。2026-11-02。Android で…））。
-  - **済（自動テスト・実機）**: 自動テストと実機の両方で確かめた。日付を添える。
+  - **済（ブラウザ）・済（実機）・済（コード）**: 確かめた。日付と、見たもの（コードなら、読んだファイル）を添える（例: 済（実機。2026-11-02。Android で…））。
+  - **済（自動テスト・ブラウザ）・済（自動テスト・実機）**: 自動テスト（上の「済（自動テスト）」と同じ基準）と、ブラウザまたは実機の両方で確かめた。日付を添える。
   - **済（手順の確認のみ）**: 手順が文書にあることだけを確かめた（実行はしていない）。日付を添える。
-  - **未（自動テスト分は済）**: 自動テストが確かめるのは一部で、残り（画面の見た目・操作・実機）が未。残りは、確かめ方に書いてある。
-  - **未（実機の分が残る）**: 自動テストとブラウザで確かめられる分は済んでいて、実機の分（2章）が残る。
+  - **未（実機の分が残る）**: 自動テスト・ブラウザ・コードで確かめられる分は済んでいて、実機の分（2章・3章）だけが残る。残りは、確かめ方の列のリンク先にある。
   - **未**: まだ確かめていない。
   - **要確認**: 確かめ方や扱いが決まっていない。理由を、括弧か確かめ方に書く。メインセッションかユーザーが決める。
   - **対象外**: 次のどれか。
@@ -82,14 +81,14 @@
 ### 2.4 絵文字
 
 - 要件: [NF-7](requirements/requirements.md#6-非機能要件)
-- **ユーザーの作業ではなくなりました**（2026-10-28）。iPhone を要件から外したため（受け入れ確認 Q1）、残る端末は Android と PC です。NF-7 は、4 章で、メインセッションがブラウザ（Chromium）で確かめます。
+- **ユーザーの作業ではなくなりました**（2026-10-28）。iPhone を要件から外したため（受け入れ確認 Q1）、残る端末は Android と PC です。NF-7 は、メインセッションがブラウザ（Chromium）で確かめました（2026-10-29。4 章の NF-7）。
 - **Why**: 実機で確かめる理由は、iPhone の Safari での表示が、Chromium とは違うかもしれないことでした（画像の SVG には、グラデーションや clipPath を使うものがある）。
   - PC のブラウザは Vivaldi で、Chromium 系です（ユーザーの回答。受け入れ確認 Q4。2026-10-28。「Chromium だから気にしないでいい」）。メインセッションが確かめる Chromium と同じ描画の仕組みです。
   - Android は、標準の絵文字も Noto なので、画像でも端末の絵文字でも見た目が変わらず、実機で見直して得るものが少ないためです。
 
 ### 2.5 繰り返しの欄と、範囲を聞く段
 
-- 要件: [RP-1](requirements/requirements.md#55-繰り返し予定タイムブロック共通)・[RP-4](requirements/requirements.md#55-繰り返し予定タイムブロック共通)
+- 要件: [RP-1](requirements/requirements.md#55-繰り返し予定タイムブロック共通)・[RP-4](requirements/requirements.md#55-繰り返し予定タイムブロック共通)・[ENV-2](requirements/requirements.md#4-利用環境)
 - 端末: Android
 - 手順:
   1. 予定を作る画面で、繰り返しを「毎週」にして、曜日（日〜土）のトグルを押す。題名を「テスト」にして保存する。
@@ -97,25 +96,25 @@
   3. 同じ予定を、［削除］でも試す（［戻る］で止める）。
   4. 最後に、1 の予定を「すべて」で消す。月表示に「テスト2」が残っていないことを見る。
 - 見るもの: 曜日の 7 つのトグル（約 40px の丸）が 1 行に収まり、押しやすい。範囲を聞く段が、下から出るシートに収まる。あわせて、次の 2 つも見る。
-  - 日付の欄が「2026/10/29」の形（年が先）で出るか。**Why**: 日付の欄はブラウザの部品で、表示の形は端末の言語の設定で決まる。メインセッションの確認のブラウザは英語の設定で、「10/29/2026」と出たため（2026-10-29）。
-  - 予定のフォームでは、開始・終了の時刻が、日付の下の行に出る（タイムブロックのフォームでは、日付の横に並ぶ）。気になるかを教えてください。**Why**: 予定のフォームには「ワークスペース」という長い項目名があり、項目名の列が広くなって、欄が狭くなるため（2026-10-29 にブラウザで見つけた。使うのに困る不具合ではない）。
+  - 日付の欄が、年/月/日 の順（例: 2026/10/29）で出るか。月/日/年 の順（例: 10/29/2026）なら教えてください。**Why**: 日付の欄はブラウザの部品で、表示の形はブラウザ本体の言語の設定で決まり、アプリの文言ではないため（ENV-2）。メインセッションの確認のブラウザは、ページに伝える言語を日本語にしても、ブラウザ本体が英語のため「10/29/2026」と出た（2026-10-29）。
+  - スマホでは、予定のフォームの開始・終了の時刻が、日付の下の行に出る（タイムブロックのフォームと PC では、日付の横に並ぶ）。気になるかを教えてください。気になるなら、5 章に記録して直します。**Why 聞くのか**: 使うのに困る不具合ではなく、直すかは見た目の好みなので、ユーザーが決めるため。原因は、予定のフォームには「ワークスペース」という長い項目名があり、項目名の列が広くなって、欄が狭くなること（2026-10-29 にブラウザで見つけた）。
 - これまでに確かめたこと: 実際のブラウザ（Chromium。412×830）で、曜日の 7 つが 1 行に収まり、範囲の段が下から出るシートに収まる。
 - **Why**: 曜日のトグルの押しやすさと、シートの高さは、実機の画面と指で見ないと分からないため。
 - 結果: 未
 
 ### 2.6 日表示の操作感
 
-- 要件: [DV-5](requirements/requirements.md#52-日表示時間割)・[DV-1](requirements/requirements.md#52-日表示時間割)・[TB-1](requirements/requirements.md#54-タイムブロック)
+- 要件: [DV-5](requirements/requirements.md#52-日表示時間割)・[TB-1](requirements/requirements.md#54-タイムブロック)・[OT-1](requirements/requirements.md#511-その他)
 - 端末: Android（PC は ‹ › のボタン）
 - 手順: 月表示で日付を押して、日表示を開く。
   1. 左右にスワイプして、前後の日に移る。縦にスクロールしたときは、日が動かない。
-  2. 15 分（15px）の予定を作り（終了の初期値は 1 時間後なので、15 分後に直す）、押して開く。
+  2. 15 分（15px）のタイムブロックを作り（フォームの上で「タイムブロック」を選ぶ。終了の初期値は 1 時間後なので、15 分後に直す）、押して開き、題名を変えて保存する。
   3. 空いているところを押して、開くフォームの開始の時刻（15 分単位）を見る（保存せずに閉じる）。
   4. 今日の日表示で、今の時刻の線を見る。
   5. 画面の左端から右へスワイプして、Android の「戻る」の操作と、どちらが効くかを見る。
   6. 題名に絵文字を入れた予定（例: 「🎂 テスト」）を作り、日表示で、その予定の絵文字のところを長押しする。画像の保存・コピーのメニューが出ないかを見る（出たら教えてください）。指を離すと予定のフォームが開くことがありますが、閉じて構いません。
-  7. 最後に、2 と 6 で作った予定を消す。
-- 見るもの: 左右のスワイプと縦のスクロールの区別（斜めに動かしても、縦のスクロール中に日が動かない）／15px の項目の押しやすさ／押した位置で決まる時刻／今の時刻の線／左端からのスワイプで起きること／絵文字の長押しで、画像の保存・コピーのメニューが出ないか。
+  7. 最後に、2 と 6 で作ったものを消す。消したら、画面の下に出る［元に戻す］を押して、戻ることを見てから、もう一度消す。
+- 見るもの: 左右のスワイプと縦のスクロールの区別（斜めに動かしても、縦のスクロール中に日が動かない）／15px の項目の押しやすさ／押した位置で決まる時刻／今の時刻の線／左端からのスワイプで起きること／絵文字の長押しで、画像の保存・コピーのメニューが出ないか／画面の下の［元に戻す］の押しやすさ（( + ) ボタンや、Android の操作のバーの近くにある）。
 - これまでに確かめたこと: 実際のブラウザ（Chromium。412×830。タッチの操作を送った）で、スワイプで日が動くこと、縦のスクロールでは動かないこと、スワイプのあとにフォームが開かないこと（[設計書 11.3](design/design.md#113-日表示dv-16)）。
 - **Why**: 動き始めの向きを決める距離（8px）と、スワイプとみなす距離（60px）、15px の項目の押しやすさは、実機の指で見ないと分からないため。6 の長押しは、画像のメニューを出さない設定（`-webkit-touch-callout: none`。[設計書 11.1](design/design.md#111-共通)）が iPhone の Safari 向けで、Android のブラウザに効くかが分からないため（PR #29 のレビュー指摘）。Android のジェスチャー操作では、画面の端からのスワイプが「戻る」に使われるので、日表示の左右のスワイプが、画面の端から始まったときに、どちらが効くかも、実機で見ないと分からない。
 - 結果: 未
@@ -192,12 +191,13 @@
 
 ### 2.13 成功の基準
 
-- 要件: [成功の基準](requirements/requirements.md#成功の基準)の 2 つ
+- 要件: [成功の基準](requirements/requirements.md#成功の基準)の 2 つ・[NF-4](requirements/requirements.md#6-非機能要件)（レイアウト）
 - 判断するのは、ユーザーです。メインセッションは、判断と日付を記録するだけです。
-- 手順: 実際の予定を入れて使い、次の 2 つを判断する。
+- 手順: 実際の予定を入れて使い、次の 3 つを判断する。
   1. 基準の 1 つ目（月表示で、予定までの距離が感覚でわかるか）
   2. 基準の 2 つ目（月表示と日表示の役割の分け方）
-- 結果: 1 つ目: 未／2 つ目: 未
+  3. レイアウトが使いやすいか（NF-4。Google カレンダーを参考にした画面の並び）
+- 結果: 1 つ目: 未／2 つ目: 未／3 つ目: 未
 
 ### 2.14 ほかの Google アカウントでは入れない
 
@@ -248,22 +248,22 @@
 
 ## 4. 要件ごとの確認
 
-要件定義書の全要件（71 件）です。要件の文は、ID のリンク先にあります。ここには、確かめ方と結果だけを書きます。テストのファイルは、リポジトリの根からのパスです。「ブラウザ」は、メインセッションが Chromium で見るもの、「実機」は、ユーザーが確かめるもの（2章）です。
+要件定義書の全要件（71 件）です。「ブラウザ（2026-10-29）」の確認は、implementer が手元の開発サーバー（ローカルの D1。main の 784685c と同じコード）を Chromium で操作してスクリーンショットを撮り、メインセッションがそれを見て判断しました。要件の文は、ID のリンク先にあります。ここには、確かめ方と結果だけを書きます。テストのファイルは、リポジトリの根からのパスです。「ブラウザ」は、メインセッションが Chromium で見るもの、「実機」は、ユーザーが確かめるもの（2章）です。
 
 ### 4.1 利用環境（ENV）
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
 | [ENV-1](requirements/requirements.md#4-利用環境) | 実機（[2.1](#21-pc-とスマホで同じ予定が見える)） | 未 |
-| [ENV-2](requirements/requirements.md#4-利用環境) | ブラウザ: 月表示・日表示・フォーム・サイドメニュー・知らせに、英語の文言がない。`index.html` は `lang="ja"`。フォームの誤りの文言: `src/client/form/validate.test.ts`。**ブラウザ（2026-10-29）**: 主な画面（78 画面。知らせ・フォームの誤りを含む）に、英語の文言がない。「URL」（項目名）と、サーバーの失敗の知らせの「HTTP」「Worker」は、日本語の文の中の技術用語。タブの題名は、アプリ名の `atara-calendar` | 済（自動テスト・ブラウザ。2026-10-29） |
+| [ENV-2](requirements/requirements.md#4-利用環境) | ブラウザ: 月表示・日表示・フォーム・サイドメニュー・知らせに、英語の文言がない。`index.html` は `lang="ja"`。フォームの誤りの文言: `src/client/form/validate.test.ts`。**ブラウザ（2026-10-29）**: アプリが出す文言に、英語がない（39 の画面を、スマホと PC の幅で、計 78。知らせ・フォームの誤りを含む）。英字は「URL」（項目名）と、サーバーの失敗の知らせの「HTTP」「Worker」だけで、日本語の文の中の技術用語。**Why 許すのか**: ENV-2 の出どころは、要件定義書 2 章の「やらないこと」の「英語などの多言語対応」で、画面を日本語だけで作ることが中身のため。「URL」は要件 EV-2 の項目名そのもので、知らせの文言は設計書 6.5 で決め、ユーザーに伝えたもの。タブの題名 `atara-calendar` は、アプリの名前（固有名詞。要件定義書の題名にも使っている）なので、訳さない。日付の欄など、ブラウザの部品の表示は、端末（ブラウザ本体）の言語で決まるので、実機（[2.5](#25-繰り返しの欄と範囲を聞く段)）で見る | 未（実機の分が残る） |
 | [ENV-3](requirements/requirements.md#4-利用環境) | `src/shared/date.test.ts`（UTC 15:00 で日付が変わる）、`src/client/form/schedule.test.ts`（今日は日本時間で決める） | 済（自動テスト） |
-| [ENV-4](requirements/requirements.md#4-利用環境) | `wrangler.jsonc` の `routes`（Custom Domain）を読む。`src/worker/index.test.ts` が確かめるのは、通知のリンクの頭だけ。実機（[2.1](#21-pc-とスマホで同じ予定が見える)）で URL を開く | 未（自動テスト分は済） |
+| [ENV-4](requirements/requirements.md#4-利用環境) | `wrangler.jsonc` の `routes`（Custom Domain）を読む。`src/worker/index.test.ts` が確かめるのは、通知のリンクの頭だけ。実機（[2.1](#21-pc-とスマホで同じ予定が見える)）で URL を開く | 未（実機の分が残る） |
 
 ### 4.2 月表示（MV）
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [MV-1](requirements/requirements.md#51-月表示無限スクロール) | 週の番号・範囲: `src/client/month/weeks.test.ts`。スクロール: 実機（[2.2](#22-月表示のスクロール)） | 未（自動テスト分は済） |
+| [MV-1](requirements/requirements.md#51-月表示無限スクロール) | 週の番号・範囲: `src/client/month/weeks.test.ts`。スクロール: 実機（[2.2](#22-月表示のスクロール)） | 未（実機の分が残る） |
 | [MV-2](requirements/requirements.md#51-月表示無限スクロール) | `src/client/month/weeks.test.ts`（週は日曜から土曜）、`src/client/dateFormat.test.ts`（曜日の並び） | 済（自動テスト） |
 | [MV-3](requirements/requirements.md#51-月表示無限スクロール) | 線を引くマス: `src/client/month/boundaries.test.ts`。ブラウザ: 階段状につながって見える。**ブラウザ（2026-10-29）**: 月の境目の線が、灰色で階段状につながる（412・1280） | 済（自動テスト・ブラウザ。2026-10-29） |
 | [MV-4](requirements/requirements.md#51-月表示無限スクロール) | 年の境目のマス: `src/client/month/boundaries.test.ts`。ブラウザ: 月の境目より目立つ。**ブラウザ（2026-10-29）**: 年の境目は白い太い線（3px）で、月の境目（灰色の 2px）より目立つ | 済（自動テスト・ブラウザ。2026-10-29） |
@@ -271,7 +271,7 @@
 | [MV-6](requirements/requirements.md#51-月表示無限スクロール) | 行の高さ: `src/client/month/sizing.test.ts`。「+N件」: `src/client/month/layout.test.ts`。ブラウザ: すべての行の高さが揃い、入りきらない日に「+N件」が出る。**ブラウザ（2026-10-29）**: 全行が同じ高さ（412: 127px・1280: 122px）。1 日 8 件の日で、出した件数と「+N件」の合計が 8 | 済（自動テスト・ブラウザ。2026-10-29） |
 | [MV-7](requirements/requirements.md#51-月表示無限スクロール) | ブラウザ: 「今日」ボタンで、今日の週が上から 2 行目に戻る（位置の計算: `src/client/month/weeks.test.ts`）。**ブラウザ（2026-10-29）**: 未来・過去に離れてから［今日］で、今日の週が上から 2 行目に戻る | 済（自動テスト・ブラウザ。2026-10-29） |
 | [MV-8](requirements/requirements.md#51-月表示無限スクロール) | URL: `src/client/route.test.ts`。ブラウザ: 日付を押すと、その日の日表示に移る。**ブラウザ（2026-10-29）**: 日付・「+N件」・空いたところを押すと、その日の日表示に移り、戻るで月表示に戻る | 済（自動テスト・ブラウザ。2026-10-29） |
-| [MV-9](requirements/requirements.md#51-月表示無限スクロール) | 横棒・並び・「+N件」: `src/client/month/layout.test.ts`。「15:00 歯医者」・日付をまたぐ予定: `src/client/month/weekViewCache.test.ts`。スマホの幅で時刻を省く: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（自動テスト分は済） |
+| [MV-9](requirements/requirements.md#51-月表示無限スクロール) | 横棒・並び・「+N件」: `src/client/month/layout.test.ts`。「15:00 歯医者」・日付をまたぐ予定: `src/client/month/weekViewCache.test.ts`。スマホの幅で時刻を省く: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（実機の分が残る） |
 | [MV-10](requirements/requirements.md#51-月表示無限スクロール) | `src/client/month/weekViewCache.test.ts`（タイムブロックは出ない）、`src/client/form/entry.integration.test.ts`（作っても月表示に出ない） | 済（自動テスト） |
 
 ### 4.3 日表示（DV）
@@ -303,7 +303,7 @@
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
 | [TB-1](requirements/requirements.md#54-タイムブロック) | `src/client/form/entry.integration.test.ts`（作る）、`src/shared/recurrenceEdit.test.ts`（RP-6。変更・削除）。日表示から開いて編集・削除する入口: ブラウザ、実機（[2.6](#26-日表示の操作感)）。**ブラウザ（2026-10-29）**: 日表示の空いたところを押して作り（開始は 15 分単位）、押して編集し、削除できる | 未（実機の分が残る） |
-| [TB-2](requirements/requirements.md#54-タイムブロック) | `src/client/form/build.test.ts`（タイムブロックの下書き）、`src/worker/api/entries.test.ts`（TB-2）。ブラウザ: フォームの欄。**ブラウザ（2026-10-29）**: タイムブロックのフォームに、「終日」と「ワークスペース」の欄がない | 済（自動テスト・ブラウザ。2026-10-29） |
+| [TB-2](requirements/requirements.md#54-タイムブロック) | `src/client/form/build.test.ts`（タイムブロックの下書き）、`src/worker/api/entries.test.ts`（TB-2）。ブラウザ: フォームの欄。**ブラウザ（2026-10-29）**: タイムブロックのフォームの欄は、タイトル・開始・終了・繰り返し・通知・場所・URL・メモで、「終日」と「ワークスペース」の欄がない | 済（自動テスト・ブラウザ。2026-10-29） |
 | [TB-3](requirements/requirements.md#54-タイムブロック) | `src/client/day/dayItems.test.ts`（OFF の影響を受けない）、`src/client/form/build.test.ts`（ワークスペースは null） | 済（自動テスト） |
 | [TB-4](requirements/requirements.md#54-タイムブロック) | `migrations/` の全ファイル（0001〜0003）の `entries` に、予定とタイムブロックを結ぶ列がない（`series_id` は繰り返しの例外用） | 済（コード。2026-10-28） |
 | [TB-5](requirements/requirements.md#54-タイムブロック) | 色を持たない: `src/client/day/dayItems.test.ts`。ブラウザ: すべて同じ 1 色で出る。**ブラウザ（2026-10-29）**: タイムブロックは、すべて同じ 1 色 | 済（自動テスト・ブラウザ。2026-10-29） |
@@ -313,10 +313,10 @@
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [RP-1](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrence.test.ts`（RP-1）、`src/client/form/recurrence.integration.test.ts`（作る）。曜日のトグルの操作: 実機（[2.5](#25-繰り返しの欄と範囲を聞く段)） | 未（自動テスト分は済） |
+| [RP-1](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrence.test.ts`（RP-1）、`src/client/form/recurrence.integration.test.ts`（作る）。曜日のトグルの操作: 実機（[2.5](#25-繰り返しの欄と範囲を聞く段)） | 未（実機の分が残る） |
 | [RP-2](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrence.test.ts`（RP-2）、`src/client/form/recurrence.integration.test.ts`（毎月 31 日） | 済（自動テスト） |
 | [RP-3](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrence.test.ts`（RP-3）、`src/client/form/repeat.test.ts`（終わりの指定を出さない）、`src/client/form/recurrence.integration.test.ts`（これ以降すべて削除） | 済（自動テスト） |
-| [RP-4](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrenceEdit.test.ts`・`src/client/form/scope.test.ts`・`src/client/form/recurrence.integration.test.ts`。範囲を聞く段の操作: 実機（[2.5](#25-繰り返しの欄と範囲を聞く段)） | 未（自動テスト分は済） |
+| [RP-4](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrenceEdit.test.ts`・`src/client/form/scope.test.ts`・`src/client/form/recurrence.integration.test.ts`。範囲を聞く段の操作: 実機（[2.5](#25-繰り返しの欄と範囲を聞く段)） | 未（実機の分が残る） |
 | [RP-5](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/holidays.test.ts`（RP-5。年末年始は祝日にならない）、`src/shared/recurrence.test.ts`（平日・休日） | 済（自動テスト） |
 | [RP-6](requirements/requirements.md#55-繰り返し予定タイムブロック共通) | `src/shared/recurrenceEdit.test.ts`（RP-6）、`src/client/form/recurrence.integration.test.ts`（タイムブロックも繰り返せる） | 済（自動テスト） |
 
@@ -324,17 +324,17 @@
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [WS-1](requirements/requirements.md#56-ワークスペース) | `src/worker/api/workspaces.test.ts`・`src/shared/workspace.test.ts`・`src/client/sidebar/workspace.integration.test.ts`。編集の操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（自動テスト分は済） |
+| [WS-1](requirements/requirements.md#56-ワークスペース) | `src/worker/api/workspaces.test.ts`・`src/shared/workspace.test.ts`・`src/client/sidebar/workspace.integration.test.ts`。編集の操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（実機の分が残る） |
 | [WS-2](requirements/requirements.md#56-ワークスペース) | 8 色: `src/client/workspaceColors.test.ts`。予定がその色を持つ: `src/client/month/weekViewCache.test.ts`・`src/client/day/dayItems.test.ts`。ブラウザ: その色で出る。**ブラウザ（2026-10-29）**: 8 色すべてで、月表示・日表示の色が、ワークスペースの色と一致する | 済（自動テスト・ブラウザ。2026-10-29） |
-| [WS-3](requirements/requirements.md#56-ワークスペース) | `src/client/workspaceDisplay.test.ts`・`src/client/sidebar/workspace.integration.test.ts`（表示の ON/OFF）。チェックボックスの操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（自動テスト分は済） |
-| [WS-4](requirements/requirements.md#56-ワークスペース) | `src/worker/db/migration.test.ts`（固定の id）、`src/worker/api/workspaces.test.ts`（WS-4。名前・色・削除の保護）、`src/client/sidebar/workspaceList.test.ts`（別の節）。チェックボックスの操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（自動テスト分は済） |
+| [WS-3](requirements/requirements.md#56-ワークスペース) | `src/client/workspaceDisplay.test.ts`・`src/client/sidebar/workspace.integration.test.ts`（表示の ON/OFF）。チェックボックスの操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（実機の分が残る） |
+| [WS-4](requirements/requirements.md#56-ワークスペース) | `src/worker/db/migration.test.ts`（固定の id）、`src/worker/api/workspaces.test.ts`（WS-4。名前・色・削除の保護）、`src/client/sidebar/workspaceList.test.ts`（別の節）。チェックボックスの操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（実機の分が残る） |
 
 ### 4.8 祝日・記念日（HD）
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [HD-1](requirements/requirements.md#57-祝日記念日) | 日付と名前: `src/shared/holidays.test.ts`、`src/client/month/weekViewCache.test.ts`。赤い色・スマホの幅での名前: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（自動テスト分は済） |
-| [HD-2](requirements/requirements.md#57-祝日記念日) | 記念日の名前: `src/client/month/weekViewCache.test.ts`。控えめな色・名前だけ: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（自動テスト分は済） |
+| [HD-1](requirements/requirements.md#57-祝日記念日) | 日付と名前: `src/shared/holidays.test.ts`、`src/client/month/weekViewCache.test.ts`。赤い色・スマホの幅での名前: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（実機の分が残る） |
+| [HD-2](requirements/requirements.md#57-祝日記念日) | 記念日の名前: `src/client/month/weekViewCache.test.ts`。控えめな色・名前だけ: 実機（[2.3](#23-祝日名記念日名スマホの幅)） | 未（実機の分が残る） |
 | [HD-3](requirements/requirements.md#57-祝日記念日) | `src/shared/holidays.test.ts`（HD-3。13 件の名前と日付） | 済（自動テスト） |
 | [HD-4](requirements/requirements.md#57-祝日記念日) | 優先度 W。作ってある。記念日が、日付の決め方の表（`src/shared/holidays.ts` の `OBSERVANCE_RULES`）として、コードの 1 か所にある。追加・削除は、この表を直す（[設計書 8.3](design/design.md#83-記念日の計算hd-3)） | 済（コード。2026-10-28） |
 | [HD-5](requirements/requirements.md#57-祝日記念日) | `src/shared/holidays.test.ts`（内閣府の一覧 1955〜2027 年との照合・上書き一覧）、`src/shared/solarTerms.test.ts`（国立天文台の暦要項 2004〜2027 年との照合） | 済（自動テスト） |
@@ -345,17 +345,17 @@
 | --- | --- | --- |
 | [NT-1](requirements/requirements.md#58-通知) | `src/worker/notify/discord.test.ts`・`src/worker/notify/message.test.ts`・`src/worker/cron.test.ts`（偽の Discord）。本物の Discord に届く: setup.md の 9.3 で確認済み（2026-10-28。[2.10](#210-通知が-1-分以内に届く)） | 済（自動テスト・実機。2026-10-28） |
 | [NT-2](requirements/requirements.md#58-通知) | `src/client/form/notify.test.ts`・`src/client/form/values.test.ts`（10 分前）、`src/client/form/build.test.ts`（通知のタイミングを変えたら入る）、`src/worker/notify/nextNotifyAt.test.ts`、`src/worker/api/notify.test.ts`。ブラウザ: 時間指定では「何分前」の欄（初期値 10 分前）が出る。**ブラウザ（2026-10-29）**: 時間指定の予定に「通知する」と「何分前」の欄（初期値 10 分前）がある | 済（自動テスト・ブラウザ。2026-10-29） |
-| [NT-3](requirements/requirements.md#58-通知) | `src/client/form/notify.test.ts`・`src/client/form/validate.test.ts`（終日は固定）、`src/worker/api/notify.test.ts`・`src/worker/cron.test.ts`（当日の朝 6 時）。ブラウザ: 終日では時刻の欄が出ず、当日の朝 6 時と分かる表示になる。**ブラウザ（2026-10-29）**: 終日の予定では、時刻の欄が出ず、「当日 6:00」と出る | 済（自動テスト・ブラウザ。2026-10-29） |
+| [NT-3](requirements/requirements.md#58-通知) | `src/client/form/notify.test.ts`・`src/client/form/validate.test.ts`（終日は固定）、`src/worker/api/notify.test.ts`・`src/worker/cron.test.ts`（当日の朝 6 時）。ブラウザ: 終日では時刻の欄が出ず、当日の朝 6 時と分かる表示になる。**ブラウザ（2026-10-29）**: 終日の予定では、通知の「何分前」の欄が出ず、「当日 6:00」と出る | 済（自動テスト・ブラウザ。2026-10-29） |
 | [NT-4](requirements/requirements.md#58-通知) | `src/client/form/values.test.ts`（初期値）、`src/client/form/build.test.ts`（通知の ON/OFF を変えたら入る）、`src/worker/notify/nextNotifyAt.test.ts`・`src/worker/api/notify.test.ts`（OFF は通知しない）。ブラウザ: 通知の ON/OFF のチェックボックス（初期値は予定が ON・タイムブロックが OFF）。**ブラウザ（2026-10-29）**: 通知の ON/OFF のチェックボックスがあり、初期値は予定が ON・タイムブロックが OFF | 済（自動テスト・ブラウザ。2026-10-29） |
-| [NT-5](requirements/requirements.md#58-通知) | 毎分の設定: `src/worker/index.test.ts`。1 分以内に届く: 実機（[2.10](#210-通知が-1-分以内に届く)） | 未（自動テスト分は済） |
+| [NT-5](requirements/requirements.md#58-通知) | 毎分の設定: `src/worker/index.test.ts`。1 分以内に届く: 実機（[2.10](#210-通知が-1-分以内に届く)） | 未（実機の分が残る） |
 | [NT-6](requirements/requirements.md#58-通知) | `src/worker/cron.ts` を読んで、時刻が来た行を 1 件ずつ送る処理だけで、まとめて送る処理がない | 対象外 |
 
 ### 4.10 同期・オフライン（SY）
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [SY-1](requirements/requirements.md#59-同期オフライン) | `src/worker/api/changes.test.ts`（SY-1）、`src/client/sync/sync.integration.test.ts`（2 台で見る）。本番で 2 台: 実機（[2.1](#21-pc-とスマホで同じ予定が見える)） | 未（自動テスト分は済） |
-| [SY-2](requirements/requirements.md#59-同期オフライン) | `src/client/sync/engine.test.ts`（電波がない間の編集と、戻ったあとの送信）。実際の電波: 実機（[2.8](#28-機内モードでの編集と同期)・[2.9](#29-電波がない間に溜めた編集の重さ)） | 未（自動テスト分は済） |
+| [SY-1](requirements/requirements.md#59-同期オフライン) | `src/worker/api/changes.test.ts`（SY-1）、`src/client/sync/sync.integration.test.ts`（2 台で見る）。本番で 2 台: 実機（[2.1](#21-pc-とスマホで同じ予定が見える)） | 未（実機の分が残る） |
+| [SY-2](requirements/requirements.md#59-同期オフライン) | `src/client/sync/engine.test.ts`（電波がない間の編集と、戻ったあとの送信）。実際の電波: 実機（[2.8](#28-機内モードでの編集と同期)・[2.9](#29-電波がない間に溜めた編集の重さ)） | 未（実機の分が残る） |
 | [SY-3](requirements/requirements.md#59-同期オフライン) | `src/client/sync/sync.integration.test.ts`（SY-3。2 台の食い違い）、`src/worker/db/store.test.ts`・`src/worker/api/entries.test.ts`（SY-3） | 済（自動テスト） |
 | [SY-4](requirements/requirements.md#59-同期オフライン) | Service Worker を作っていない（`src/`・`public/` に登録がない）。電波がない状態で開くと「読み込めませんでした」と再試行が出る: `src/client/sync/engine.test.ts`（SY-4） | 対象外 |
 
@@ -363,14 +363,14 @@
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [AU-1](requirements/requirements.md#510-ログイン) | `src/worker/auth.test.ts`（JWT・許可するメールアドレス）、`src/worker/index.test.ts`。Access と Google の設定（自分の Google アカウントだけ）: 実機（[2.14](#214-ほかの-google-アカウントでは入れない)） | 未（自動テスト分は済） |
+| [AU-1](requirements/requirements.md#510-ログイン) | `src/worker/auth.test.ts`（JWT・許可するメールアドレス）、`src/worker/index.test.ts`。Access と Google の設定（自分の Google アカウントだけ）: 実機（[2.14](#214-ほかの-google-アカウントでは入れない)） | 未（実機の分が残る） |
 | [AU-2](requirements/requirements.md#510-ログイン) | 確かめない（[2.11](#211-ログインが-1-か月続く)。ユーザーの回答。受け入れ確認 Q2） | 対象外（確かめない） |
 
 ### 4.12 その他（OT）
 
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
-| [OT-1](requirements/requirements.md#511-その他) | `src/client/form/undoNotices.test.ts`・`src/client/form/entry.integration.test.ts`（OT-1）・`src/client/sync/engine.test.ts`。ボタン: ブラウザ、実機（[2.7](#27-サイドメニューとワークスペースの編集)）。**ブラウザ（2026-10-29）**: 削除のあと［元に戻す］で戻る。押さなければ約 5 秒で知らせが消え、サーバーからも消える | 未（実機の分が残る） |
+| [OT-1](requirements/requirements.md#511-その他) | `src/client/form/undoNotices.test.ts`・`src/client/form/entry.integration.test.ts`（OT-1）・`src/client/sync/engine.test.ts`。ボタン: ブラウザ、実機（予定の削除は [2.6](#26-日表示の操作感)、ワークスペースの削除は [2.7](#27-サイドメニューとワークスペースの編集)）。**ブラウザ（2026-10-29）**: 削除のあと［元に戻す］で戻る。押さなければ約 5 秒で知らせが消え、サーバーからも消える | 未（実機の分が残る） |
 | [OT-2](requirements/requirements.md#511-その他) | [設計書 A.1](design/design.md#a1-データの復元ot-2)に、Time Travel で戻す手順（`wrangler d1 time-travel restore` と、端末に全データを読み込み直させる `epoch` の変更）があることを確かめた。復元後の全データの読み直し: `src/client/sync/sync.integration.test.ts`。本番では戻してみない（その時点より後のデータが消えるため。ユーザーの回答。受け入れ確認 Q3） | 済（手順の確認のみ。2026-10-28） |
 | [OT-3](requirements/requirements.md#511-その他) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
 
@@ -379,12 +379,12 @@
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
 | [NF-1](requirements/requirements.md#6-非機能要件) | 実機（[2.12](#212-費用無料枠)） | 未 |
-| [NF-2](requirements/requirements.md#6-非機能要件) | `src/worker/auth.test.ts`・`src/worker/security.test.ts`・`src/worker/staticHeaders.test.ts`（API の拒否・ヘッダー・CSP）。画面を Access が守ること: AU-1 と同じ。`workers.dev` とプレビュー URL が無効なこと: `wrangler.jsonc`（`workers_dev: false`・`preview_urls: false`）を読む | 未（自動テスト分は済） |
+| [NF-2](requirements/requirements.md#6-非機能要件) | `src/worker/auth.test.ts`・`src/worker/security.test.ts`・`src/worker/staticHeaders.test.ts`（API の拒否・ヘッダー・CSP）。画面を Access が守ること: AU-1 と同じ。`workers.dev` とプレビュー URL が無効なこと: `wrangler.jsonc`（`workers_dev: false`・`preview_urls: false`）を読む | 未（実機の分が残る） |
 | [NF-3](requirements/requirements.md#6-非機能要件) | リポジトリに Webhook の URL・メールアドレスがない（`git grep` で確認。見つかったのは、setup.md の URL の形の説明（`<数字>/<文字列>`）と、テストの example.com のダミーのアドレスだけ。履歴（`git log -p --all`）にもない）。登録先は Cloudflare の Secrets（[setup.md の 7・9.2](setup.md)） | 済（コード。2026-10-28） |
-| [NF-4](requirements/requirements.md#6-非機能要件) | ブラウザ: ダークの配色だけ（OS をライトモードにしても暗い。`index.html` は `color-scheme: dark`）。レイアウト。**ブラウザ（2026-10-29）**: OS をライトモードにしても、画面はダークのまま（月表示・日表示・フォーム・サイドメニューのスクリーンショットが、ダークのときと同一） | 済（ブラウザ。2026-10-29） |
+| [NF-4](requirements/requirements.md#6-非機能要件) | ブラウザ: ダークの配色だけ（OS をライトモードにしても暗い。`index.html` は `color-scheme: dark`）。**ブラウザ（2026-10-29）**: OS をライトモードにしても、画面はダークのまま（月表示・日表示・フォーム・サイドメニューのスクリーンショットが、ダークのときと同一）。レイアウト（Google カレンダーを参考に、一般的なベストプラクティスに沿う）は、見た目と使いやすさの判断なので、ユーザーが使いながら判断する（[2.13](#213-成功の基準)） | 未（実機の分が残る） |
 | [NF-5](requirements/requirements.md#6-非機能要件) | `src/worker/api/changes.test.ts`・`entries.test.ts`・`workspaces.test.ts`・`occurrences.test.ts`・`errors.test.ts`（NF-5） | 済（自動テスト） |
 | [NF-6](requirements/requirements.md#6-非機能要件) | 実機（[2.2](#22-月表示のスクロール)） | 未 |
-| [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ（実機は不要。[2.4](#24-絵文字)）。**ブラウザ（2026-10-29）**: 絵文字（ZWJ の組み合わせ・肌の色・キーキャップを含む）は画像で出て、欠け・崩れがない。国旗は端末の文字。文字は Noto Sans JP | 済（自動テスト・ブラウザ。2026-10-29） |
+| [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ（実機は不要。[2.4](#24-絵文字)）。**ブラウザ（2026-10-29）**: 絵文字（ZWJ の組み合わせ・肌の色・キーキャップを含む）は画像で出て、欠け・崩れがない。国旗は端末の文字（国旗の画像がないため。設計書 11.1 の「できないこと」のとおり）。文字は Noto Sans JP | 済（自動テスト・ブラウザ。2026-10-29） |
 
 ## 5. 見つかった問題
 
