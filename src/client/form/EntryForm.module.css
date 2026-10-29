@@ -169,6 +169,16 @@
   font-size: 16px;
 }
 
+/*
+ * プルダウンの一覧の選択肢は、透けない暗い背景と明るい文字にする。
+ * Why not 欄と同じ半透明の背景（rgb(255 255 255 / 6%)）: 一覧はブラウザが別に描くので、下に透ける暗い背景がなく、
+ * ほぼ白になる。文字の色（明るい灰色）は受け継ぐので、白地に灰色の、読みにくい一覧になっていた（PC の Vivaldi）。
+ */
+.select option {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
 .input[aria-invalid='true'],
 .select[aria-invalid='true'] {
   border-color: var(--color-holiday);

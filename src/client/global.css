@@ -1,4 +1,10 @@
 :root {
+  /*
+   * ブラウザが描く部品（プルダウンの一覧・日付の選択画面・スクロールバー）も、暗い配色で描かせる。
+   * index.html の <meta name="color-scheme"> だけでは、PC の Vivaldi で、プルダウンの一覧が白い背景のままだった。
+   */
+  color-scheme: dark;
+
   --color-bg: #1f1f1f;
   --color-text: #e3e3e3;
   --color-grid: #3c4043;
@@ -19,6 +25,9 @@
    * 使う要素は、空いている幅いっぱいに広げるか、右に 1em の余白（padding）を持たせる。
    */
   --fade-end: linear-gradient(to right, #000 calc(100% - 1em), transparent);
+
+  /* 日表示の中身（上部の欄・タイムライン）の、いちばん広い幅。PC の広い画面で、項目が横に伸びすぎないよう、中央に置く。 */
+  --day-content-width: 720px;
 }
 
 body {

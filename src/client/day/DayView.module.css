@@ -130,7 +130,8 @@
   flex: none;
   box-sizing: border-box;
   max-height: 94px;
-  padding: 2px 8px 0;
+  /* 広い画面では、中身をタイムラインと同じ幅で中央に置く。Why not max-width: 下の線は、画面の幅いっぱいに残すため。 */
+  padding: 2px max(8px, calc((100% - var(--day-content-width)) / 2)) 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   border-bottom: 1px solid var(--color-grid);
