@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { makeOccurrence } from '../../../test/helpers/entries';
-import { layoutWeek, type BarItem, type MonthEvent, type MoreItem, type TimedItem } from './layout';
+import {
+  layoutWeek,
+  type BarItem,
+  type MonthEvent,
+  type MoreItem,
+  type NamedMonthEvent,
+  type TimedItem,
+} from './layout';
 
 // 2026-10-18（日）〜 10-24（土）の週。列は 0（日）〜 6（土）。10-19 が月曜（列 1）。
 const WEEK = '2026-10-18';
@@ -10,6 +17,7 @@ const OCCURRENCE = makeOccurrence();
 
 function timed(key: string, date: string, time: string): MonthEvent {
   return {
+    source: 'entry',
     key,
     title: key,
     color: '#039BE5',
@@ -23,6 +31,7 @@ function timed(key: string, date: string, time: string): MonthEvent {
 
 function allDay(key: string, startDate: string, lastDate = startDate): MonthEvent {
   return {
+    source: 'entry',
     key,
     title: key,
     color: '#039BE5',
@@ -31,6 +40,20 @@ function allDay(key: string, startDate: string, lastDate = startDate): MonthEven
     lastDate,
     startTime: null,
     occurrence: OCCURRENCE,
+  };
+}
+
+/** 祝日・記念日（その日 1 日だけの終日）。 */
+function named(source: NamedMonthEvent['source'], key: string, date: string): NamedMonthEvent {
+  return {
+    source,
+    key,
+    title: key,
+    color: '#F28B82',
+    allDay: true,
+    startDate: date,
+    lastDate: date,
+    startTime: null,
   };
 }
 
@@ -174,6 +197,126 @@ describe('横棒の行（レーン）の割り当て', () => {
 
     const b = bars(items).find((bar) => bar.event.key === 'B');
     expect(b).toEqual(expect.objectContaining({ row: 1, startCol: 2, endCol: 4 }));
+  });
+});
+
+describe('祝日・記念日の横棒', () => {
+  // 2026-10-20 が火曜（列 2）。
+  const DAY = '2026-10-20';
+
+  function rowsOf(events: MonthEvent[], slots = SLOTS): Map<string, number> {
+    return new Map(bars(layoutWeek(events, WEEK, slots)).map((bar) => [bar.event.key, bar.row]));
+  }
+
+  it('その日 1 マスの横棒になる', () => {
+    const items = layoutWeek([named('holiday', '勤労感謝の日', DAY)], WEEK, SLOTS);
+
+    expect(bars(items)).toEqual([
+      expect.objectContaining({
+        startCol: 2,
+        endCol: 2,
+        row: 0,
+        continuesBefore: false,
+        continuesAfter: false,
+      }),
+    ]);
+  });
+
+  it('その日の 1 日だけの終日の予定より上に出る。祝日 → 記念日 → 予定の順', () => {
+    // 予定の key を、並べ替えの結果が key の順に見えないよう、わざと先頭にする。
+    const rows = rowsOf([
+      allDay('A 予定', DAY),
+      named('observance', 'Z 記念日', DAY),
+      named('holiday', 'Z 祝日', DAY),
+    ]);
+
+    expect(rows.get('Z 祝日')).toBe(0);
+    expect(rows.get('Z 記念日')).toBe(1);
+    expect(rows.get('A 予定')).toBe(2);
+  });
+
+  it('同じ日に重なる記念日は、どちらも出る（夏至と父の日）', () => {
+    const rows = rowsOf([named('observance', '夏至', DAY), named('observance', '父の日', DAY)]);
+
+    expect([...rows.values()].sort()).toEqual([0, 1]);
+  });
+
+  it('前の日から続く複数日の棒の行は動かさない。祝日は、空いている行のうち、いちばん上に置く', () => {
+    // 帰省は月〜木（行 0）。火曜の祝日は、その下の行 1。帰省は、祝日のために下がらない。
+    const rows = rowsOf([
+      named('holiday', '祝日', DAY),
+      allDay('帰省', '2026-10-19', '2026-10-22'),
+      allDay('予定', DAY),
+    ]);
+
+    expect(rows.get('帰省')).toBe(0);
+    expect(rows.get('祝日')).toBe(1);
+    expect(rows.get('予定')).toBe(2);
+  });
+
+  it('前の週から続く複数日の棒の行も動かさない', () => {
+    const rows = rowsOf([
+      named('holiday', '祝日', '2026-10-19'),
+      allDay('旅行', '2026-10-15', '2026-10-20'),
+    ]);
+
+    expect(rows.get('旅行')).toBe(0);
+    expect(rows.get('祝日')).toBe(1);
+  });
+
+  it('同じ日に始まる複数日の棒は、祝日・記念日の下に付く（始まる日なので、つながりを崩さない）', () => {
+    const rows = rowsOf([
+      allDay('帰省', DAY, '2026-10-22'),
+      named('observance', '記念日', DAY),
+      named('holiday', '祝日', DAY),
+    ]);
+
+    expect(rows.get('祝日')).toBe(0);
+    expect(rows.get('記念日')).toBe(1);
+    expect(rows.get('帰省')).toBe(2);
+  });
+
+  it('時間指定の予定は、祝日・記念日の下に並ぶ', () => {
+    const items = layoutWeek(
+      [timed('歯医者', DAY, '15:00'), named('holiday', '祝日', DAY)],
+      WEEK,
+      SLOTS,
+    );
+
+    expect(timeds(items)).toEqual([expect.objectContaining({ col: 2, row: 1 })]);
+  });
+
+  it('入りきらないときは、予定と同じく「+N件」の数に含める', () => {
+    // 3 行。火曜に、祝日・記念日・予定 2 件（時間指定 1 件）の 4 件。出せるのは 2 行（祝日・記念日）。
+    const items = layoutWeek(
+      [
+        named('holiday', '祝日', DAY),
+        named('observance', '記念日', DAY),
+        allDay('予定', DAY),
+        timed('歯医者', DAY, '15:00'),
+      ],
+      WEEK,
+      3,
+    );
+
+    expect(bars(items).map((bar) => bar.event.key)).toEqual(['祝日', '記念日']);
+    expect(mores(items)).toEqual([{ kind: 'more', col: 2, row: 2, count: 2 }]);
+  });
+
+  it('祝日・記念日だけでも、入りきらなければ「+N件」に数える', () => {
+    // 2 行。祝日・記念日・夏至の 3 件。出せるのは 1 行（祝日）。
+    const items = layoutWeek(
+      [
+        named('holiday', '祝日', DAY),
+        named('observance', '記念日', DAY),
+        named('observance', '夏至', DAY),
+      ],
+      WEEK,
+      2,
+    );
+
+    expect(bars(items).map((bar) => bar.event.key)).toEqual(['祝日']);
+    expect(mores(items)).toEqual([{ kind: 'more', col: 2, row: 1, count: 2 }]);
   });
 });
 

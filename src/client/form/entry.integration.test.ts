@@ -90,6 +90,7 @@ function change(device: Device, occurrence: Occurrence, values: FormValues) {
   return changes;
 }
 
+/** 週に出る予定の題名。祝日・記念日の横棒は、予定ではないので数えない。 */
 function monthEventTitles(device: Device, date: string): string[] {
   const { entries, workspaces } = device.state().view;
   const cache = new WeekViewCache({
@@ -99,7 +100,9 @@ function monthEventTitles(device: Device, date: string): string[] {
   });
   return cache
     .get(weekNumberOf(date))
-    .items.flatMap((item) => (item.kind === 'more' ? [] : [item.event.title]));
+    .items.flatMap((item) =>
+      item.kind !== 'more' && item.event.source === 'entry' ? [item.event.title] : [],
+    );
 }
 
 describe('新しく作る', () => {
