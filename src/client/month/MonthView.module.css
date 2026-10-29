@@ -56,12 +56,17 @@
   background-color: var(--color-grid);
 }
 
-/* 曜日の見出し。日付のマスと同じ 7 等分の幅にそろえる（スクロール領域のスクロールバーは隠している）。 */
+/*
+ * 曜日の見出し。日付のマスと同じ 7 等分の幅にそろえる（スクロール領域のスクロールバーは隠している）。
+ * 左右の余白を padding ではなく margin で付けるのは、下の線を、マスの外枠と同じ幅で止めるため
+ * （padding だと、線だけが画面の端まで伸びて、外枠の角から飛び出して見える）。
+ */
 .weekdays {
   flex: none;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  padding: 0 var(--month-side-margin) 4px;
+  margin: 0 var(--month-side-margin);
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--color-grid);
   font-size: 12px;
   text-align: center;
