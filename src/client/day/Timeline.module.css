@@ -1,6 +1,8 @@
 /*
  * タイムライン。0:00〜24:00 を 1 時間 60px で並べる（合計 1440px。timelineGeometry.ts の HOUR_HEIGHT と対応する）。
  * 左の時間軸（目盛り）と、右の、項目を並べる領域（track）の 2 列。
+ * 目盛りと正時の線は、24:00 まで（25 個）。24:00 の分は、1440px の下端から下に出る。箱は、この領域の高さ（1440px）を
+ * はみ出すが、はみ出した分は、スクロール領域の末尾の空白（DayView.module.css の .scroller::after）の中に収まる。
  */
 .timeline {
   display: flex;
@@ -93,13 +95,19 @@
   display: block;
   flex: none;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.itemTitle {
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
+}
+
+/* 時刻は、予定名ではないので、薄くせず、「…」のまま（ユーザーの要望は、予定名が見えること）。 */
 .itemTime {
   font-size: 11px;
   opacity: 0.85;
+  text-overflow: ellipsis;
 }
 
 /* 今の時刻の線（今日だけ）。左端の小さな丸は、::before。線の上のクリックは、下の空いているところに通す。 */

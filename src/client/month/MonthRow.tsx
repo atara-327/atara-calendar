@@ -84,8 +84,8 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
 }
 
 // 予定は、押すとフォームが開く（設計書 11.2）。<button> にするのは、キーボードの Tab・Enter でも開けるため。
-// 横棒の題名の省略（…）を、<button> の中身に直接かけず、中の span にかけるのは、
-// <button> の text-overflow が、ブラウザによって効かないため。
+// 横棒の題名の右端を薄くする（mask-image）のを、<button> に直接かけず、中の span にかけるのは、
+// <button> にかけると、背景（予定の色）まで薄くなるため。
 
 function BarChip({ item }: { item: BarItem }) {
   const { event } = item;

@@ -17,11 +17,12 @@ describe('タイムラインの大きさ', () => {
     expect(DAY_HEIGHT).toBe(1440);
   });
 
-  it('目盛りは「0:00」から「23:00」まで、1 時間ごと', () => {
-    expect(HOUR_LABELS).toHaveLength(24);
+  it('目盛りは「0:00」から「24:00」まで、1 時間ごと（下端の 24:00 を含む）', () => {
+    expect(HOUR_LABELS).toHaveLength(25);
     expect(HOUR_LABELS[0]).toBe('0:00');
     expect(HOUR_LABELS[9]).toBe('9:00');
     expect(HOUR_LABELS[23]).toBe('23:00');
+    expect(HOUR_LABELS[24]).toBe('24:00');
   });
 });
 

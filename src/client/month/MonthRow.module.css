@@ -21,6 +21,15 @@
   text-decoration: none;
 }
 
+/*
+ * 左端（日曜）のマスだけ、左にも線を持つ。右端（土曜）のマスは、右の線を持つので、左右の外枠がそろう。
+ * 外枠のない左端だけが空いて見えると、外側の余白が、右にだけあるように見えるため。
+ * 幅は、列の幅（1/7）のまま（box-sizing: border-box）なので、曜日の見出しと列がずれない。
+ */
+.cell:first-child {
+  border-left: 1px solid var(--color-grid);
+}
+
 /* 範囲（1900〜2199 年）の外の日。リンクではなく、日付の数字だけを薄く出す。 */
 .outOfRange {
   color: var(--color-observance);
@@ -124,9 +133,12 @@
 .holidayName,
 .observanceName {
   min-width: 0;
+  /* 右の 1em は、薄くなる範囲。短い名前の末尾が薄くならないよう、空けておく（global.css の --fade-end）。 */
+  padding-right: 1em;
   overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 11px;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 .holidayName {
@@ -159,9 +171,22 @@
   box-sizing: border-box;
   min-width: 0;
   margin: 1px 2px;
-  font-size: 12px;
   line-height: 18px;
   white-space: nowrap;
+}
+
+/*
+ * 予定の文字（時間指定の予定・横棒の題名）は 10px。マスが 1 / 7 の幅（約 55px）しかなく、12px では、
+ * 予定名が数文字しか見えないため。「+N件」は、予定名ではないので、12px のまま。
+ * 行の高さ（line-height: 18px）は変えない。マスの高さの計算（sizing.ts の SLOT_HEIGHT）と合わせてあるため。
+ */
+.bar,
+.timed {
+  font-size: 10px;
+}
+
+.more {
+  font-size: 12px;
 }
 
 /*
@@ -202,7 +227,8 @@
 .barText {
   display: block;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 .continuesBefore {
@@ -238,9 +264,11 @@
 }
 
 .timedText {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-mask-image: var(--fade-end);
+  mask-image: var(--fade-end);
 }
 
 /*

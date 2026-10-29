@@ -34,7 +34,7 @@ export const FALLBACK_TOP_MINUTE = 8 * 60;
 /** 今日を開いたとき、今の時刻より、どれだけ前から表示するか（分）。 */
 const LEAD_BEFORE_NOW_MINUTES = 60;
 
-/** 分（0〜1439）を 'HH:MM' にする。 */
+/** 分（0〜1440）を 'HH:MM' にする。1440 は、タイムラインの下端の目盛り「24:00」。 */
 export function minutesToTime(minutes: number): string {
   const hour = Math.floor(minutes / 60);
   return `${String(hour).padStart(2, '0')}:${String(minutes - hour * 60).padStart(2, '0')}`;
@@ -102,7 +102,10 @@ export function addButtonStart(date: DateStr, nowMs: number): StartPoint {
   return { date, time: minutesToTime(hour * 60) };
 }
 
-/** 時間軸の目盛りの文字（「0:00」〜「23:00」）。 */
-export const HOUR_LABELS: readonly string[] = Array.from({ length: 24 }, (_, hour) =>
+/**
+ * 時間軸の目盛りの文字（「0:00」〜「24:00」。25 個）。24:00 は、タイムラインの下端（1440px）の目盛りで、
+ * 23 時台の項目が、どこまで続くか（23:30 までか、24:00 までか）を、見て分かるようにするため（設計書 11.3）。
+ */
+export const HOUR_LABELS: readonly string[] = Array.from({ length: 25 }, (_, hour) =>
   formatTime(minutesToTime(hour * 60)),
 );
