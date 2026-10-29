@@ -15,7 +15,7 @@ import { menuSections } from './workspaceList';
 
 // サイドメニュー（設計書 11.5。要件 WS-1・3・4）。左から重ねて出す、ネイティブの <dialog>（showModal）。
 // Why: フォーカスの閉じ込め・Esc で閉じる・背景を操作できなくする、が、追加の部品なしで手に入る
-// （予定のフォーム EntryForm と同じ）。背景を押しても閉じる（backdropClose.ts。フォームは、入力を失わないよう、閉じない）。
+// （予定のフォーム EntryForm と同じ）。背景を押しても閉じる（backdropClose.ts。予定のフォームも同じ）。
 
 function selectWorkspaces(state: SyncState): SyncState['view']['workspaces'] {
   return state.view.workspaces;
