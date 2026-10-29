@@ -48,10 +48,26 @@ describe('ワークスペースから決まる、画面に出すもの', () => {
     expect(display.showObservances).toBe(true);
   });
 
-  it('組み込みの行が（まだ読み込んでいなくて）ないときは、祝日・記念日を出す', () => {
+  it('祝日・記念日の横棒の色は、組み込みの「祝日」「記念日」の行の色', () => {
+    const display = workspaceDisplayOf([holiday, observance]);
+
+    expect(display.holidayBarColor).toBe('#111111');
+    expect(display.observanceBarColor).toBe('#222222');
+  });
+
+  it('組み込みの「祝日」「記念日」が OFF なら、その横棒の色はない（横棒を出さない）。別々に決まる', () => {
+    const display = workspaceDisplayOf([{ ...holiday, visible: false }, observance]);
+
+    expect(display.holidayBarColor).toBeUndefined();
+    expect(display.observanceBarColor).toBe('#222222');
+  });
+
+  it('組み込みの行が（まだ読み込んでいなくて）ないときは、祝日・記念日は ON で、色はない（横棒は出せない）', () => {
     const display = workspaceDisplayOf([]);
 
     expect(display.showHolidays).toBe(true);
     expect(display.showObservances).toBe(true);
+    expect(display.holidayBarColor).toBeUndefined();
+    expect(display.observanceBarColor).toBeUndefined();
   });
 });
