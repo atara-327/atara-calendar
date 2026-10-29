@@ -3,7 +3,6 @@ import { classNames } from '../classNames';
 import { formatMonthDay, formatYear } from '../dateFormat';
 import { MenuButton } from '../sidebar/MenuButton';
 import { PendingBadge } from '../sync/SyncStatus';
-import type { DayNames } from './dayItems';
 import styles from './DayView.module.css';
 
 const SUNDAY = 0;
@@ -28,7 +27,8 @@ function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
 
 interface DayHeaderProps {
   date: DateStr;
-  names: DayNames;
+  /** 表示が ON の祝日か。日付を赤にする。 */
+  isHoliday: boolean;
   /** 範囲（1900〜2199 年）の端では、前（後）の日へ移れない。 */
   hasPrevious: boolean;
   hasNext: boolean;
@@ -42,13 +42,14 @@ interface DayHeaderProps {
  * 日表示の固定のヘッダー。1 行目に、≡・［月表示］・前の日・日付・次の日・［今日］。
  * 日付の年は、幅の狭い画面（約 640px 以下。月表示と同じ境目）では、CSS で隠す（≡ が増えて、年まで収まらないため）。
  * 隠した年は、読み上げからも外れる（display: none）。見えるとおりの読み上げでよい。
- * 2 行目に、祝日名・記念日名（全文。折り返してよい）と、未送信の件数（右端）。
+ * 2 行目に、未送信の件数（右端）。祝日名・記念日名は、ここではなく、上部の欄に、終日の予定と同じ形で出す
+ * （BannerList。同じことを 2 か所に出さないため）。
  * 未送信の件数を 1 行目に入れないのは、スマホの幅（412px）では、1 行目に、件数まで収まらないため。
  * 2 行目は、中身がなければ、高さを持たない（styles.subRow の :empty）。
  */
 export function DayHeader({
   date,
-  names,
+  isHoliday,
   hasPrevious,
   hasNext,
   onMonth,
@@ -60,10 +61,9 @@ export function DayHeader({
   // 日付の色は、月表示と同じ決まり（設計書 11.2）。祝日と日曜は赤、土曜は青。祝日が土曜に重なれば、祝日の赤。
   const titleClass = classNames(
     styles.title,
-    (names.holiday !== null || weekday === SUNDAY) && styles.holiday,
-    names.holiday === null && weekday === SATURDAY && styles.saturday,
+    (isHoliday || weekday === SUNDAY) && styles.holiday,
+    !isHoliday && weekday === SATURDAY && styles.saturday,
   );
-  const hasNames = names.holiday !== null || names.observances.length > 0;
 
   return (
     <header className={styles.header}>
@@ -99,16 +99,6 @@ export function DayHeader({
         </button>
       </div>
       <div className={styles.subRow}>
-        {hasNames && (
-          <p className={styles.names}>
-            {names.holiday !== null && <span className={styles.holidayName}>{names.holiday}</span>}
-            {names.observances.map((name) => (
-              <span key={name} className={styles.observanceName}>
-                {name}
-              </span>
-            ))}
-          </p>
-        )}
         <PendingBadge />
       </div>
     </header>
