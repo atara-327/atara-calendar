@@ -1,6 +1,8 @@
 /*
  * タイムライン。0:00〜24:00 を 1 時間 60px で並べる（合計 1440px。timelineGeometry.ts の HOUR_HEIGHT と対応する）。
  * 左の時間軸（目盛り）と、右の、項目を並べる領域（track）の 2 列。
+ * 目盛りと正時の線は、24:00 まで（25 個）。24:00 の分は、1440px の下端から下に出る。箱は、この領域の高さ（1440px）を
+ * はみ出すが、はみ出した分は、スクロール領域の末尾の空白（DayView.module.css の .scroller::after）の中に収まる。
  */
 .timeline {
   display: flex;
