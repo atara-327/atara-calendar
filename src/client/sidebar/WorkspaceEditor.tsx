@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type SubmitEvent } from 'react';
 import { INPUT_LIMITS, type Workspace } from '../../shared/schema';
+import { useBackdropClose } from '../backdropClose';
 import { EmojiText } from '../emoji/EmojiText';
 import formStyles from '../form/EntryForm.module.css';
 import { CloseIcon } from '../form/icons';
@@ -30,7 +31,7 @@ import { menuSections } from './workspaceList';
 // 中身は、段で差し替える。一覧 → 名前と色（新しく作るときも）→ 削除の確認。
 // Why not 段ごとにダイアログを重ねる: 入れ子にすると、履歴を積む仕組み（スマホの「戻る」で閉じる。historyMark.ts）や、
 // Esc・戻るの扱いが増えるため（予定のフォームの、範囲を聞く段 ScopeStep と同じ）。
-// Esc・✕・スマホの「戻る」は、どの段にいても、全部を閉じる。段の中の［戻る］は、一つ前の段に戻る。
+// Esc・✕・背景を押す・スマホの「戻る」は、どの段にいても、全部を閉じる。段の中の［戻る］は、一つ前の段に戻る。
 
 interface EditState {
   /** 入力の途中の値。名前は、前後の空白を除く前の、入力したまま。 */
@@ -74,6 +75,7 @@ export function WorkspaceEditor() {
   const users = useMemo(() => menuSections(workspaces.values()).workspaces, [workspaces]);
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [failure, setFailure] = useState<string | null>(null);
+  const backdropClose = useBackdropClose(closeSidebar);
   // 段を変えたあと、フォーカスを置く先（data-focus の値）。段の中身は差し替わるので、押したボタンが DOM から外れ、
   // フォーカスが失われるため（予定のフォームの、範囲を聞く段から戻るときと同じ）。
   const pendingFocus = useRef<string | null>(null);
@@ -242,6 +244,7 @@ export function WorkspaceEditor() {
           closeSidebar();
         }
       }}
+      {...backdropClose}
     >
       <header className={formStyles.header}>
         <h2 className={styles.title} tabIndex={-1} data-focus="heading">

@@ -16,6 +16,7 @@ import {
   type Workspace,
 } from '../../shared/schema';
 import { MAX_YEAR, MIN_YEAR } from '../../shared/solarTerms';
+import { useBackdropClose } from '../backdropClose';
 import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from '../sync/instance';
 import type { SyncState } from '../sync/state';
@@ -267,6 +268,8 @@ export function EntryForm({ target }: { target: FormTarget }) {
   // 保存を押したあとに、確認の誤りを、すべて出す。押す前は、開始・終了と、通知の分の誤り（入力の途中で、すぐ分かる）だけ出す。
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  // 背景を押したときも、✕ と同じ閉じ方にする。確認は出さず、入力は失われる（ユーザーの要望。設計書 11.4）。
+  const backdropClose = useBackdropClose(closeEntryForm);
   // 範囲を聞く段（設計書 11.4）。null のときは、入力の段。変更の中身（changes）は、範囲を決めた時点のものを持つ
   // （範囲は、この changes に当てて決めたので、送るのも、同じものにする）。
   const [scopeStep, setScopeStep] = useState<{
@@ -587,6 +590,7 @@ export function EntryForm({ target }: { target: FormTarget }) {
           closeEntryForm();
         }
       }}
+      {...backdropClose}
     >
       <form className={styles.form} noValidate onSubmit={handleSubmit}>
         <header className={styles.header}>

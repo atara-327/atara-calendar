@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Workspace } from '../../shared/schema';
+import { useBackdropClose } from '../backdropClose';
 import { classNames } from '../classNames';
 import { EmojiText } from '../emoji/EmojiText';
 import { CloseIcon } from '../form/icons';
@@ -14,7 +15,7 @@ import { menuSections } from './workspaceList';
 
 // サイドメニュー（設計書 11.5。要件 WS-1・3・4）。左から重ねて出す、ネイティブの <dialog>（showModal）。
 // Why: フォーカスの閉じ込め・Esc で閉じる・背景を操作できなくする、が、追加の部品なしで手に入る
-// （予定のフォーム EntryForm と同じ）。背景を押しても閉じる（フォームは、入力を失わないよう、閉じない）。
+// （予定のフォーム EntryForm と同じ）。背景を押しても閉じる（backdropClose.ts。予定のフォームも同じ）。
 
 function selectWorkspaces(state: SyncState): SyncState['view']['workspaces'] {
   return state.view.workspaces;
@@ -34,9 +35,7 @@ export function SidebarMenu() {
   const ready = notice === null;
   const sections = useMemo(() => menuSections(workspaces.values()), [workspaces]);
   const [failure, setFailure] = useState<string | null>(null);
-  // 背景を押したかを、押し始めた位置でも確かめる。メニューの中の文字を選ぼうとして、指（マウス）を背景まで動かして
-  // 離したときに、閉じてしまわないため（その click は、背景に当たる）。
-  const pressedBackdrop = useRef(false);
+  const backdropClose = useBackdropClose(closeSidebar);
 
   // 開いたとき showModal し、閉じるとき close する。useLayoutEffect にするのは、後片付けを、dialog が DOM から外れる前に
   // 行い、開く前にフォーカスのあった要素（≡）へ、フォーカスを戻すため（EntryForm と同じ）。
@@ -107,16 +106,7 @@ export function SidebarMenu() {
           closeSidebar();
         }
       }}
-      onPointerDown={(event) => {
-        pressedBackdrop.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        // 背景（::backdrop）を押すと、click の target は、dialog そのもの。中身は、dialog の全面を覆っているので、
-        // 中身を押したときは、target が中身の要素になる。
-        const onBackdrop = pressedBackdrop.current && event.target === event.currentTarget;
-        pressedBackdrop.current = false;
-        if (onBackdrop) closeSidebar();
-      }}
+      {...backdropClose}
     >
       <div className={styles.panel}>
         <header className={styles.header}>
