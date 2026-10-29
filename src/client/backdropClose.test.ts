@@ -26,6 +26,14 @@ describe('背景を押して閉じる判定', () => {
     expect(press.end(false)).toBe(false);
   });
 
+  it('続けて押した 2 回目の click（開くボタンのダブルクリックで、開いた直後の背景に当たったとき）は、閉じない', () => {
+    const press = createBackdropPress();
+
+    press.start(true);
+
+    expect(press.end(true, 2)).toBe(false);
+  });
+
   it('押し始めを見ていない click（キーボードで押したボタンなど）は、閉じない', () => {
     const press = createBackdropPress();
 
