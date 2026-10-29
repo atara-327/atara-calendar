@@ -50,6 +50,7 @@
   }
 }
 
+/* 中身が dialog の全面を覆う（ブラウザの既定の margin を外す）。背景を押したときだけ、click の target が dialog そのものになるため（backdropClose.ts）。 */
 .form {
   margin: 0;
 }
