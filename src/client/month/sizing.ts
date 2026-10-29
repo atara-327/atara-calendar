@@ -6,7 +6,7 @@ export const VISIBLE_WEEKS = 6;
 /** 行の高さの下限。画面が極端に低いときに、日付の行と予定が 1 行も入らなくならないように。 */
 export const MIN_ROW_HEIGHT = 84;
 
-/** マスの上の、日付の数字と祝日名を出す行の高さ。 */
+/** マスの上の、日付の数字（と、月のラベル）を出す行の高さ。 */
 export const DATE_HEADER_HEIGHT = 24;
 
 /** 予定 1 行（横棒・時間指定の予定・「+N件」）の高さ。 */

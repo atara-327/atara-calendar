@@ -4,7 +4,13 @@ import { occurrencesInPeriod } from '../../shared/period';
 import { lastCoveredDate, type Occurrence } from '../../shared/recurrence';
 import { isDateInSupportedYears, type Entry, type Workspace } from '../../shared/schema';
 import { workspaceDisplayOf } from '../workspaceDisplay';
-import { layoutWeek, type MonthEvent, type WeekItem } from './layout';
+import {
+  layoutWeek,
+  type EntryMonthEvent,
+  type MonthEvent,
+  type NamedMonthEvent,
+  type WeekItem,
+} from './layout';
 import {
   FIRST_WEEK_NUMBER,
   LAST_WEEK_NUMBER,
@@ -12,6 +18,28 @@ import {
   weekDates,
   weekStartDate,
 } from './weeks';
+
+/**
+ * 祝日・記念日の横棒。予定の行ではなく、namedDatesBetween で計算したもの（設計書 8章）。
+ * key に名前まで入れるのは、同じ日に重なる（夏至と父の日）ものを、見分けるため。
+ */
+function namedEvent(
+  source: NamedMonthEvent['source'],
+  date: DateStr,
+  name: string,
+  color: string,
+): NamedMonthEvent {
+  return {
+    source,
+    key: `${source}:${date}:${name}`,
+    title: name,
+    color,
+    allDay: true,
+    startDate: date,
+    lastDate: date,
+    startTime: null,
+  };
+}
 
 /** 1 日のマスに出す、日付のまわりの情報。 */
 export interface DayView {
@@ -23,9 +51,12 @@ export interface DayView {
    * 外の日の「+N件」は、リンクの行き先がないので、出さない。
    */
   inRange: boolean;
-  /** 祝日名。祝日でない日と、組み込みのワークスペース「祝日」が OFF のときは null。 */
+  /**
+   * 祝日名。祝日でない日と、組み込みのワークスペース「祝日」が OFF のときは null。
+   * 画面に出すのは、日付の数字の色と、マスのリンクの読み上げだけ。名前の文字は、横棒（WeekView の items）で出す。
+   */
   holidayName: string | null;
-  /** 記念日の名前（同じ日に重なることがある）。「記念日」が OFF のときは空。 */
+  /** 記念日の名前（同じ日に重なることがある）。「記念日」が OFF のときは空。読み上げだけに使う。 */
   observanceNames: readonly string[];
 }
 
@@ -78,6 +109,8 @@ export class WeekViewCache {
   private readonly colors: ReadonlyMap<string, string>;
   private readonly showHolidays: boolean;
   private readonly showObservances: boolean;
+  private readonly holidayBarColor: string | undefined;
+  private readonly observanceBarColor: string | undefined;
   private readonly chunks = new Map<number, Chunk>();
 
   constructor({ entries, workspaces, slots }: WeekViewSource) {
@@ -96,6 +129,8 @@ export class WeekViewCache {
     this.colors = display.colors;
     this.showHolidays = display.showHolidays;
     this.showObservances = display.showObservances;
+    this.holidayBarColor = display.holidayBarColor;
+    this.observanceBarColor = display.observanceBarColor;
   }
 
   /** これまでに計算したまとまりの数。計算が、描いた週の分だけに収まっていることの確認に使う。 */
@@ -151,20 +186,29 @@ export class WeekViewCache {
     const holidays = new Map<DateStr, string>();
     const observances = new Map<DateStr, string[]>();
     const named = namedDatesBetween(from, to);
-    for (const { date, name } of named.holidays) holidays.set(date, name);
+    for (const { date, name } of named.holidays) {
+      holidays.set(date, name);
+      if (this.holidayBarColor !== undefined) {
+        events.push(namedEvent('holiday', date, name, this.holidayBarColor));
+      }
+    }
     for (const { date, name } of named.observances) {
       observances.set(date, [...(observances.get(date) ?? []), name]);
+      if (this.observanceBarColor !== undefined) {
+        events.push(namedEvent('observance', date, name, this.observanceBarColor));
+      }
     }
     return { events, holidays, observances, weeks: new Map() };
   }
 
   /** 月表示に出す予定にする。出さないもの（タイムブロック・表示が OFF のワークスペース）は null。 */
-  private toMonthEvent(occurrence: Occurrence): MonthEvent | null {
+  private toMonthEvent(occurrence: Occurrence): EntryMonthEvent | null {
     // タイムブロックは月表示に出さない（MV-10）。
     if (occurrence.kind !== 'event' || occurrence.workspaceId === null) return null;
     const color = this.colors.get(occurrence.workspaceId);
     if (color === undefined) return null;
     return {
+      source: 'entry',
       key: `${occurrence.entryId}:${occurrence.occurrenceDate}`,
       title: occurrence.title,
       color,

@@ -18,7 +18,7 @@ import type { SyncState } from '../sync/state';
 import { workspaceDisplayOf } from '../workspaceDisplay';
 import { BannerList } from './BannerList';
 import { DayHeader } from './DayHeader';
-import { dayItemsOf, dayNamesOf } from './dayItems';
+import { dayItemsOf, isHolidayShown } from './dayItems';
 import styles from './DayView.module.css';
 import { layoutDay } from './layout';
 import { createSwipeTracker, isClickAfterSwipe } from './swipe';
@@ -49,8 +49,8 @@ function topPixelsFor(date: DateStr, firstItemStart: number | null): number {
 }
 
 /**
- * 日表示（DV-1〜6。設計書 11.3）。固定のヘッダー（［月表示］・前後の日・日付・［今日］・祝日名）、
- * 上部の欄（終日・24 時間以上）、縦にスクロールするタイムライン、タイムブロックを作る ( + ) ボタン。
+ * 日表示（DV-1〜6。設計書 11.3）。固定のヘッダー（［月表示］・前後の日・日付・［今日］）、
+ * 上部の欄（祝日・記念日・終日・24 時間以上）、縦にスクロールするタイムライン、タイムブロックを作る ( + ) ボタン。
  */
 export function DayView({ date }: { date: DateStr }) {
   const ready = useSyncState(selectReady);
@@ -65,7 +65,7 @@ export function DayView({ date }: { date: DateStr }) {
     () => dayItemsOf({ entries: [...view.entries.values()], display, date }),
     [view, display, date],
   );
-  const names = useMemo(() => dayNamesOf(date, display), [date, display]);
+  const isHoliday = useMemo(() => isHolidayShown(date, display), [date, display]);
   const placements = useMemo(() => layoutDay(items.timeline), [items.timeline]);
 
   const previousDate = addDays(date, -1);
@@ -158,7 +158,7 @@ export function DayView({ date }: { date: DateStr }) {
     <div className={styles.screen}>
       <DayHeader
         date={date}
-        names={names}
+        isHoliday={isHoliday}
         hasPrevious={hasPrevious}
         hasNext={hasNext}
         onMonth={goToMonth}

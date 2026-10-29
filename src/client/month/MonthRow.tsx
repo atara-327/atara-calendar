@@ -72,12 +72,6 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
             {label.month}
           </span>
         )}
-        {holiday !== null && <span className={styles.holidayName}>{holiday}</span>}
-        {day.observanceNames.map((name) => (
-          <span key={name} className={styles.observanceName}>
-            {name}
-          </span>
-        ))}
       </span>
     </Link>
   );
@@ -89,6 +83,26 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
 
 function BarChip({ item }: { item: BarItem }) {
   const { event } = item;
+  const placement = {
+    gridColumn: `${String(item.startCol + 1)} / ${String(item.endCol + 2)}`,
+    gridRow: item.row + 1,
+    backgroundColor: event.color,
+    color: readableTextColor(event.color),
+  };
+
+  if (event.source !== 'entry') {
+    // 祝日・記念日。編集も削除もできないので、<button> にしない（Tab で止まらず、フォームも開かない）。
+    // pointer-events: none で、押した位置の下にあるマスのリンクに通すので、押すと、空いているところと同じく、
+    // 日表示へ移る。<Link> にしないのは、マスのリンクと行き先が同じで、読み上げとフォーカスが二重になるため。
+    // 名前は、マスのリンクの読み上げ（DayCell）に入っているので、ここは読み上げから外す（aria-hidden）。
+    return (
+      <div aria-hidden="true" className={classNames(styles.bar, styles.namedBar)} style={placement}>
+        <span className={styles.barText}>{event.title}</span>
+      </div>
+    );
+  }
+
+  const { occurrence } = event;
   return (
     <button
       type="button"
@@ -98,14 +112,9 @@ function BarChip({ item }: { item: BarItem }) {
         item.continuesBefore && styles.continuesBefore,
         item.continuesAfter && styles.continuesAfter,
       )}
-      style={{
-        gridColumn: `${String(item.startCol + 1)} / ${String(item.endCol + 2)}`,
-        gridRow: item.row + 1,
-        backgroundColor: event.color,
-        color: readableTextColor(event.color),
-      }}
+      style={placement}
       onClick={() => {
-        openEditForm(event.occurrence);
+        openEditForm(occurrence);
       }}
     >
       <span className={styles.barText}>
@@ -162,6 +171,7 @@ interface MonthRowProps {
  * 日付のマスは、リンクの全面（日付・空いているところ → 日表示。MV-8）。予定は、その上に重ねる。
  * 予定の層は、空いているところのクリックを下のマスに通す（pointer-events）。予定そのものを押すと、
  * その回のフォームが開く（フォームの履歴を積むので、スマホの「戻る」で閉じる。設計書 11.4）。
+ * 祝日・記念日の横棒は、クリックもマスに通す（BarChip）ので、押すと日表示へ移る。
  */
 export const MonthRow = memo(function MonthRow({ view, slots, today }: MonthRowProps) {
   return (

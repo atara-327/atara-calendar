@@ -105,14 +105,13 @@
 }
 
 /*
- * 2 行目。祝日名・記念日名（全文。折り返してよい）と、未送信の件数（右端）。
- * 中身がなければ、高さを持たない（:empty）。名前も件数もないとき、React は、何も描かないので、空になる。
+ * 2 行目。未送信の件数（右端）。
+ * 中身がなければ、高さを持たない（:empty）。件数がないとき、React は、何も描かないので、空になる。
  */
 .subRow {
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-  gap: 8px;
   padding-top: 2px;
   font-size: 13px;
   line-height: 18px;
@@ -120,25 +119,6 @@
 
 .subRow:empty {
   display: none;
-}
-
-.names {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-}
-
-.holidayName,
-.observanceName {
-  margin-right: 8px;
-}
-
-.holidayName {
-  color: var(--color-holiday);
-}
-
-.observanceName {
-  color: var(--color-observance);
 }
 
 /*
@@ -159,7 +139,8 @@
 }
 
 /*
- * 上部の欄の 1 件。ブラウザの既定の見た目（枠・背景・文字の色・中央寄せ）を外す。
+ * 上部の欄の 1 件（祝日・記念日の <div> と、予定の <button> で共通の見た目）。
+ * ブラウザの既定の見た目（枠・背景・文字の色・中央寄せ）を外す（<button> のため）。
  * 背景と文字の色は、ワークスペースの色なので、style 属性（CSSOM）で与える。
  * 題名の右端を薄くする（mask-image）のを、<button> に直接かけず、中の span にかけるのは、
  * <button> にかけると、背景（予定の色）まで薄くなるため（月表示と同じ）。
@@ -181,14 +162,18 @@
   font-size: 13px;
   line-height: 24px;
   text-align: left;
+}
+
+/* 押せるのは、予定（<button>）だけ。祝日・記念日は押せないので、カーソルも色の変化も付けない。 */
+.bannerButton {
   cursor: pointer;
 }
 
-.bannerItem:hover {
+.bannerButton:hover {
   filter: brightness(1.15);
 }
 
-.bannerItem:focus-visible {
+.bannerButton:focus-visible {
   outline: 2px solid var(--color-today);
   outline-offset: -2px;
 }
