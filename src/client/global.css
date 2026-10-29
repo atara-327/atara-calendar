@@ -25,6 +25,9 @@
    * 使う要素は、空いている幅いっぱいに広げるか、右に 1em の余白（padding）を持たせる。
    */
   --fade-end: linear-gradient(to right, #000 calc(100% - 1em), transparent);
+
+  /* 日表示の中身（上部の欄・タイムライン）の、いちばん広い幅。PC の広い画面で、項目が横に伸びすぎないよう、中央に置く。 */
+  --day-content-width: 720px;
 }
 
 body {

@@ -6,7 +6,9 @@
  */
 .timeline {
   display: flex;
+  max-width: var(--day-content-width);
   height: 1440px;
+  margin: 0 auto;
 }
 
 .ruler {
