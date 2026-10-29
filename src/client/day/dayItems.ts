@@ -1,5 +1,5 @@
 import { dateToDays, type DateStr } from '../../shared/date';
-import { namedDatesBetween } from '../../shared/holidays';
+import { holidayName, namedDatesBetween } from '../../shared/holidays';
 import { occurrencesInPeriod } from '../../shared/period';
 import type { Occurrence } from '../../shared/recurrence';
 import type { Entry } from '../../shared/schema';
@@ -10,13 +10,17 @@ import { MINUTES_PER_DAY } from './timelineGeometry';
 // その日の日表示に出す項目を、展開した回から求める（設計書 11.3）。画面に依存しない。
 // 回の開始・終了を、「1970-01-01 の 0:00 からの分」にして、長さと、その日の範囲との重なりを求める。
 
-/** 上部の欄（DV-6）の 1 行。終日の予定と、24 時間以上の時間指定の予定。タイムブロックは入らない。 */
-export interface BannerItem {
+interface BannerItemBase {
   /** 回を見分ける値。 */
   key: string;
   title: string;
-  /** ワークスペースの色。 */
+  /** ワークスペースの色。祝日・記念日は、組み込みのワークスペースの色。 */
   color: string;
+}
+
+/** 上部の欄（DV-6）の、利用者の予定の 1 行。終日の予定と、24 時間以上の時間指定の予定。タイムブロックは入らない。 */
+export interface EntryBannerItem extends BannerItemBase {
+  source: 'entry';
   /** 複数日の期間。終日は「10/18〜10/21」、時間指定は「10/16 18:00〜10/18 20:00」。1 日だけの終日は null。 */
   period: string | null;
   /** 読み上げの名前。 */
@@ -24,6 +28,16 @@ export interface BannerItem {
   /** 押したときに開くフォームが、その回の内容を知るため。 */
   occurrence: Occurrence;
 }
+
+/**
+ * 上部の欄の、祝日・記念日の 1 行。計算して出すもので、予定の行ではない。編集も削除もできないので、
+ * フォームを開く回を持たず、押せない項目として出す（BannerList）。
+ */
+export interface NamedBannerItem extends BannerItemBase {
+  source: 'holiday' | 'observance';
+}
+
+export type BannerItem = EntryBannerItem | NamedBannerItem;
 
 /** タイムラインの 1 項目。 */
 export interface TimelineItem {
@@ -74,7 +88,7 @@ function accessibleNameOf(occurrence: Occurrence, parts: readonly (string | null
     .join(' ');
 }
 
-function toBanner(occurrence: Occurrence, color: string): BannerItem {
+function toBanner(occurrence: Occurrence, color: string): EntryBannerItem {
   const { startDate, endDate } = occurrence;
   let period: string | null;
   if (occurrence.allDay) {
@@ -84,6 +98,7 @@ function toBanner(occurrence: Occurrence, color: string): BannerItem {
     period = `${dateTime(startDate, occurrence.startTime)}〜${dateTime(endDate, occurrence.endTime)}`;
   }
   return {
+    source: 'entry',
     key: `${occurrence.entryId}:${occurrence.occurrenceDate}`,
     title: occurrence.title,
     color,
@@ -135,6 +150,8 @@ function toTimeline(
  * （設計書 11.3）、タイムブロックへ広げる根拠がない。
  * タイムブロックは、ワークスペースの表示 ON/OFF によらず、常に出す（TB-3・TB-5・DV-2）。
  * 予定は、表示が ON で、削除されていないワークスペースのものだけ（WS-3）。
+ * 祝日・記念日は、上部の欄の先頭に出す（祝日 → 記念日 → 予定）。休みかどうかを先に知りたいため
+ * （月表示の、その日の終日の予定の先頭と同じ。設計書 11.2）。組み込みのワークスペースが OFF なら出さない。
  * 表示が OFF のワークスペースの予定を、展開の前に除かず、展開した回から除く理由は、weekViewCache.ts と同じ。
  */
 export function dayItemsOf({
@@ -149,7 +166,7 @@ export function dayItemsOf({
   date: DateStr;
 }): DayItems {
   const dayStart = dateToDays(date) * MINUTES_PER_DAY;
-  const banner: BannerItem[] = [];
+  const banner: BannerItem[] = namedBannerItems(date, display);
   const timeline: TimelineItem[] = [];
 
   for (const occurrence of occurrencesInPeriod(entries, display.liveIds, date, date)) {
@@ -173,19 +190,32 @@ export function dayItemsOf({
   return { banner, timeline };
 }
 
-/** その日の祝日名と記念日の名前（ヘッダーの 2 行目に出す）。 */
-export interface DayNames {
-  /** 祝日名。祝日でない日と、組み込みのワークスペース「祝日」が OFF のときは null。 */
-  holiday: string | null;
-  /** 記念日の名前（同じ日に重なることがある）。「記念日」が OFF のときは空。 */
-  observances: readonly string[];
+/** date の祝日・記念日の、上部の欄の項目。祝日 → 記念日の順。組み込みのワークスペースが OFF なら、出さない。 */
+function namedBannerItems(date: DateStr, display: WorkspaceDisplay): NamedBannerItem[] {
+  const named = namedDatesBetween(date, date);
+  const toItem =
+    (source: NamedBannerItem['source'], color: string) =>
+    ({ name }: { name: string }): NamedBannerItem => ({
+      source,
+      key: `${source}:${date}:${name}`,
+      title: name,
+      color,
+    });
+  const { holidayBarColor, observanceBarColor } = display;
+  return [
+    ...(holidayBarColor === undefined
+      ? []
+      : named.holidays.map(toItem('holiday', holidayBarColor))),
+    ...(observanceBarColor === undefined
+      ? []
+      : named.observances.map(toItem('observance', observanceBarColor))),
+  ];
 }
 
-/** date の祝日名・記念日名。組み込みのワークスペースが OFF なら、出さない（月表示と同じ。設計書 11.2）。 */
-export function dayNamesOf(date: DateStr, display: WorkspaceDisplay): DayNames {
-  const named = namedDatesBetween(date, date);
-  return {
-    holiday: display.showHolidays ? (named.holidays[0]?.name ?? null) : null,
-    observances: display.showObservances ? named.observances.map(({ name }) => name) : [],
-  };
+/**
+ * date が、表示が ON の祝日か。ヘッダーの日付を赤にするか決める（月表示の日付の色と同じ決まり。設計書 11.2）。
+ * 組み込みのワークスペース「祝日」が OFF なら、祝日でも false。
+ */
+export function isHolidayShown(date: DateStr, display: WorkspaceDisplay): boolean {
+  return display.showHolidays && holidayName(date) !== null;
 }

@@ -5,12 +5,11 @@ import type { Occurrence } from '../../shared/recurrence';
 
 const DAYS_PER_WEEK = 7;
 
-/** 月表示に出す予定 1 件（展開した回）。 */
-export interface MonthEvent {
+interface MonthEventBase {
   /** 回を見分ける値（同じ予定の別の回と区別する）。 */
   key: string;
   title: string;
-  /** ワークスペースの色。 */
+  /** ワークスペースの色。祝日・記念日は、組み込みのワークスペースの色。 */
   color: string;
   allDay: boolean;
   startDate: DateStr;
@@ -18,11 +17,27 @@ export interface MonthEvent {
   lastDate: DateStr;
   /** 'HH:MM'。終日なら null。 */
   startTime: string | null;
+}
+
+/** 利用者の予定（展開した回）。押すと、その回のフォームが開く。 */
+export interface EntryMonthEvent extends MonthEventBase {
+  source: 'entry';
   /** 押したときに開くフォームが、その回の内容を知るため。並べ方（このファイルの計算）は使わない。 */
   occurrence: Occurrence;
 }
 
-/** 横棒（複数日の予定と、終日の予定）。列は 0（日曜）〜6（土曜）で、endCol を含む。 */
+/**
+ * 祝日・記念日。計算して出すもので、予定の行ではない。編集も削除もできないので、フォームを開く回を持たない
+ * （押すと、マスのリンクと同じく、日表示へ移る）。終日で、その日 1 日だけ。
+ */
+export interface NamedMonthEvent extends MonthEventBase {
+  source: 'holiday' | 'observance';
+}
+
+/** 月表示に出す、横棒か時間指定の 1 件。 */
+export type MonthEvent = EntryMonthEvent | NamedMonthEvent;
+
+/** 横棒（複数日の予定と、終日の予定と、祝日・記念日）。列は 0（日曜）〜6（土曜）で、endCol を含む。 */
 export interface BarItem {
   kind: 'bar';
   event: MonthEvent;
@@ -39,7 +54,7 @@ export interface BarItem {
 /** 時間指定の、その日だけの予定。「15:00 歯医者」。 */
 export interface TimedItem {
   kind: 'timed';
-  event: MonthEvent;
+  event: EntryMonthEvent;
   col: number;
   row: number;
 }
@@ -49,19 +64,19 @@ export interface MoreItem {
   kind: 'more';
   col: number;
   row: number;
-  /** その日にかかる予定のうち、出せなかった数。 */
+  /** その日にかかる予定（祝日・記念日を含む）のうち、出せなかった数。 */
   count: number;
 }
 
 export type WeekItem = BarItem | TimedItem | MoreItem;
 
-/** 横棒で出すか。複数日にまたがる予定（時間指定でも、日付をまたぐもの）と、終日の予定。 */
-function isBar(event: MonthEvent): boolean {
-  return event.allDay || event.lastDate > event.startDate;
-}
-
 function isMultiDay(event: MonthEvent): boolean {
   return event.lastDate > event.startDate;
+}
+
+/** 時間指定の、その日だけの予定か。横棒で出すのは、これ以外（複数日の予定・終日の予定・祝日・記念日）。 */
+function isTimedEntry(event: MonthEvent): event is EntryMonthEvent {
+  return event.source === 'entry' && !event.allDay && !isMultiDay(event);
 }
 
 function compareText(a: string, b: string): number {
@@ -69,18 +84,41 @@ function compareText(a: string, b: string): number {
 }
 
 /**
- * 横棒を上から詰める順番。複数日の予定が先、そのあと 1 日だけの終日予定。
- * 複数日の予定は、先に始まったもの、同じなら長いものが先（Googleカレンダーと同じ）。
+ * 横棒を上から詰める順番。「複数日の予定と、祝日・記念日」が先、そのあと 1 日だけの終日予定。
+ * 先の組は、先に始まったものが先。同じ日に始まるものは、祝日 → 記念日 → 複数日の予定
+ * （複数日の予定は、長いものが先。Googleカレンダーと同じ）。
+ * 祝日・記念日は、その日の 1 日だけの終日予定より上に出る（休みかどうかを先に知りたいため）。
+ * Why not 祝日・記念日を、すべての棒の先頭にする: 前の日から続く棒の行は、週の中で 1 つなので、
+ * 祝日の日のために棒ごと 1 行下がり、ほかの日の上に空き行ができて、位置が日によって変わってしまう。
+ * 前の日から続く棒は、始まりが祝日より早いので、先に行が決まり、動かない。
  */
 function compareBars(a: MonthEvent, b: MonthEvent): number {
   return (
-    Number(isMultiDay(b)) - Number(isMultiDay(a)) ||
+    barGroup(a) - barGroup(b) ||
     compareText(a.startDate, b.startDate) ||
+    barRank(a) - barRank(b) ||
     compareText(b.lastDate, a.lastDate) ||
     Number(b.allDay) - Number(a.allDay) ||
     compareText(a.startTime ?? '', b.startTime ?? '') ||
     compareText(a.key, b.key)
   );
+}
+
+/** 0: 複数日の予定と、祝日・記念日。1: 1 日だけの終日予定。 */
+function barGroup(event: MonthEvent): number {
+  return isMultiDay(event) || event.source !== 'entry' ? 0 : 1;
+}
+
+/** 同じ日に始まる棒の順。祝日 → 記念日 → 予定。 */
+function barRank(event: MonthEvent): number {
+  switch (event.source) {
+    case 'holiday':
+      return 0;
+    case 'observance':
+      return 1;
+    case 'entry':
+      return 2;
+  }
 }
 
 function compareTimed(a: MonthEvent, b: MonthEvent): number {
@@ -104,7 +142,7 @@ interface PlacedBar {
  *   決めた行は、横棒がかかる日のすべてで同じ。日によって上下に動かさない（途中で折れると、1 本の棒に見えない）。
  * - 時間指定の予定は、その日の横棒の下に、時刻順に並べる。横棒がその日に通っていない行（上の空き）には入れない。
  * - 1 日に出す行数を超えたら、いちばん下の行を「+N件」にして、そこから下にあった予定は出さない。
- *   N は、その日にかかる予定のうち、出せなかった数。横棒が日によって出せない（途中で切れる）ときも、
+ *   N は、その日にかかる予定（祝日・記念日を含む）のうち、出せなかった数。横棒が日によって出せない（途中で切れる）ときも、
  *   その日の分として数える。Googleカレンダーと同じ。
  */
 export function layoutWeek(
@@ -115,14 +153,16 @@ export function layoutWeek(
   const weekStartDays = dateToDays(weekStart);
 
   const bars: PlacedBar[] = [];
-  const timedByCol: MonthEvent[][] = Array.from({ length: DAYS_PER_WEEK }, () => []);
+  const timedByCol: EntryMonthEvent[][] = Array.from({ length: DAYS_PER_WEEK }, () => []);
   for (const event of [...events].sort(compareBars)) {
     const firstCol = dateToDays(event.startDate) - weekStartDays;
     const lastCol = dateToDays(event.lastDate) - weekStartDays;
     if (lastCol < 0 || firstCol > DAYS_PER_WEEK - 1) continue;
     const startCol = Math.max(0, firstCol);
     const endCol = Math.min(DAYS_PER_WEEK - 1, lastCol);
-    if (isBar(event)) {
+    if (isTimedEntry(event)) {
+      timedByCol[startCol]?.push(event);
+    } else {
       bars.push({
         event,
         startCol,
@@ -131,8 +171,6 @@ export function layoutWeek(
         continuesAfter: lastCol > DAYS_PER_WEEK - 1,
         lane: 0,
       });
-    } else {
-      timedByCol[startCol]?.push(event);
     }
   }
 

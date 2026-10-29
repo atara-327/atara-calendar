@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { makeOccurrence } from '../../../test/helpers/entries';
 import { eventAccessibleName } from './eventLabel';
-import type { MonthEvent } from './layout';
+import type { EntryMonthEvent } from './layout';
 
-function event(overrides: Partial<MonthEvent>): MonthEvent {
+function event(overrides: Partial<EntryMonthEvent>): EntryMonthEvent {
   return {
+    source: 'entry',
     key: 'e1:2026-10-22',
     title: '歯医者',
     color: '#4FC3F7',

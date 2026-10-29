@@ -130,25 +130,6 @@
   font-weight: 700;
 }
 
-.holidayName,
-.observanceName {
-  min-width: 0;
-  /* 右の 1em は、薄くなる範囲。短い名前の末尾が薄くならないよう、空けておく（global.css の --fade-end）。 */
-  padding-right: 1em;
-  overflow: hidden;
-  font-size: 11px;
-  -webkit-mask-image: var(--fade-end);
-  mask-image: var(--fade-end);
-}
-
-.holidayName {
-  color: var(--color-holiday);
-}
-
-.observanceName {
-  color: var(--color-observance);
-}
-
 /* 予定の層。マスの上に重ねて、予定のない場所のクリックは、下のマスに通す。 */
 .events {
   position: absolute;
@@ -222,6 +203,14 @@
 .bar {
   padding: 0 4px;
   border-radius: 4px;
+}
+
+/*
+ * 祝日・記念日の横棒。クリックを通して、下のマスのリンク（日表示へ移る）を押したことにする。
+ * 「.events > *」（予定の層の子はクリックを受ける）に勝つよう、「.events >」から書く。
+ */
+.events > .namedBar {
+  pointer-events: none;
 }
 
 .barText {

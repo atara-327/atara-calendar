@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { workspaceDisplayOf } from '../workspaceDisplay';
-import { dayItemsOf, dayNamesOf } from './dayItems';
+import { dayItemsOf, isHolidayShown } from './dayItems';
 
 const workspaces = [
   makeWorkspace({ id: 'w1', color: '#039BE5' }),
@@ -116,7 +116,9 @@ describe('上部の欄（DV-6）に出るもの', () => {
   it('上部の欄の項目は、押したときに開く回（occurrence）を持つ', () => {
     const { banner } = itemsOf('2026-10-19', [{ id: 'e1', startDate: '2026-10-19' }]);
 
-    expect(banner[0]?.occurrence).toMatchObject({ entryId: 'e1', occurrenceDate: '2026-10-19' });
+    expect(banner).toMatchObject([
+      { source: 'entry', occurrence: { entryId: 'e1', occurrenceDate: '2026-10-19' } },
+    ]);
   });
 });
 
@@ -501,39 +503,141 @@ describe('同じ日の、複数の項目', () => {
   });
 });
 
-describe('祝日名・記念日名（ヘッダーの 2 行目）', () => {
+describe('祝日・記念日（上部の欄。DV-6）', () => {
+  const names = (date: string, entries: EntryFields[] = [], options = {}) =>
+    itemsOf(date, entries, options).banner.map((item) => item.title);
+
+  it('祝日の日は、上部の欄に、組み込みのワークスペース「祝日」の色で出る。タイムラインには出ない', () => {
+    const { banner, timeline } = itemsOf('2026-11-03', []);
+
+    expect(timeline).toEqual([]);
+    expect(banner).toEqual([
+      {
+        source: 'holiday',
+        key: 'holiday:2026-11-03:文化の日',
+        title: '文化の日',
+        color: '#F28B82',
+      },
+    ]);
+  });
+
+  it('記念日の日は、上部の欄に、組み込みのワークスペース「記念日」の色で出る', () => {
+    const { banner } = itemsOf('2026-10-31', []);
+
+    expect(banner).toEqual([
+      {
+        source: 'observance',
+        key: 'observance:2026-10-31:ハロウィン',
+        title: 'ハロウィン',
+        color: '#9AA0A6',
+      },
+    ]);
+  });
+
+  it('色は、組み込みのワークスペースの行の色（コードに書いた値ではない）', () => {
+    const { banner } = itemsOf('2018-12-24', [], {
+      workspaces: [
+        makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday', color: '#111111' }),
+        makeWorkspace({ id: 'builtin-observance', builtin: 'observance', color: '#222222' }),
+      ],
+    });
+
+    expect(banner.map((item) => item.color)).toEqual(['#111111', '#222222']);
+  });
+
+  it('祝日 → 記念日 → 利用者の終日の予定の順で、先頭に出る（2018-12-24 は、振替休日とクリスマスイブ）', () => {
+    // 予定の題名を、並べ替えの結果が、題名の順に見えないよう、わざと先頭の文字にする。
+    expect(names('2018-12-24', [{ id: 'e1', title: 'あ予定', startDate: '2018-12-24' }])).toEqual([
+      '振替休日',
+      'クリスマスイブ',
+      'あ予定',
+    ]);
+  });
+
+  it('複数日の終日の予定よりも先頭に出る', () => {
+    expect(
+      names('2026-11-03', [
+        { id: 'e1', title: '帰省', startDate: '2026-11-02', endDate: '2026-11-04' },
+      ]),
+    ).toEqual(['文化の日', '帰省']);
+  });
+
+  it('押せない項目として、予定と区別できる。フォームを開く回（occurrence）を持たない', () => {
+    const { banner } = itemsOf('2026-11-03', [{ id: 'e1', startDate: '2026-11-03' }]);
+
+    const [holiday, entry] = banner;
+    expect(holiday?.source).toBe('holiday');
+    expect(holiday).not.toHaveProperty('occurrence');
+    expect(entry?.source).toBe('entry');
+  });
+
+  it('祝日でも記念日でもない日は、祝日・記念日の項目がない', () => {
+    expect(itemsOf('2026-10-27', []).banner).toEqual([]);
+  });
+
+  it('組み込みの「祝日」が OFF なら、祝日を出さない（記念日は出る）', () => {
+    const off = {
+      workspaces: [
+        makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday', visible: false }),
+        makeWorkspace({ id: 'builtin-observance', builtin: 'observance' }),
+      ],
+    };
+
+    expect(names('2026-11-03', [], off)).toEqual([]);
+    expect(names('2026-10-31', [], off)).toEqual(['ハロウィン']);
+  });
+
+  it('組み込みの「記念日」が OFF なら、記念日を出さない（祝日は出る）', () => {
+    const off = {
+      workspaces: [
+        makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday' }),
+        makeWorkspace({ id: 'builtin-observance', builtin: 'observance', visible: false }),
+      ],
+    };
+
+    expect(names('2026-10-31', [], off)).toEqual([]);
+    expect(names('2026-11-03', [], off)).toEqual(['文化の日']);
+  });
+
+  it('組み込みの行が（まだ読み込んでいなくて）ないときは、色が決まらないので、出さない', () => {
+    expect(names('2026-11-03', [], { workspaces: [] })).toEqual([]);
+  });
+
+  it('祝日の日も、時間指定の予定は、タイムラインに出る', () => {
+    const { banner, timeline } = itemsOf('2026-11-03', [
+      timed({ id: 'e1', title: '会議', startDate: '2026-11-03' }),
+    ]);
+
+    expect(banner.map((item) => item.title)).toEqual(['文化の日']);
+    expect(timeline.map((item) => item.title)).toEqual(['会議']);
+  });
+});
+
+describe('ヘッダーの日付の色（祝日）', () => {
   const display = workspaceDisplayOf(workspaces);
 
-  it('祝日の日は、祝日名が出る', () => {
-    expect(dayNamesOf('2026-11-03', display)).toEqual({ holiday: '文化の日', observances: [] });
+  it('祝日の日は、祝日（日付を赤にする）', () => {
+    expect(isHolidayShown('2026-11-03', display)).toBe(true);
   });
 
-  it('記念日の日は、記念日の名前が出る', () => {
-    expect(dayNamesOf('2026-10-31', display)).toEqual({
-      holiday: null,
-      observances: ['ハロウィン'],
-    });
+  it('記念日だけの日と、祝日でも記念日でもない日は、祝日ではない', () => {
+    expect(isHolidayShown('2026-10-31', display)).toBe(false);
+    expect(isHolidayShown('2026-10-27', display)).toBe(false);
   });
 
-  it('祝日でも記念日でもない日は、どちらもない', () => {
-    expect(dayNamesOf('2026-10-27', display)).toEqual({ holiday: null, observances: [] });
-  });
-
-  it('組み込みの「祝日」が OFF なら、祝日名を出さない（記念日は出る）', () => {
+  it('組み込みの「祝日」が OFF なら、祝日でも、祝日として扱わない（日付を赤にしない）', () => {
     const off = workspaceDisplayOf([
       makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday', visible: false }),
     ]);
 
-    expect(dayNamesOf('2026-11-03', off).holiday).toBeNull();
-    expect(dayNamesOf('2026-10-31', off).observances).toEqual(['ハロウィン']);
+    expect(isHolidayShown('2026-11-03', off)).toBe(false);
   });
 
-  it('組み込みの「記念日」が OFF なら、記念日の名前を出さない（祝日は出る）', () => {
+  it('組み込みの「記念日」が OFF でも、祝日は祝日', () => {
     const off = workspaceDisplayOf([
       makeWorkspace({ id: 'builtin-observance', builtin: 'observance', visible: false }),
     ]);
 
-    expect(dayNamesOf('2026-10-31', off).observances).toEqual([]);
-    expect(dayNamesOf('2026-11-03', off).holiday).toBe('文化の日');
+    expect(isHolidayShown('2026-11-03', off)).toBe(true);
   });
 });
