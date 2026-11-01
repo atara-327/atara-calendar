@@ -97,7 +97,7 @@ export const updateEventInputSchema = z.strictObject({
       '（kind は変えられない）。空にできる項目（location・url・memo・rrule）は null で空にする。' +
       "scope が 'this' のときは、rrule（繰り返し）を変えられない。" +
       '終日にするときは startTime・endTime を null にする。時間指定にするときは startTime・endTime の両方を入れる。' +
-      '終日かどうかを変えて notifyOffsetMin を書かないと、通知は、その初期値（時間指定は 10、終日は -360）になる',
+      'allDay を書いて notifyOffsetMin を書かないと、通知は、その初期値（時間指定は 10、終日は -360）になる（終日かどうかを変えないなら、allDay は書かない）',
   ),
 });
 
