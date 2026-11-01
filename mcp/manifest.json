@@ -1,0 +1,59 @@
+{
+  "manifest_version": "0.3",
+  "name": "atara-calendar",
+  "display_name": "atara-calendar",
+  "version": "1.0.0",
+  "description": "自分専用のカレンダー（atara-calendar）の予定を、Claude から確認・追加・編集・削除する",
+  "author": {
+    "name": "atara"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "ATARA_CALENDAR_BASE_URL": "${user_config.base_url}",
+        "CF_ACCESS_CLIENT_ID": "${user_config.client_id}",
+        "CF_ACCESS_CLIENT_SECRET": "${user_config.client_secret}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "list_events", "description": "期間の予定・タイムブロック・祝日・記念日を返す" },
+    { "name": "list_workspaces", "description": "ワークスペースの一覧を返す" },
+    { "name": "create_event", "description": "予定・タイムブロックを作る（繰り返しも）" },
+    { "name": "update_event", "description": "予定・タイムブロックを変える" },
+    { "name": "delete_event", "description": "予定・タイムブロックを消す" },
+    { "name": "create_workspace", "description": "ワークスペースを作る" }
+  ],
+  "user_config": {
+    "client_id": {
+      "type": "string",
+      "title": "Client ID",
+      "description": "Cloudflare Access のサービストークンの Client ID（CF-Access-Client-Id）",
+      "required": true
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "Client Secret",
+      "description": "Cloudflare Access のサービストークンの Client Secret（CF-Access-Client-Secret）",
+      "sensitive": true,
+      "required": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "ベース URL",
+      "description": "カレンダーの URL（https:// で始まる）",
+      "default": "https://calendar.ataraman.com",
+      "required": true
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import type { Occurrence } from '../../shared/recurrence';
+import { defaultNotify as sharedDefaultNotify } from '../../shared/notifyDefaults';
 import type { Entry, Rrule } from '../../shared/schema';
-import { DEFAULT_ALL_DAY_NOTIFY_MIN, DEFAULT_TIMED_NOTIFY_MIN } from './notify';
 import { NO_REPEAT, repeatFieldsOf, type RepeatFields } from './repeat';
 import {
   defaultSchedule,
@@ -36,21 +36,13 @@ export interface FormValues extends Schedule, RepeatFields {
   memo: string;
 }
 
-/**
- * 通知の初期値（要件 NT-2〜4）。予定は ON（時間指定は 10 分前、終日は当日の朝 6 時）、タイムブロックは OFF。
- * OFF のときも、ON にしたときの初期のタイミング（10 分前）を持つ。
- */
+/** 通知の初期値（要件 NT-2〜4）。値は shared/notifyDefaults.ts。入力欄の文字（10 進）で持つ。 */
 export function defaultNotify(
   kind: EntryKind,
   allDay: boolean,
 ): Pick<FormValues, 'notifyEnabled' | 'notifyOffsetText'> {
-  if (kind === 'block') {
-    return { notifyEnabled: false, notifyOffsetText: String(DEFAULT_TIMED_NOTIFY_MIN) };
-  }
-  return {
-    notifyEnabled: true,
-    notifyOffsetText: String(allDay ? DEFAULT_ALL_DAY_NOTIFY_MIN : DEFAULT_TIMED_NOTIFY_MIN),
-  };
+  const { notifyEnabled, notifyOffsetMin } = sharedDefaultNotify(kind, allDay);
+  return { notifyEnabled, notifyOffsetText: String(notifyOffsetMin) };
 }
 
 /**

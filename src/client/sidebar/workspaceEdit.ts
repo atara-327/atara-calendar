@@ -1,6 +1,11 @@
 import { INPUT_LIMITS, type Entry, type Workspace } from '../../shared/schema';
-import { selectableWorkspaces } from '../form/workspaceChoices';
-import { WORKSPACE_COLORS, isSameColor, type WorkspaceColor } from '../workspaceColors';
+import { selectableWorkspaces } from '../../shared/workspace';
+import {
+  WORKSPACE_COLORS,
+  firstUnusedColor,
+  isSameColor,
+  type WorkspaceColor,
+} from '../../shared/workspaceColors';
 
 // ワークスペースの編集（設計書 11.5）の、画面に依存しない部分。並べ替え・新しいワークスペースの初期値・
 // 名前の確認・保存する行の決め方・色の見本・削除の確認に出す件数・最後の 1 つの判定。
@@ -57,11 +62,7 @@ export function reorderWorkspaces(
  * Why: 色でワークスペースを見分けるため（要件 WS-2）。
  */
 export function initialWorkspaceColor(workspaces: Iterable<Workspace>): string {
-  const used = selectableWorkspaces(workspaces).map(({ color }) => color);
-  const unused = WORKSPACE_COLORS.find(
-    ({ value }) => !used.some((color) => isSameColor(color, value)),
-  );
-  return (unused ?? WORKSPACE_COLORS[0]).value;
+  return firstUnusedColor(selectableWorkspaces(workspaces).map(({ color }) => color));
 }
 
 /**

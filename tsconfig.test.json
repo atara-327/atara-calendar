@@ -21,6 +21,7 @@
     "src/shared/astronomia.d.ts",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
+    "mcp/**/*.test.ts",
     "test/**/*.ts"
   ]
 }

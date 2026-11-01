@@ -8,3 +8,6 @@ dist/
 !.dev.vars.example
 .env
 .env.*
+
+# MCP サーバーの拡張機能（npm run pack:mcpb で作る。配るのは別の方法で、リポジトリには入れない）
+*.mcpb

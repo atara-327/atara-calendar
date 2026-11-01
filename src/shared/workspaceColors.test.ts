@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { workspaceSchema } from '../shared/schema';
-import { WORKSPACE_COLORS, isSameColor } from './workspaceColors';
+import { workspaceSchema } from './schema';
+import { WORKSPACE_COLORS, firstUnusedColor, isSameColor } from './workspaceColors';
 
 describe('ワークスペースの 8 色', () => {
   it('8 色で、名前（読み上げ）も値も、重ならない', () => {
@@ -36,5 +36,23 @@ describe('同じ色か', () => {
 
   it('値が違えば、違う色', () => {
     expect(isSameColor('#E57373', '#E57374')).toBe(false);
+  });
+});
+
+describe('まだ使っていない最初の色', () => {
+  it('何も使っていなければ、最初の色（トマト）', () => {
+    expect(firstUnusedColor([])).toBe('#E57373');
+  });
+
+  it('使っている色を飛ばして、並びの先頭の、使っていない色を返す', () => {
+    expect(firstUnusedColor(['#E57373', '#FFD54F'])).toBe('#FF8A65');
+  });
+
+  it('16 進の小文字で使っている色も、使っているとみなす', () => {
+    expect(firstUnusedColor(['#e57373'])).toBe('#FF8A65');
+  });
+
+  it('8 色すべて使っていれば、最初の色', () => {
+    expect(firstUnusedColor(WORKSPACE_COLORS.map(({ value }) => value))).toBe('#E57373');
   });
 });

@@ -78,3 +78,18 @@ export function isInLiveWorkspace(
 ): boolean {
   return row.workspaceId === null || liveIds.has(row.workspaceId);
 }
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * 予定に選べるワークスペース。削除されていない、利用者のワークスペースを、並び順（sortOrder。同じなら id）で。
+ * 組み込みの「祝日」「記念日」は、予定を入れられない（WS-4。サーバーも 400 にする）ので除く。
+ * 画面（フォーム・サイドメニュー）と MCP（create_workspace の色と sortOrder の決め方）が、同じ条件を使う。
+ */
+export function selectableWorkspaces(workspaces: Iterable<Workspace>): Workspace[] {
+  return [...workspaces]
+    .filter(({ deletedAt, builtin }) => deletedAt === null && builtin === null)
+    .sort((a, b) => a.sortOrder - b.sortOrder || compareText(a.id, b.id));
+}
