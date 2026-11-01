@@ -6,7 +6,7 @@
 export type Bindings = Env & {
   /** ログインを許可するメールアドレス（Secrets）。 */
   ALLOWED_EMAIL?: string;
-  /** 許可するサービストークンの Client ID（Secrets）。MCP を作るまでは空。 */
+  /** 許可するサービストークンの Client ID（Secrets）。空なら、サービストークンを一切通さない。 */
   ALLOWED_SERVICE_TOKEN_ID?: string;
   /**
    * 通知の送り先の Discord Webhook の URL（Secrets）。知っていれば、誰でもそのチャンネルに投稿できるので、
@@ -20,7 +20,7 @@ export type Bindings = Env & {
   AUTH_MODE?: string;
 };
 
-/** リクエストをしてきた相手。サービストークンは将来の MCP 用。 */
+/** リクエストをしてきた相手。サービストークンは MCP 用（設計書 13.2）。 */
 export type Actor = { kind: 'user'; email: string } | { kind: 'service' };
 
 export type Variables = { actor: Actor };

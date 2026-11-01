@@ -10,6 +10,7 @@ export const app = new Hono<AppEnv>();
 
 // 順番が大事。ヘッダーを先に付けるので、認証の 403 にも付く。認証をリクエストの確認より先にするので、
 // ログインしていない相手には、リクエストの確認の結果（415 など）を返さない。
+// リクエストの確認は、認証が決めた相手（actor）を読む（サービストークンなら Sec-Fetch-Site を確かめない）。
 app.use('/api/*', apiSecurityHeaders, accessAuth(), guardRequests);
 
 app.get('/api/health', (c) => c.json({ ok: true }));
