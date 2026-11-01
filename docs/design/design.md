@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 版 | 2.1（確定。変更は[changelog.md](changelog.md)） |
+| 版 | 2.2（確定。変更は[changelog.md](changelog.md)） |
 | 作成日 | 2026-10-19 |
 | 元にした要件 | [要件定義書 v1.6](../requirements/requirements.md) |
 
@@ -77,7 +77,7 @@ atara-calendar/
 ├─ mcp/             Claude Desktop の MCP サーバー（[13章](#13-claude-連携mcp)）
 ├─ migrations/       D1 のテーブル定義と、最初から入れる行・その直し（[4.2](#42-テーブル定義)）
 ├─ public/           そのまま配信するファイル（静的ファイルのヘッダーを指定する `_headers`）
-├─ scripts/          開発用のスクリプト（天文計算のデータの生成）
+├─ scripts/          開発用のスクリプト（天文計算のデータの生成・MCP のビルドと `.mcpb` の作成）
 ├─ vite-plugins/     ビルドと `vite dev` に組み込む Vite のプラグイン（絵文字の画像の生成。[11.1](#111-共通)）
 ├─ third_party/      配布物に含める、第三者のライセンス全文（絵文字の画像の Apache 2.0）
 ├─ test/fixtures/    テストの正解データ（内閣府の祝日一覧・国立天文台の暦要項）
@@ -1163,6 +1163,16 @@ Claude Desktop ──(標準入出力)── MCP サーバー（PC の上で動�
 - **通信が失敗したときは、同じ依頼（同じ id・`newId`・`editedAt`）で 1 回だけ送り直します**。送り直した結果が `stale` なら、「反映済みか、ほかの端末の新しい編集があった」と返します。**Why**: 1 回目が保存されたのに応答だけが失われたとき、Claude が新しい依頼として作り直すと、予定が 2 つできるからです。同じ依頼なら、2 回目はサーバーが `stale` で捨てます（5.1）。
 - 応答は、Claude が利用者に伝えられる短い日本語にします。`applied: false` は、`stale` なら「ほかの端末の新しい編集があったため、反映しませんでした」、`not_found` なら「対象の予定（またはワークスペース）が見つかりません」です。4xx は、`error` の種類に合わせた文言にします。
 - MCP の書き込みは、開いている画面には、次の受け取り（[6.3](#63-受け取るサーバー--端末)）で届きます。通知の時刻は、サーバーが保存のときに計算します（[9.2](#92-保存したときの計算実装-11a)）。
+
+### 13.5 実装の細部
+
+- **ビルド**: `npm run build:mcp` が、`mcp/index.ts` を、依存を含めた 1 つの JS ファイル（`mcp/dist/index.js`）にまとめます。`npm run pack:mcpb` が、それと `mcp/manifest.json` から `mcp/dist/atara-calendar.mcpb` を作ります。`npm run build` にも `build:mcp` が入ります。**Why**: MCP のビルドが壊れたことに、CI で気づくためです。`dist` と `.mcpb` はコミットしません。
+- **設定**: 環境変数 `ATARA_CALENDAR_BASE_URL`（`https://` のみ）・`CF_ACCESS_CLIENT_ID`・`CF_ACCESS_CLIENT_SECRET`。`manifest.json` の `user_config` から渡します。**Why `https://` だけか**: サービストークンのヘッダーを、平文で送らないためです。
+- **対象の回の指し方**: `update_event`・`delete_event` の `seriesId`・`occurrenceDate` は、`list_events` が返す回（`occurrenceSchema`）の同じ名前の項目です。`seriesId` が API の `:id` になります。
+- **`create_event` の省略**: 場所・URL・メモ・繰り返し（`rrule`）は空、`allDay` は `false`。通知は、要件 NT-2〜4 の初期値（予定は ON、タイムブロックは OFF。時間指定は 10 分前、終日は `-360`）です。**Why**: Claude に、毎回 14 項目をすべて渡させないためです。
+- **送り直し**: 通信の失敗に加えて、5xx も、同じ依頼で 1 回だけ送り直します（端末の扱い、[6.2](#62-送る端末--サーバー)と同じ）。読み取り（`GET`）は送り直しません。**Why**: 読み取りは、やり直しても結果が変わらず、Claude がもう一度呼べるからです。
+- **`fetch` は転送を追いません**（`redirect: 'manual'`）。Access が断るとログイン画面へ転送され、追うと、トークンのヘッダーを転送先へ送り、認証の失敗が 200 の HTML に見えるためです。
+- `list_events` は、区切りをまたぐ予定を 1 回だけ返します（`entryId` と `occurrenceDate` が同じ回は 1 つ）。`from` が `to` より後なら、API と同じく空を返します。
 
 ---
 
