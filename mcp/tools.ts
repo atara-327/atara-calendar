@@ -181,10 +181,17 @@ export function createTools({ api, newId, nextEditedAt }: ToolDeps) {
     if (Object.keys(input.changes).length === 0) {
       return failed('変える項目がありません。changes に、変える項目を書いてください');
     }
+    // 終日かどうかを変えると、通知の分の意味が変わる（時間指定は開始の何分前か、終日は 0:00 からの分）ので、
+    // 分を書かないときは、変更後の初期値にする（画面の setAllDay と同じ）。
+    const { allDay } = input.changes;
+    const changes =
+      allDay === undefined || input.changes.notifyOffsetMin !== undefined
+        ? input.changes
+        : { ...input.changes, notifyOffsetMin: defaultNotify('event', allDay).notifyOffsetMin };
     const body = patchEntryRequestSchema.safeParse({
       occurrenceDate: input.occurrenceDate,
       scope: input.scope,
-      changes: input.changes,
+      changes,
       newId: newId(),
       editedAt: nextEditedAt(),
     });
