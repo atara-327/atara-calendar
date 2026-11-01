@@ -26,7 +26,9 @@ export type ApiFailure =
   | { kind: 'server'; status: number }
   /** Access に断られた（401・403・ログイン画面への転送）。 */
   | { kind: 'auth'; status: number }
-  | { kind: 'client'; status: number; error: ApiErrorKind | null };
+  | { kind: 'client'; status: number; error: ApiErrorKind | null }
+  /** 200 だが、応答の形が想定と違う。書き込みなら、反映されたかどうかは分からない。 */
+  | { kind: 'unreadable' };
 
 export type ApiResult = { ok: true; body: unknown } | { ok: false; failure: ApiFailure };
 
@@ -80,6 +82,8 @@ export async function callApi(
 
   env.log(`${method} ${path}: HTTP ${String(response.status)}`);
   if (kind === 'server' || kind === 'auth') {
+    // 本文は読まないので、接続を解放するために捨てる。
+    void response.body?.cancel();
     return { ok: false, failure: { kind, status: response.status } };
   }
   const parsed = apiErrorBodySchema.safeParse(await response.json().catch(() => null));
@@ -123,7 +127,7 @@ export async function sendWrite(
       if (!parsed.success) {
         // 200 なのに形が違う。反映されたか分からないので、送り直さず、失敗として返す。
         env.log(`${method} ${path}: 応答の形が想定と違います`);
-        return { kind: 'failed', failure: { kind: 'server', status: 200 }, retried };
+        return { kind: 'failed', failure: { kind: 'unreadable' }, retried };
       }
       return parsed.data.applied
         ? { kind: 'applied' }

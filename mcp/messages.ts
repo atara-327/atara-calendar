@@ -37,6 +37,8 @@ export function describeFailure(failure: ApiFailure): string {
       return `サーバーが応答できませんでした（HTTP ${String(failure.status)}）。しばらくしてから、もう一度試してください`;
     case 'auth':
       return AUTH_MESSAGE;
+    case 'unreadable':
+      return 'サーバーの応答を読めませんでした';
     case 'client':
       return failure.error === null
         ? `リクエストが受け付けられませんでした（HTTP ${String(failure.status)}）`
@@ -44,8 +46,11 @@ export function describeFailure(failure: ApiFailure): string {
   }
 }
 
-const TRANSPORT_UNCERTAIN =
-  '通信に失敗しました（1 回送り直しました）。反映されたかどうか分かりません。list_events で確かめてから、必要ならもう一度依頼してください';
+const CHECK_WITH_LIST_EVENTS = 'list_events で確かめてから、必要ならもう一度依頼してください';
+
+const TRANSPORT_UNCERTAIN = `通信に失敗しました（1 回送り直しました）。反映されたかどうか分かりません。${CHECK_WITH_LIST_EVENTS}`;
+
+const UNREADABLE_UNCERTAIN = `サーバーの応答を読めませんでした。反映されたかどうか分かりません。${CHECK_WITH_LIST_EVENTS}`;
 
 /**
  * 書き込みの結果を、利用者に伝える文言にする。
@@ -65,13 +70,19 @@ export function describeWrite(outcome: WriteOutcome, done: string): ToolResult {
           ? '反映済みか、ほかの端末の新しい編集があったため、反映しませんでした。list_events で確かめてください'
           : 'ほかの端末の新しい編集があったため、反映しませんでした',
       };
-    case 'failed':
-      if (
-        outcome.retried &&
-        (outcome.failure.kind === 'network' || outcome.failure.kind === 'server')
-      ) {
+    case 'failed': {
+      const { failure, retried } = outcome;
+      if (failure.kind === 'unreadable') return { ok: false, text: UNREADABLE_UNCERTAIN };
+      if (retried && (failure.kind === 'network' || failure.kind === 'server')) {
         return { ok: false, text: TRANSPORT_UNCERTAIN };
       }
-      return { ok: false, text: describeFailure(outcome.failure) };
+      // 送り直したあとの失敗。1 回目が保存されていた（応答だけが失われた）かもしれない。
+      return {
+        ok: false,
+        text: retried
+          ? `${describeFailure(failure)}。1 回目の送信は、反映されたかもしれません。${CHECK_WITH_LIST_EVENTS}`
+          : describeFailure(failure),
+      };
+    }
   }
 }
