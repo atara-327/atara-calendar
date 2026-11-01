@@ -9,6 +9,7 @@ import {
 } from 'jose';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accessAuth, remoteKeyResolver } from './auth';
+import { guardRequests } from './security';
 import { TEST_APP_ORIGIN, unusedDb } from '../../test/helpers/env';
 import type { AppEnv, Bindings } from './env';
 
@@ -311,7 +312,7 @@ describe('Access の JWT の検証（AU-1・NF-2）', () => {
   });
 });
 
-describe('サービストークン（AU-1・NF-2。将来の MCP 用）', () => {
+describe('サービストークン（AU-1・NF-2。MCP 用）', () => {
   const serviceClaims = { common_name: SERVICE_TOKEN_ID };
 
   it('許可する ID を設定していて、common_name が一致すれば 200', async () => {
@@ -597,5 +598,43 @@ describe('公開鍵の取得（remoteKeyResolver）', () => {
     );
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('network down'));
+  });
+});
+
+describe('認証のあとのリクエストの確認（設計書 13.2。本番と同じ順番）', () => {
+  /** index.ts と同じく、認証（accessAuth）が決めた相手を、リクエストの確認（guardRequests）が読む。 */
+  function callGuarded(jwt: string, env: Partial<Bindings> = {}) {
+    const app = new Hono<AppEnv>();
+    app.use(
+      '/api/*',
+      accessAuth({ keyResolver: () => createLocalJWKSet({ keys: [publicJwk] }) }),
+      guardRequests,
+    );
+    app.get('/api/whoami', (c) => c.json(c.var.actor));
+    return app.request(
+      '/api/whoami',
+      { headers: { 'Cf-Access-Jwt-Assertion': jwt } },
+      { ...baseEnv, ...env },
+    );
+  }
+
+  it('MC-1: 許可したサービストークンは、Sec-Fetch-Site がなくても 200', async () => {
+    const res = await callGuarded(await makeJwt({ claims: { common_name: SERVICE_TOKEN_ID } }), {
+      ALLOWED_SERVICE_TOKEN_ID: SERVICE_TOKEN_ID,
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('許可する ID を設定していなければ、サービストークンは 403', async () => {
+    const res = await callGuarded(await makeJwt({ claims: { common_name: SERVICE_TOKEN_ID } }));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('Google でログインした本人は、Sec-Fetch-Site がなければ 403', async () => {
+    const res = await callGuarded(await makeJwt(), { ALLOWED_SERVICE_TOKEN_ID: SERVICE_TOKEN_ID });
+
+    expect(res.status).toBe(403);
   });
 });
