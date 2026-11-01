@@ -68,6 +68,17 @@ describe('MCP のツールの登録（MC-1〜3）', () => {
     expect(schema.properties.color.enum).toEqual(WORKSPACE_COLORS.map(({ name }) => name));
   });
 
+  it('消す・変えるツールは、破壊的でない印を付けない。作るツールは、破壊的でない印を付ける', async () => {
+    const { client } = await connect(() => jsonReply({}));
+    const { tools } = await client.listTools();
+    const hint = (name: string) =>
+      tools.find((tool) => tool.name === name)?.annotations?.destructiveHint;
+    expect(hint('create_event')).toBe(false);
+    expect(hint('create_workspace')).toBe(false);
+    expect(hint('delete_event')).toBe(true);
+    expect(hint('update_event')).not.toBe(false);
+  });
+
   it('入力が合わなければ、API を呼ばずに、エラーで返す', async () => {
     const { client, requests } = await connect(() => jsonReply({}));
     const result = await client.callTool({

@@ -21,7 +21,8 @@ async function main(): Promise<void> {
       baseUrl: config.baseUrl,
       clientId: config.clientId,
       clientSecret: config.clientSecret,
-      timeoutMs: 30_000,
+      // 送り直し（最大 2 回）を含めて 40 秒。Claude Desktop のツール呼び出しの既定の待ち時間（60 秒）より先に返す。
+      timeoutMs: 20_000,
       log,
     },
     newId: () => randomUUID(),

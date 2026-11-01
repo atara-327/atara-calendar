@@ -58,6 +58,7 @@ export function createServer(tools: Tools): McpServer {
         '日付は日本時間の YYYY-MM-DD、時刻は日本時間の HH:MM（分は 00・15・30・45）。' +
         '予定はワークスペースが必要（list_workspaces で調べる）。',
       inputSchema: createEventInputSchema,
+      annotations: { destructiveHint: false },
     },
     async (input) => toCallToolResult(await tools.createEvent(input)),
   );
@@ -71,7 +72,6 @@ export function createServer(tools: Tools): McpServer {
         '繰り返す予定は、scope で範囲を選ぶ: this（この回のみ）・following（この回以降すべて）・all（すべての回）。' +
         '日付は日本時間の YYYY-MM-DD、時刻は日本時間の HH:MM。',
       inputSchema: updateEventInputSchema,
-      annotations: { destructiveHint: false, idempotentHint: false },
     },
     async (input) => toCallToolResult(await tools.updateEvent(input)),
   );
@@ -97,6 +97,7 @@ export function createServer(tools: Tools): McpServer {
         'ワークスペースを作る。名前・色の変更と削除は、このツールではできない（画面でやる）。' +
         '色は名前で選ぶ（省略すると、まだ使っていない色の先頭）。',
       inputSchema: createWorkspaceInputSchema,
+      annotations: { destructiveHint: false },
     },
     async (input) => toCallToolResult(await tools.createWorkspace(input)),
   );

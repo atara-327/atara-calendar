@@ -360,6 +360,39 @@ describe('書き込みのヘッダーと本文（MC-2・MC-4）', () => {
     expect(result).toEqual({ ok: true, text: '変更しました（範囲: これ以降すべて）' });
   });
 
+  it('update_event: 終日かどうかを変えて、通知の分を書かなければ、変更後の初期値の分を補う', async () => {
+    const { tools, requests } = setup(() => APPLIED());
+    const target = { seriesId: 's', occurrenceDate: '2026-10-19', scope: 'all' } as const;
+    await tools.updateEvent({
+      ...target,
+      changes: { allDay: true, startTime: null, endTime: null },
+    });
+    await tools.updateEvent({
+      ...target,
+      changes: { allDay: false, startTime: '09:00', endTime: '10:00' },
+    });
+    const changes = requests.map(
+      ({ body }) => (body as { changes: Record<string, unknown> }).changes,
+    );
+    expect(changes[0]).toMatchObject({ allDay: true, notifyOffsetMin: -360 });
+    expect(changes[1]).toMatchObject({ allDay: false, notifyOffsetMin: 10 });
+  });
+
+  it('update_event: 通知の分を書いていれば、その値のまま送る。終日を変えなければ、補わない', async () => {
+    const { tools, requests } = setup(() => APPLIED());
+    const target = { seriesId: 's', occurrenceDate: '2026-10-19', scope: 'all' } as const;
+    await tools.updateEvent({
+      ...target,
+      changes: { allDay: true, startTime: null, endTime: null, notifyOffsetMin: -120 },
+    });
+    await tools.updateEvent({ ...target, changes: { title: 'a' } });
+    const changes = requests.map(
+      ({ body }) => (body as { changes: Record<string, unknown> }).changes,
+    );
+    expect(changes[0]).toMatchObject({ notifyOffsetMin: -120 });
+    expect(changes[1]).toEqual({ title: 'a' });
+  });
+
   it('update_event: 変える項目がなければ、送らずに断る', async () => {
     const { tools, requests } = setup(() => APPLIED());
     const result = await tools.updateEvent({
@@ -493,6 +526,31 @@ describe('通信の失敗と送り直し（MC-2）', () => {
       ok: false,
       text: '対象の予定（またはワークスペース）が見つかりません',
     });
+  });
+
+  it('送り直したあとの 2 回目が、認証の失敗や 4xx でも、1 回目は反映されたかもしれないと伝える', async () => {
+    for (const second of [
+      new Response('denied', { status: 403 }),
+      jsonReply({ error: 'conflict', message: 'x' }, 409),
+    ]) {
+      const { tools, requests } = setup((_, index) =>
+        index === 0 ? NETWORK_ERROR() : second.clone(),
+      );
+      const result = await tools.createEvent(create);
+      expect(requests).toHaveLength(2);
+      expect(result.ok).toBe(false);
+      expect(result.text).toContain('反映されたかもしれません');
+      expect(result.text).toContain('list_events で確かめて');
+    }
+  });
+
+  it('200 なのに応答の形が違うときは、送り直さず、反映されたか分からないと伝える', async () => {
+    const { tools, requests } = setup(() => jsonReply({ hello: 'world' }));
+    const result = await tools.createEvent(create);
+    expect(requests).toHaveLength(1);
+    expect(result.ok).toBe(false);
+    expect(result.text).toContain('反映されたかどうか分かりません');
+    expect(result.text).toContain('list_events で確かめて');
   });
 
   const clientErrors: [ApiErrorKind, number, string][] = [
