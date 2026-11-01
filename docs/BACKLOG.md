@@ -4,18 +4,7 @@
 
 ## Claude 連携（MCP サーバー）
 
-- 出典: 1次ヒアリング I3、2次ヒアリング M1〜M3
-- 優先度: W（本体ができてから追加）
-- 内容:
-  - Claude から予定の確認・追加・編集・削除・サマリができる MCP サーバーを作る
-  - 使う Claude: Claude Code / Claude Desktop（PC）。ローカルで動く MCP サーバーを想定
-  - 許可する操作: 確認・サマリ・追加・編集・削除のすべて
-  - 参考: Googleカレンダーの MCP（ツールの分け方・引数の設計）
-  - 認証: Cloudflare Access のサービストークン（`CF-Access-Client-Id` / `CF-Access-Client-Secret` ヘッダー）で API を呼ぶ（3次ヒアリング K2）
-  - MCP（サービストークン）から API を呼ぶときは `Sec-Fetch-Site` が付かないので、そのときの扱いを決める（今の API は same-origin だけを通す。[設計書 10.3](design/design.md#103-その他の対策)）
-- 移行: MCP ができたら、今の Googleカレンダーの予定を Claude に移してもらう（Googleカレンダーの MCP で読み、こちらの MCP で書き込む）（3次ヒアリング E14）
-- MVP の時点で気をつけること:
-  - 後から MCP サーバーを付けやすいように、データの読み書きは API として整理しておく
+進行中（2026-11-01 から）。要件は[要件定義書 5.12](requirements/requirements.md#512-claude-連携mcp)、作り方は[設計書 13章](design/design.md#13-claude-連携mcp)。
 
 ## あったら嬉しい（W）機能
 
