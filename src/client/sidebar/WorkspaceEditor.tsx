@@ -8,7 +8,7 @@ import { unavailableMessage } from '../form/messages';
 import { UndoNotices, showDeletedNotice } from '../form/UndoNotices';
 import { getSyncEngine, useSyncState } from '../sync/instance';
 import type { SyncState } from '../sync/state';
-import { isSameColor } from '../workspaceColors';
+import { isSameColor } from '../../shared/workspaceColors';
 import { closeSidebar } from './instance';
 import styles from './WorkspaceEditor.module.css';
 import {

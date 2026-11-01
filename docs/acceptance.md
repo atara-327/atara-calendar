@@ -345,7 +345,7 @@
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
 | [WS-1](requirements/requirements.md#56-ワークスペース) | `src/worker/api/workspaces.test.ts`・`src/shared/workspace.test.ts`・`src/client/sidebar/workspace.integration.test.ts`。編集の操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（実機の分が残る） |
-| [WS-2](requirements/requirements.md#56-ワークスペース) | 8 色: `src/client/workspaceColors.test.ts`。予定がその色を持つ: `src/client/month/weekViewCache.test.ts`・`src/client/day/dayItems.test.ts`。ブラウザ: その色で出る。**ブラウザ（2026-10-29）**: 8 色すべてで、月表示・日表示の色が、ワークスペースの色と一致する | 済（自動テスト・ブラウザ。2026-10-29） |
+| [WS-2](requirements/requirements.md#56-ワークスペース) | 8 色: `src/shared/workspaceColors.test.ts`。予定がその色を持つ: `src/client/month/weekViewCache.test.ts`・`src/client/day/dayItems.test.ts`。ブラウザ: その色で出る。**ブラウザ（2026-10-29）**: 8 色すべてで、月表示・日表示の色が、ワークスペースの色と一致する | 済（自動テスト・ブラウザ。2026-10-29） |
 | [WS-3](requirements/requirements.md#56-ワークスペース) | `src/client/workspaceDisplay.test.ts`・`src/client/sidebar/workspace.integration.test.ts`（表示の ON/OFF）。チェックボックスの操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（実機の分が残る） |
 | [WS-4](requirements/requirements.md#56-ワークスペース) | `src/worker/db/migration.test.ts`（固定の id）、`src/worker/api/workspaces.test.ts`（WS-4。名前・色・削除の保護）、`src/client/sidebar/workspaceList.test.ts`（別の節）。チェックボックスの操作: 実機（[2.7](#27-サイドメニューとワークスペースの編集)） | 未（実機の分が残る） |
 

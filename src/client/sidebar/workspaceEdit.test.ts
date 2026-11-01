@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import { INPUT_LIMITS } from '../../shared/schema';
-import { WORKSPACE_COLORS, type WorkspaceColor } from '../workspaceColors';
+import { WORKSPACE_COLORS, type WorkspaceColor } from '../../shared/workspaceColors';
 import {
   CURRENT_COLOR_NAME,
   colorSwatches,

@@ -1,10 +1,10 @@
 // ワークスペースの色の 8 色（設計書 11.1）。Google カレンダーの 8 色を、暗い背景向けに明るくした色。
 // 値は、ユーザーが、月表示のマスでの見本（3 案）を見て選んだ（ユーザーの回答。実装 #7 の確認 Q1）。
-// 画面の色の選択（ワークスペースの編集）だけが使う。サーバー（API）は、これまでどおり '#RRGGBB' の形だけを
-// 確かめる（shared/schema.ts）。
-// Why 8 色を shared に置かないのか: サーバーで 8 色に絞ると、組み込みの「祝日」「記念日」が持つ、8 色以外の色に
-// 例外が要る。API はユーザー専用なので、サーバーで絞る必要が小さい。
-// サーバーで絞らないと決めたのは、ユーザーの回答（推奨どおり。実装 #10 の確認 Q4）。上の理由は、推奨案のもの。
+// 8 色に絞るのは、画面の色の選択と、MCP の create_workspace（色を名前で選ぶ。設計書 13.3）。
+// サーバー（API）は、これまでどおり '#RRGGBB' の形だけを確かめる（shared/schema.ts）。
+// Why not サーバーで 8 色に絞る: 組み込みの「祝日」「記念日」が持つ、8 色以外の色に例外が要る。API はユーザー専用なので、
+// サーバーで絞る必要が小さい。サーバーで絞らないと決めたのは、ユーザーの回答（推奨どおり。実装 #10 の確認 Q4）。
+// 上の理由は、推奨案のもの。
 
 export interface WorkspaceColor {
   /** 色の見本の、読み上げの名前。 */
@@ -31,4 +31,15 @@ export const WORKSPACE_COLORS: readonly [WorkspaceColor, ...WorkspaceColor[]] = 
  */
 export function isSameColor(a: string, b: string): boolean {
   return a.toUpperCase() === b.toUpperCase();
+}
+
+/**
+ * まだ使っていない、最初の 8 色の値。全部使っていれば、最初の色（トマト）。
+ * 画面の新しいワークスペースの初期値と、MCP の create_workspace の色の省略が、同じ決め方をするために shared に置く。
+ */
+export function firstUnusedColor(usedColors: readonly string[]): string {
+  const unused = WORKSPACE_COLORS.find(
+    ({ value }) => !usedColors.some((color) => isSameColor(color, value)),
+  );
+  return (unused ?? WORKSPACE_COLORS[0]).value;
 }

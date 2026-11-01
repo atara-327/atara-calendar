@@ -5,7 +5,7 @@ import { makeDraft } from '../../../test/helpers/entries';
 import { readAllRows } from '../../../test/helpers/rows';
 import type { Workspace } from '../../shared/schema';
 import { DELETE_UNDO_MS } from '../sync/engine';
-import { WORKSPACE_COLORS } from '../workspaceColors';
+import { WORKSPACE_COLORS } from '../../shared/workspaceColors';
 import { workspaceDisplayOf } from '../workspaceDisplay';
 import {
   countEntriesIn,
