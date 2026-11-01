@@ -1,10 +1,23 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
+import type { Actor, AppEnv } from './env';
 import { apiSecurityHeaders, guardRequests } from './security';
 
-function buildApp() {
-  const app = new Hono();
-  app.use('/api/*', apiSecurityHeaders, guardRequests);
+const user: Actor = { kind: 'user', email: 'me@example.com' };
+const service: Actor = { kind: 'service' };
+
+/** 認証（accessAuth）の代わりに、入ってきた相手を決めて渡す。 */
+function buildApp(actor: Actor = user) {
+  const app = new Hono<AppEnv>();
+  app.use(
+    '/api/*',
+    apiSecurityHeaders,
+    async (c, next) => {
+      c.set('actor', actor);
+      await next();
+    },
+    guardRequests,
+  );
   app.all('/api/echo', (c) => c.json({ ok: true }));
   return app;
 }
@@ -109,6 +122,39 @@ describe('他のサイトからのリクエストの拒否（NF-2。設計書 10
         method: 'POST',
         headers: { 'Sec-Fetch-Site': 'cross-site', 'Content-Type': 'text/plain' },
         body: 'x',
+      });
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('サービストークン（MCP。設計書 13.2）', () => {
+    it.each(allMethods.filter((m) => m !== 'OPTIONS'))(
+      'Sec-Fetch-Site がなくても、%s を通す',
+      async (method) => {
+        const res = await buildApp(service).request('/api/echo', {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          ...(readMethods.includes(method) ? {} : { body: json({}) }),
+        });
+
+        expect(res.status).toBe(200);
+      },
+    );
+
+    it('JSON でない書き込みは、415', async () => {
+      const res = await buildApp(service).request('/api/echo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'x',
+      });
+
+      expect(res.status).toBe(415);
+    });
+
+    it('Google でログインした相手は、Sec-Fetch-Site がなければ 403 のまま', async () => {
+      const res = await buildApp(user).request('/api/echo', {
+        headers: { 'Content-Type': 'application/json' },
       });
 
       expect(res.status).toBe(403);
