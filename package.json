@@ -7,7 +7,9 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:mcp",
+    "build:mcp": "node scripts/build-mcp.mjs",
+    "pack:mcpb": "npm run build:mcp && node scripts/pack-mcpb.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "eslint .",
