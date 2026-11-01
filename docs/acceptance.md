@@ -268,7 +268,7 @@
 
 ## 4. 要件ごとの確認
 
-要件定義書の全要件（71 件）です。「ブラウザ（2026-10-29）」の確認は、implementer が手元の開発サーバー（ローカルの D1。main の 784685c と同じコード）を Chromium で操作してスクリーンショットを撮り、メインセッションがそれを見て判断しました。要件の文は、ID のリンク先にあります。ここには、確かめ方と結果だけを書きます。テストのファイルは、リポジトリの根からのパスです。「ブラウザ」は、メインセッションが Chromium で見るもの、「実機」は、ユーザーが確かめるもの（2章）です。
+要件定義書の要件（71 件）です。5.12 の Claude 連携（MC-1〜5）は、リリース後の機能なので、[4.14](#414-claude-連携mc) に分けて書きます。「ブラウザ（2026-10-29）」の確認は、implementer が手元の開発サーバー（ローカルの D1。main の 784685c と同じコード）を Chromium で操作してスクリーンショットを撮り、メインセッションがそれを見て判断しました。要件の文は、ID のリンク先にあります。ここには、確かめ方と結果だけを書きます。テストのファイルは、リポジトリの根からのパスです。「ブラウザ」は、メインセッションが Chromium で見るもの、「実機」は、ユーザーが確かめるもの（2章）です。
 
 ### 4.1 利用環境（ENV）
 
@@ -405,6 +405,16 @@
 | [NF-5](requirements/requirements.md#6-非機能要件) | `src/worker/api/changes.test.ts`・`entries.test.ts`・`workspaces.test.ts`・`occurrences.test.ts`・`errors.test.ts`（NF-5） | 済（自動テスト） |
 | [NF-6](requirements/requirements.md#6-非機能要件) | 実機（[2.2](#22-月表示のスクロール)） | 未 |
 | [NF-7](requirements/requirements.md#6-非機能要件) | 絵文字の判定: `src/client/emoji/splitEmoji.test.ts`。画像のキャッシュ: `src/worker/staticHeaders.test.ts`（NF-7）。フォント・画像の見た目: ブラウザ（実機は不要。[2.4](#24-絵文字)）。**ブラウザ（2026-10-29）**: 絵文字（ZWJ の組み合わせ・肌の色・キーキャップを含む）は画像で出て、欠け・崩れがない。国旗は端末の文字（国旗の画像がないため。設計書 11.1 の「できないこと」のとおりで、ユーザーに説明し、了承された（7b の確認））。文字は Noto Sans JP | 済（自動テスト・ブラウザ。2026-10-29） |
+
+### 4.14 Claude 連携（MC）
+
+| ID | 確かめ方 | 結果 |
+| --- | --- | --- |
+| [MC-1](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（list_events・list_workspaces。31 日ずつの区切り・366 日の上限・ワークスペースの名前）・`mcp/server.test.ts` | 対象外（リリース（v1.0）の条件に入れない。リリース前に並行して作ったリリース後の機能のため。Claude Desktop に入れたあと、ユーザーが試す） |
+| [MC-2](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（create_event・update_event・delete_event。editedAt・送り直し・stale・not_found・4xx の文言）・`mcp/editedAtClock.test.ts` | 同上 |
+| [MC-3](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（list_workspaces・create_workspace。色の名前・省略したときの色と sortOrder）・`src/shared/workspaceColors.test.ts` | 同上 |
+| [MC-4](requirements/requirements.md#512-claude-連携mcp) | `mcp/config.test.ts`（設定）。`npm run pack:mcpb` で `.mcpb` を作れること（manifest の検証が通る）。Claude Desktop に入れて、設定画面でサービストークンを入れる操作は、ユーザーが試す | 同上 |
+| [MC-5](requirements/requirements.md#512-claude-連携mcp) | Google カレンダーの MCP で読み、こちらの MCP で書き込む。コードはなく（Claude が 2 つの MCP を使う）、ユーザーが試す | 同上 |
 
 ## 5. 見つかった問題
 
