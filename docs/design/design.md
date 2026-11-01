@@ -1169,7 +1169,7 @@ Claude Desktop ──(標準入出力)── MCP サーバー（PC の上で動�
 - **ビルド**: `npm run build:mcp` が、`mcp/index.ts` を、依存を含めた 1 つの JS ファイル（`mcp/dist/index.js`）にまとめます。`npm run pack:mcpb` が、それと `mcp/manifest.json` から `mcp/dist/atara-calendar.mcpb` を作ります。`npm run build` にも `build:mcp` が入ります。**Why**: MCP のビルドが壊れたことに、CI で気づくためです。`dist` と `.mcpb` はコミットしません。
 - **設定**: 環境変数 `ATARA_CALENDAR_BASE_URL`（`https://` のみ）・`CF_ACCESS_CLIENT_ID`・`CF_ACCESS_CLIENT_SECRET`。`manifest.json` の `user_config` から渡します。**Why `https://` だけか**: サービストークンのヘッダーを、平文で送らないためです。
 - **対象の回の指し方**: `update_event`・`delete_event` の `seriesId`・`occurrenceDate` は、`list_events` が返す回（`occurrenceSchema`）の同じ名前の項目です。`seriesId` が API の `:id` になります。
-- **`create_event` の省略**: 場所・URL・メモ・繰り返し（`rrule`）は空、`allDay` は `false`。通知は、要件 NT-2〜4 の初期値（予定は ON、タイムブロックは OFF。時間指定は 10 分前、終日は `-360`）です。**Why**: Claude に、毎回 14 項目をすべて渡させないためです。
+- **`create_event` の省略**: 場所・URL・メモ・繰り返し（`rrule`）は空、`allDay` は `false`。通知は、要件 NT-2〜4 の初期値（予定は ON、タイムブロックは OFF。時間指定は 10 分前、終日は `-360`）です。この値（`notifyDefaults.ts`）と、「選べるワークスペース」の条件（`selectableWorkspaces`）は、画面と共有するので `src/shared/` に置きます（3章の決まり）。**Why**: Claude に、毎回 14 項目をすべて渡させないためです。
 - **送り直し**: 通信の失敗に加えて、5xx も、同じ依頼で 1 回だけ送り直します（端末の扱い、[6.2](#62-送る端末--サーバー)と同じ）。読み取り（`GET`）は送り直しません。**Why**: 読み取りは、やり直しても結果が変わらず、Claude がもう一度呼べるからです。
 - **`fetch` は転送を追いません**（`redirect: 'manual'`）。Access が断るとログイン画面へ転送され、追うと、トークンのヘッダーを転送先へ送り、認証の失敗が 200 の HTML に見えるためです。
 - `list_events` は、区切りをまたぐ予定を 1 回だけ返します（`entryId` と `occurrenceDate` が同じ回は 1 つ）。`from` が `to` より後なら、API と同じく空を返します。

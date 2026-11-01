@@ -1,19 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { INPUT_LIMITS } from '../../shared/schema';
-import {
-  DEFAULT_ALL_DAY_NOTIFY_MIN,
-  DEFAULT_TIMED_NOTIFY_MIN,
-  TIMED_NOTIFY_RANGE,
-  describeAllDayNotify,
-  parseNotifyOffset,
-} from './notify';
-
-describe('通知の初期値（NT-2・NT-3）', () => {
-  it('時間指定は 10 分前、終日は当日の朝 6 時（開始の 0:00 から 360 分後 = -360）', () => {
-    expect(DEFAULT_TIMED_NOTIFY_MIN).toBe(10);
-    expect(DEFAULT_ALL_DAY_NOTIFY_MIN).toBe(-360);
-  });
-});
+import { DEFAULT_ALL_DAY_NOTIFY_MIN } from '../../shared/notifyDefaults';
+import { TIMED_NOTIFY_RANGE, describeAllDayNotify, parseNotifyOffset } from './notify';
 
 describe('時間指定の「何分前」の入力欄', () => {
   it('入力できる範囲は、0（開始時刻）から、サーバーの入力の検証の上限（10080 分）まで', () => {

@@ -9,9 +9,11 @@ import {
 } from '../src/shared/api';
 import { addDays, dateToDays, type DateStr } from '../src/shared/date';
 import { entryProblem } from '../src/shared/entryRules';
+import { defaultNotify } from '../src/shared/notifyDefaults';
 import type { Occurrence } from '../src/shared/recurrence';
 import type { EntryDraft, Scope } from '../src/shared/schema';
 import { structuralWorkspaceSchema } from '../src/shared/structure';
+import { selectableWorkspaces } from '../src/shared/workspace';
 import { WORKSPACE_COLORS, firstUnusedColor, isSameColor } from '../src/shared/workspaceColors';
 import { callApi, sendWrite, type ApiEnv, type ApiFailure } from './apiClient';
 import { describeFailure, describeWrite, type ToolResult } from './messages';
@@ -35,11 +37,6 @@ export interface ToolDeps {
   /** 書き込みの editedAt。editedAtClock.ts。 */
   nextEditedAt: () => number;
 }
-
-// 通知の初期値（要件 NT-2〜4）。画面のフォーム（client/form/notify.ts・values.ts）と同じ値。
-// shared に出さないのは、フォームの定数を移すと、画面側の import を直す範囲が、この PR の目的から外れるため。
-const DEFAULT_TIMED_NOTIFY_MIN = 10;
-const DEFAULT_ALL_DAY_NOTIFY_MIN = -360;
 
 const SCOPE_LABELS: Record<Scope, string> = {
   this: 'この予定のみ',
@@ -93,18 +90,11 @@ export function createTools({ api, newId, nextEditedAt }: ToolDeps) {
     };
   }
 
-  /** 予定を入れられる、利用者のワークスペース。並び順（sortOrder。同じなら id）。 */
-  function userWorkspaces(rows: readonly WorkspaceRow[]): WorkspaceRow[] {
-    return rows
-      .filter(({ builtin }) => builtin === null)
-      .sort((a, b) => a.sortOrder - b.sortOrder || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  }
-
   async function listWorkspaces(): Promise<ToolResult> {
     const loaded = await loadWorkspaces();
     if (!loaded.ok) return loaded.result;
     return json({
-      workspaces: userWorkspaces(loaded.value).map(({ id, name, color }) => ({
+      workspaces: selectableWorkspaces(loaded.value).map(({ id, name, color }) => ({
         id,
         name,
         color,
@@ -158,6 +148,7 @@ export function createTools({ api, newId, nextEditedAt }: ToolDeps) {
 
   async function createEvent(input: CreateEventInput): Promise<ToolResult> {
     const allDay = input.allDay ?? false;
+    const notifyDefaults = defaultNotify(input.kind, allDay);
     const draft: EntryDraft = {
       kind: input.kind,
       title: input.title,
@@ -171,9 +162,8 @@ export function createTools({ api, newId, nextEditedAt }: ToolDeps) {
       url: input.url ?? null,
       memo: input.memo ?? null,
       rrule: input.rrule ?? null,
-      notifyEnabled: input.notifyEnabled ?? input.kind === 'event',
-      notifyOffsetMin:
-        input.notifyOffsetMin ?? (allDay ? DEFAULT_ALL_DAY_NOTIFY_MIN : DEFAULT_TIMED_NOTIFY_MIN),
+      notifyEnabled: input.notifyEnabled ?? notifyDefaults.notifyEnabled,
+      notifyOffsetMin: input.notifyOffsetMin ?? notifyDefaults.notifyOffsetMin,
     };
     const problem = entryProblem({ ...draft, untilDate: null });
     if (problem !== null) return failed(`入力が正しくありません: ${problem}`);
@@ -222,9 +212,9 @@ export function createTools({ api, newId, nextEditedAt }: ToolDeps) {
     if (name === '') return failed('名前を入れてください');
     const loaded = await loadWorkspaces();
     if (!loaded.ok) return loaded.result;
-    const mine = userWorkspaces(loaded.value);
+    const mine = selectableWorkspaces(loaded.value);
 
-    // 色の選び方と sortOrder は、画面の新しいワークスペース（client/sidebar/workspaceEdit.ts の newWorkspaceInput）と同じ。
+    // 色の選び方（firstUnusedColor）と sortOrder は、画面の新しいワークスペース（client/sidebar/workspaceEdit.ts の newWorkspaceInput）と同じ。
     const color =
       input.color === undefined
         ? firstUnusedColor(mine.map((workspace) => workspace.color))
