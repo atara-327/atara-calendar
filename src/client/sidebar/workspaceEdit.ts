@@ -1,5 +1,5 @@
 import { INPUT_LIMITS, type Entry, type Workspace } from '../../shared/schema';
-import { selectableWorkspaces } from '../form/workspaceChoices';
+import { selectableWorkspaces } from '../../shared/workspace';
 import {
   WORKSPACE_COLORS,
   firstUnusedColor,

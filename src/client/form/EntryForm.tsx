@@ -15,7 +15,9 @@ import {
   type Scope,
   type Workspace,
 } from '../../shared/schema';
+import { DEFAULT_ALL_DAY_NOTIFY_MIN } from '../../shared/notifyDefaults';
 import { MAX_YEAR, MIN_YEAR } from '../../shared/solarTerms';
+import { selectableWorkspaces } from '../../shared/workspace';
 import { useBackdropClose } from '../backdropClose';
 import { classNames } from '../classNames';
 import { getSyncEngine, useSyncState } from '../sync/instance';
@@ -28,12 +30,7 @@ import { closeEntryForm } from './instance';
 import { loadLastWorkspaceId, saveLastWorkspaceId } from './lastWorkspace';
 import { mapSearchUrl, openableUrl } from './links';
 import { scopeChangedMessage, scopeUnavailableMessage, unavailableMessage } from './messages';
-import {
-  DEFAULT_ALL_DAY_NOTIFY_MIN,
-  TIMED_NOTIFY_RANGE,
-  describeAllDayNotify,
-  parseNotifyOffset,
-} from './notify';
+import { TIMED_NOTIFY_RANGE, describeAllDayNotify, parseNotifyOffset } from './notify';
 import { RepeatControls } from './RepeatControls';
 import {
   describeFirstOccurrence,
@@ -61,7 +58,7 @@ import {
   type EntryKind,
   type FormValues,
 } from './values';
-import { defaultWorkspaceId, selectableWorkspaces } from './workspaceChoices';
+import { defaultWorkspaceId } from './workspaceChoices';
 
 // 予定・タイムブロックの入力フォーム（設計書 11.4。要件 EV-1〜4・8、TB-1〜6、NT-2〜4、OT-1）。
 // スマホでは下から出るシート、PC では中央のダイアログ。ネイティブの <dialog>（showModal）を使う。

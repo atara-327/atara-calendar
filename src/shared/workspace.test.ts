@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { deepFreeze, makeEntry } from '../../test/helpers/entries';
 import { makeWorkspace } from '../../test/helpers/workspaces';
 import { markCancelled } from './recurrence';
-import { deleteWorkspace, isInLiveWorkspace, liveWorkspaceIds } from './workspace';
+import {
+  deleteWorkspace,
+  isInLiveWorkspace,
+  liveWorkspaceIds,
+  selectableWorkspaces,
+} from './workspace';
 
 const workspace = makeWorkspace({ id: 'w1', editedAt: 1000 });
 
@@ -212,5 +217,46 @@ describe('削除済みのワークスペースの予定を除くための判定'
 
   it('タイムブロック（workspaceId が null）は、ワークスペースに属さないので、常に残す', () => {
     expect(isInLiveWorkspace({ workspaceId: null }, new Set())).toBe(true);
+  });
+});
+
+const work = makeWorkspace({ id: 'work', name: '仕事', sortOrder: 1 });
+const hobby = makeWorkspace({ id: 'hobby', name: '趣味', sortOrder: 2 });
+const holidays = makeWorkspace({ id: 'builtin-holiday', builtin: 'holiday', sortOrder: 1000 });
+const observances = makeWorkspace({
+  id: 'builtin-observance',
+  builtin: 'observance',
+  sortOrder: 1001,
+});
+
+describe('予定に選べるワークスペース', () => {
+  it('組み込みの「祝日」「記念日」は含めない（予定を入れられない。WS-4）', () => {
+    expect(selectableWorkspaces([holidays, work, observances]).map(({ id }) => id)).toEqual([
+      'work',
+    ]);
+  });
+
+  it('削除されたものは含めない', () => {
+    const deleted = makeWorkspace({ id: 'old', deletedAt: 5000 });
+
+    expect(selectableWorkspaces([work, deleted]).map(({ id }) => id)).toEqual(['work']);
+  });
+
+  it('並び順（sortOrder）で並べる。同じなら id の順', () => {
+    const second = makeWorkspace({ id: 'b', sortOrder: 5 });
+    const first = makeWorkspace({ id: 'a', sortOrder: 5 });
+
+    expect(selectableWorkspaces([hobby, second, work, first]).map(({ id }) => id)).toEqual([
+      'work',
+      'hobby',
+      'a',
+      'b',
+    ]);
+  });
+
+  it('表示が OFF のワークスペースも含める（OFF でも、予定は入れられる）', () => {
+    const hidden = makeWorkspace({ id: 'hidden', visible: false });
+
+    expect(selectableWorkspaces([hidden]).map(({ id }) => id)).toEqual(['hidden']);
   });
 });

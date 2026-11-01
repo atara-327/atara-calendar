@@ -1,5 +1,5 @@
 import type { Workspace } from '../../shared/schema';
-import { selectableWorkspaces } from '../form/workspaceChoices';
+import { selectableWorkspaces } from '../../shared/workspace';
 
 // サイドメニューに出すワークスペースの、並べ方（設計書 11.5）。
 
