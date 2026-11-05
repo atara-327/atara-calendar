@@ -10,7 +10,7 @@ import type { StartPoint } from '../form/schedule';
 
 export const MINUTES_PER_DAY = 24 * 60;
 
-/** 1 時間の高さ（px）。15 分刻み（DV-3）の項目でも、題名が 1 行読める高さにするため（設計書 11.3）。 */
+/** 1 時間の高さ（px）。15 分の項目でも、題名が 1 行読める高さにするため（設計書 11.3）。 */
 export const HOUR_HEIGHT = 60;
 
 /** 1 分の高さ（px）。 */
@@ -19,7 +19,7 @@ export const PX_PER_MINUTE = HOUR_HEIGHT / 60;
 /** タイムライン全体の高さ（px）。0:00〜24:00。 */
 export const DAY_HEIGHT = MINUTES_PER_DAY * PX_PER_MINUTE;
 
-/** 項目の最小の高さ（px）。時刻は 15 分刻みで、終了は開始より後なので、15 分（15px）以上になる。 */
+/** 項目の最小の高さ（px）。短い項目でも、題名が 1 行読める高さ（15 分ぶん）。 */
 export const MIN_ITEM_HEIGHT = 15 * PX_PER_MINUTE;
 
 /** 2 行目に時刻を出せる、項目の高さ（px）。これより低い項目は、題名の 1 行だけにする。 */

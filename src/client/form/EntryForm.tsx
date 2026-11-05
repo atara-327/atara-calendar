@@ -70,8 +70,8 @@ const DATE_MIN = `${String(MIN_YEAR)}-01-01`;
 const DATE_MAX = `${String(MAX_YEAR)}-12-31`;
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
-// 時刻の「分」は 00・15・30・45 だけ（DV-3）。ブラウザ標準の時刻入力は、iPhone で 15 分刻みが効かない（設計書 11.4）。
-const MINUTES = ['00', '15', '30', '45'];
+// 時刻の「分」は 1 分刻み（DV-3）。時と分の 2 つの選択欄は、前の 15 分刻みのときの形のまま（設計書 11.4）。
+const MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, '0'));
 
 const KINDS: readonly { kind: EntryKind; label: string }[] = [
   { kind: 'event', label: '予定' },

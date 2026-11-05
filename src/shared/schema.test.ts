@@ -54,17 +54,14 @@ describe('日付の文字列', () => {
   );
 });
 
-describe('DV-3: 時刻の文字列は 15 分刻み', () => {
-  it.each(['00:00', '09:15', '12:30', '23:45'])('%s は通る', (value) => {
+describe('DV-3: 時刻の文字列は 1 分刻み', () => {
+  it.each(['00:00', '09:15', '09:10', '12:59', '23:59'])('%s は通る', (value) => {
     expect(timeStringSchema.safeParse(value).success).toBe(true);
   });
 
-  it.each(['09:10', '12:59', '24:00', '9:00', '09:00:00', '12:60', ''])(
-    '%s は通らない',
-    (value) => {
-      expect(timeStringSchema.safeParse(value).success).toBe(false);
-    },
-  );
+  it.each(['24:00', '9:00', '09:00:00', '12:60', '09:5', ''])('%s は通らない', (value) => {
+    expect(timeStringSchema.safeParse(value).success).toBe(false);
+  });
 });
 
 describe('RP-1: 繰り返しのルール', () => {
@@ -116,8 +113,8 @@ describe('予定とタイムブロックの行', () => {
     expect(entrySchema.safeParse({ ...validEntry, startDate: '2026/10/19' }).success).toBe(false);
   });
 
-  it('時刻が 15 分刻みでないと通らない', () => {
-    expect(entrySchema.safeParse({ ...validEntry, startTime: '15:10' }).success).toBe(false);
+  it('時刻の形が違うと通らない', () => {
+    expect(entrySchema.safeParse({ ...validEntry, startTime: '15:60' }).success).toBe(false);
   });
 
   it('列が足りないと通らない', () => {
@@ -226,7 +223,7 @@ describe('RP-4: 変更の中身は、ユーザーが変えた項目だけ', () =
   });
 
   it('項目の値が不正だと通らない', () => {
-    expect(entryChangesSchema.safeParse({ startTime: '10:10' }).success).toBe(false);
+    expect(entryChangesSchema.safeParse({ startTime: '10:60' }).success).toBe(false);
   });
 });
 

@@ -23,6 +23,7 @@ import styles from './DayView.module.css';
 import { layoutDay } from './layout';
 import { createSwipeTracker, isClickAfterSwipe } from './swipe';
 import {
+  MIN_ITEM_HEIGHT,
   PX_PER_MINUTE,
   addButtonStart,
   initialTopMinute,
@@ -66,7 +67,14 @@ export function DayView({ date }: { date: DateStr }) {
     [view, display, date],
   );
   const isHoliday = useMemo(() => isHolidayShown(date, display), [date, display]);
-  const placements = useMemo(() => layoutDay(items.timeline), [items.timeline]);
+  // 短い項目は、描く高さ（MIN_ITEM_HEIGHT）と同じ長さで並べ方を決める。本当の終わりで決めると、
+  // すぐ後の項目と同じ列に並び、伸ばして描いた分が重なって隠れる。
+  const placements = useMemo(() => {
+    const minMinutes = MIN_ITEM_HEIGHT / PX_PER_MINUTE;
+    return layoutDay(
+      items.timeline.map((item) => ({ ...item, end: Math.max(item.end, item.start + minMinutes) })),
+    );
+  }, [items.timeline]);
 
   const previousDate = addDays(date, -1);
   const nextDate = addDays(date, 1);

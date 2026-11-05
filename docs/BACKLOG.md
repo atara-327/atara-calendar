@@ -4,7 +4,7 @@
 
 ## Claude 連携（MCP サーバー）
 
-進行中（2026-11-01 から）。要件は[要件定義書 5.12](requirements/requirements.md#512-claude-連携mcp)、作り方は[設計書 13章](design/design.md#13-claude-連携mcp)。
+一時停止中（2026-11-05。1 分刻みの対応を先にしたため）。MCP サーバー（PR #39）はマージ済み。残りは、ユーザーが Claude Desktop に入れて試すこと（下準備: サービストークン・Access の許可・`ALLOWED_SERVICE_TOKEN_ID`）と、Google カレンダーからの移行（MC-5）。要件は[要件定義書 5.12](requirements/requirements.md#512-claude-連携mcp)、作り方は[設計書 13章](design/design.md#13-claude-連携mcp)。
 
 ## あったら嬉しい（W）機能
 
@@ -33,7 +33,7 @@
 
 実装中に見つかった、MVP の後でよい改善。
 
-- 時刻の 15 分刻みと色の `#RRGGBB` の確認を、書き込み用のスキーマ（`entrySchema`・`workspaceSchema`）から、入力用のスキーマへ移す
+- 色の `#RRGGBB` の確認を、書き込み用のスキーマ（`entrySchema`・`workspaceSchema`）から、入力用のスキーマへ移す
   - 出典: PR #10 のレビュー
   - Why: 入力のルールを書き込み用のスキーマに入れない理由と同じ（[設計書 4.2](design/design.md#42-テーブル定義)）。ルールを変えたときや、手での修正（[設計書 付録 A.3](design/design.md#a3-壊れた行が見つかったとき)）で、書き直せない行ができないようにするため。
   - ルールを厳しくする前に行う。

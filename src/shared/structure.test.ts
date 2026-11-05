@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../test/helpers/entries';
 import { makeWorkspace } from '../../test/helpers/workspaces';
 import { changesResponseSchema, type ChangesResponse } from './api';
-import { entrySchema, workspaceSchema } from './schema';
+import { workspaceSchema } from './schema';
 import {
   structuralChangesResponseSchema,
   structuralEntrySchema,
@@ -67,21 +67,11 @@ describe('structuralEntrySchema（予定の行の構造）', () => {
   // 入力のルールは、読み込みでは確かめない（設計書 6.3）。ルールを後で厳しくしても、すでにある行で、
   // 全端末の受け取りが止まらないようにするため。書き込み用のスキーマが弾く行でも、構造としては読める。
   it.each([
-    {
-      name: '15 分刻みでない時刻',
-      change: { startTime: '09:07', endTime: '10:07', allDay: false },
-    },
     { name: '長いタイトル', change: { title: 'あ'.repeat(5000) } },
     { name: '範囲外の年', change: { startDate: '1850-01-01', endDate: '1850-01-01' } },
     { name: 'http で始まらない URL', change: { url: 'javascript:alert(1)' } },
   ])('$name の行は、構造としては通す（入力のルールは見ない）', ({ change }) => {
     const row = { ...makeEntry({ id: 'e1' }), ...change };
-    expect(structuralEntrySchema.safeParse(row).success).toBe(true);
-  });
-
-  it('入力のルールを含む書き込み用のスキーマが弾く行を、構造だけのスキーマは通す（15 分刻み）', () => {
-    const row = { ...makeEntry({ id: 'e1' }), allDay: false, startTime: '09:07', endTime: '10:07' };
-    expect(entrySchema.safeParse(row).success).toBe(false);
     expect(structuralEntrySchema.safeParse(row).success).toBe(true);
   });
 });

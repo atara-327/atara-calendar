@@ -277,7 +277,7 @@ describe('PUT /api/entries/:id（作成）', () => {
       { name: '開始日の年が 1899', overrides: { startDate: '1899-12-31', endDate: '1899-12-31' } },
       { name: '終了日の年が 2200', overrides: { endDate: '2200-01-01' } },
       { name: '存在しない日付', overrides: { startDate: '2026-02-30', endDate: '2026-02-30' } },
-      { name: '分が 15 分刻みでない', overrides: { startTime: '15:10' } },
+      { name: '時刻の形が違う', overrides: { startTime: '15:60' } },
       { name: '通知が 1441 分後より前（-1441）', overrides: { notifyOffsetMin: -1441 } },
       { name: '通知が 10081 分前', overrides: { notifyOffsetMin: 10_081 } },
       { name: '通知が整数でない', overrides: { notifyOffsetMin: 1.5 } },

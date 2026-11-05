@@ -55,7 +55,7 @@ export function createServer(tools: Tools): McpServer {
     {
       description:
         '予定（kind が event）かタイムブロック（block）を作る。繰り返しも指定できる（rrule）。' +
-        '日付は日本時間の YYYY-MM-DD、時刻は日本時間の HH:MM（分は 00・15・30・45）。' +
+        '日付は日本時間の YYYY-MM-DD、時刻は日本時間の HH:MM（1 分刻み）。' +
         '予定はワークスペースが必要（list_workspaces で調べる）。',
       inputSchema: createEventInputSchema,
       annotations: { destructiveHint: false },

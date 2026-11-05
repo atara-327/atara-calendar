@@ -9,11 +9,11 @@ import { MAX_YEAR, MIN_YEAR } from './solarTerms';
 export const dateStringSchema = z.iso.date();
 
 /**
- * 'HH:MM'（日本時間）。分は 00・15・30・45 だけ（DV-3）。
- * z.iso.time() を使わないのは、15 分刻みに絞れないため。24:00 も通さない（終わりが翌日 0:00 なら、終了日を翌日にして 00:00 と書く）。
+ * 'HH:MM'（日本時間）。分は 1 分刻み（DV-3）。
+ * z.iso.time() を使わないのは、秒を付けた形も通すため。24:00 も通さない（終わりが翌日 0:00 なら、終了日を翌日にして 00:00 と書く）。
  */
-export const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):(00|15|30|45)$/, {
-  message: "時刻は 'HH:MM' で、分は 00・15・30・45 のどれかにしてください",
+export const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, {
+  message: "時刻は 'HH:MM' にしてください",
 });
 
 const weekdayNumberSchema = z.number().int().min(0).max(6);
