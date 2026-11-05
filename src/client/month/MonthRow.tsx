@@ -80,6 +80,8 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
       className={classNames(styles.cell, boundaryClass(cellBoundary(day.date)))}
       aria-label={accessibleName}
       aria-current={isToday ? 'date' : undefined}
+      // Android の Chrome は、リンクの長押しをドラッグにして pointercancel を送り、長押しが成り立たなくなるため。
+      draggable={false}
       onPointerDown={(event) => {
         longPress.start(event.clientX, event.clientY, event.pointerId, event.isPrimary);
       }}
