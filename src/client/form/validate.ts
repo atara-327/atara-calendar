@@ -108,6 +108,8 @@ export function validateForm(
           break;
         case 'startDate':
         case 'endDate':
+        case 'startTime':
+        case 'endTime':
           // validateSchedule が、日本語で、同じ欄に付けている。
           break;
         case 'rrule':
@@ -133,7 +135,9 @@ export function validateForm(
     draft.rrule !== null &&
     original?.recurring !== true &&
     errors.startDate === undefined &&
-    errors.endDate === undefined
+    errors.endDate === undefined &&
+    errors.startTime === undefined &&
+    errors.endTime === undefined
   ) {
     const first = firstOccurrence(values);
     if (
