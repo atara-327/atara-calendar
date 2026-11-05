@@ -127,7 +127,7 @@ export type ReadOutcome =
 
 /**
  * GET /api/changes。応答は、構造だけを見るスキーマで確かめる（shared/structure.ts）。
- * 入力のルール（15 分刻みなど）で弾くと、ルールを後で厳しくしたとき、すでにある行のために、全端末の
+ * 入力のルール（長さ・色の形など）で弾くと、ルールを後で厳しくしたとき、すでにある行のために、全端末の
  * 受け取りが止まる（設計書 6.3）。
  */
 export async function fetchChanges(fetchFn: FetchFn, since: number): Promise<ReadOutcome> {

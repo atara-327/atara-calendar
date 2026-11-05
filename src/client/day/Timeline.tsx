@@ -15,7 +15,7 @@ function percent(ratio: number): string {
 }
 
 function TimelineButton({ item, placement }: { item: TimelineItem; placement: DayPlacement }) {
-  // 時刻は 15 分刻みで、終了は開始より後なので、15px より低くはならない。念のための下限。
+  // 1 分刻みなので、短い項目でも題名が読めるよう、15 分ぶんの高さを下限にする。
   const height = Math.max(MIN_ITEM_HEIGHT, (item.end - item.start) * PX_PER_MINUTE);
   return (
     <button

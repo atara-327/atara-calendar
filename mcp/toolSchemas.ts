@@ -18,7 +18,7 @@ export const MAX_LIST_DAYS = 366;
 const draft = entryDraftInputSchema.shape;
 
 const DATE_NOTE = '日本時間の YYYY-MM-DD';
-const TIME_NOTE = '日本時間の HH:MM（分は 00・15・30・45 のどれか）';
+const TIME_NOTE = '日本時間の HH:MM（1 分刻み）';
 
 export const listEventsInputSchema = z.strictObject({
   from: inputDateSchema.describe(`期間の最初の日（この日を含む）。${DATE_NOTE}`),

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { entryKindSchema, rruleSchema, workspaceSchema } from './schema';
 
 // 行の「構造」だけを確かめるスキーマ。型・必須の項目・日付と時刻の形・rrule の形を見る。
-// 長さ・年の範囲・15 分刻み・色の形のような入力のルールは見ない。
+// 長さ・年の範囲・色の形のような入力のルールは見ない。
 // Why: 入力のルールを後で厳しくしたときに、すでに DB にある行が「壊れた行」になり、全端末の受け取りが
 // 止まるのを防ぐため（設計書 6.3）。入力のルールを確かめるのは、書き込むとき（API と store.ts の applyWrite）。
 // 画面が GET /api/changes の応答を確かめる（実装 #6）のにも、DB から読んだ行の確認（worker/db/rows.ts）にも、
@@ -13,7 +13,7 @@ export const rowIdSchema = z.string().min(1);
 /** 'YYYY-MM-DD'。2/30 のような存在しない日付は通さない。 */
 export const rowDateSchema = z.iso.date();
 
-/** 'HH:MM'。分は 00〜59 のどれでもよい（15 分刻みは入力のルール）。 */
+/** 'HH:MM'。分は 00〜59 のどれでもよい。 */
 export const rowTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const rowTimestampSchema = z.number().int();

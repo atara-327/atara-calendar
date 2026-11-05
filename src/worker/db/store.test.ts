@@ -228,7 +228,7 @@ describe('readChanges', () => {
       vi.restoreAllMocks();
     });
 
-    it('入力のルール（15 分刻みの時刻など）に合わない行でも、構造が成り立っていれば読める', async () => {
+    it('分が 15 分刻みでない時刻（1 分刻み。DV-3）の行も読める', async () => {
       await db().prepare(INSERT_ENTRY).bind('odd-time', '2026-10-19', '15:10').run();
 
       const { entries } = await readChanges(db(), 0);
@@ -646,8 +646,8 @@ describe('applyWrite', () => {
   describe('書く前の検証（entrySchema・workspaceSchema）', () => {
     it.each<{ reason: string; invalid: WriteRequest }>([
       {
-        reason: '時刻が 15 分刻みでない予定',
-        invalid: { entries: [makeEntry({ id: 'bad', allDay: false, startTime: '15:10' })] },
+        reason: '時刻の形が違う予定',
+        invalid: { entries: [makeEntry({ id: 'bad', allDay: false, startTime: '15:60' })] },
       },
       {
         reason: '存在しない日付の予定',
