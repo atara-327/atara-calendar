@@ -104,12 +104,14 @@ export function Timeline({ items, placements, date, onTrackClick }: TimelineProp
         {HOUR_LABELS.map((label) => (
           <div key={label} className={styles.hourLine} />
         ))}
-        {items.map((item, index) => {
-          const placement = placements[index];
-          return placement === undefined ? null : (
-            <TimelineButton key={item.key} item={item} placement={placement} />
-          );
-        })}
+        <div className={styles.items}>
+          {items.map((item, index) => {
+            const placement = placements[index];
+            return placement === undefined ? null : (
+              <TimelineButton key={item.key} item={item} placement={placement} />
+            );
+          })}
+        </div>
         <NowLine date={date} />
       </div>
     </div>
