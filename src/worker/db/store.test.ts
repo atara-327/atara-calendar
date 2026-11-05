@@ -228,7 +228,7 @@ describe('readChanges', () => {
       vi.restoreAllMocks();
     });
 
-    it('分が 15 分刻みでない時刻（1 分刻み。DV-3）の行も読める', async () => {
+    it('1 分刻みの時刻（15:10 など。DV-3）の行も読める', async () => {
       await db().prepare(INSERT_ENTRY).bind('odd-time', '2026-10-19', '15:10').run();
 
       const { entries } = await readChanges(db(), 0);

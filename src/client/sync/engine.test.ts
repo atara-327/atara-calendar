@@ -918,13 +918,13 @@ describe('受け取る（設計書 6.3）', () => {
     expect(device.network.reads.at(-1)?.url).toBe(`/api/changes?since=${String(rev)}`);
   });
 
-  it('入力のルール（15 分刻みなど）を満たさない行があっても、受け取れる', async () => {
+  it('入力のルール（日付が 1900〜2199 年など）を満たさない行があっても、受け取れる', async () => {
     await db().batch([
       db().prepare('UPDATE meta SET rev = 50'),
       db().prepare(
         `INSERT INTO entries (id, kind, title, workspace_id, all_day, start_date, start_time, end_date, end_time,
              notify_enabled, notify_offset_min, edited_at, rev)
-           VALUES ('odd', 'event', '変な時刻', 'default-workspace', 0, '2026-10-19', '09:07', '2026-10-19', '10:07',
+           VALUES ('odd', 'event', '変な日付', 'default-workspace', 0, '1800-01-01', '09:07', '1800-01-01', '10:07',
              1, 10, 5, 50)`,
       ),
     ]);
@@ -932,7 +932,7 @@ describe('受け取る（設計書 6.3）', () => {
     const device = await startedDevice();
 
     expect(device.state().phase).toBe('ready');
-    expect(entryIn(device, 'odd')?.startTime).toBe('09:07');
+    expect(entryIn(device, 'odd')?.startDate).toBe('1800-01-01');
     expect(device.state().syncError).toBe(false);
   });
 

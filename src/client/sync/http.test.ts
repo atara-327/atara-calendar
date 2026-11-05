@@ -279,11 +279,20 @@ describe('差分の受け取りの応答の扱い（設計書 6.3）', () => {
     expect(outcome).toEqual({ kind: 'ok', changes: body });
   });
 
-  it('入力のルール（15 分刻み・#RRGGBB など）を満たさない行があっても、応答を受け取る', async () => {
+  it('入力のルール（日付の範囲・#RRGGBB など）を満たさない行があっても、応答を受け取る', async () => {
     const lenient = {
       ...body,
       workspaces: [makeWorkspace({ id: 'w1', color: 'red' })],
-      entries: [makeEntry({ id: 'e1', allDay: false, startTime: '09:07', endTime: '10:07' })],
+      entries: [
+        makeEntry({
+          id: 'e1',
+          allDay: false,
+          startDate: '1800-01-01',
+          endDate: '1800-01-01',
+          startTime: '09:07',
+          endTime: '10:07',
+        }),
+      ],
     };
     const outcome = await fetchChanges(fetching(response(200, lenient)).fetchFn, 0);
     expect(outcome).toEqual({ kind: 'ok', changes: lenient });
