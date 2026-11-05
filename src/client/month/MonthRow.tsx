@@ -1,15 +1,18 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
 import { readableTextColor } from '../color';
 import { formatMonthDay } from '../dateFormat';
 import { EmojiText } from '../emoji/EmojiText';
-import { openEditForm } from '../form/instance';
+import { openCreateForm, openEditForm } from '../form/instance';
+import { nextFullHour } from '../form/schedule';
 import { Link } from '../Link';
 import { dayPath } from '../route';
+import { getSyncEngine } from '../sync/instance';
 import { cellBoundary } from './boundaries';
 import { eventAccessibleName } from './eventLabel';
 import { dayLabelParts } from './labels';
+import { createLongPressTracker } from './longPress';
 import type { BarItem, MoreItem, TimedItem } from './layout';
 import styles from './MonthRow.module.css';
 import { DATE_HEADER_HEIGHT, SLOT_HEIGHT } from './sizing';
@@ -27,9 +30,23 @@ function boundaryClass({ top, left }: ReturnType<typeof cellBoundary>): string {
   );
 }
 
+function openCreateFormOn(date: DateStr): void {
+  // 最初の読み込みが終わるまでは開かない（( + ) が押せないのと同じ理由。AddEntryButton.tsx）。
+  if (getSyncEngine().store.getState().phase !== 'ready') return;
+  // ( + ) と同じ予定のフォームで、開始の日付だけを、長押しした日にする。時刻は、( + ) と同じ次の正時。
+  openCreateForm('event', { date, time: nextFullHour(Date.now()).time });
+}
+
 function DayCell({ day, today }: { day: DayView; today: DateStr }) {
   const { day: dayOfMonth } = dateToYmd(day.date);
   const weekday = dayOfWeek(day.date);
+  const longPress = useMemo(
+    () =>
+      createLongPressTracker(() => {
+        openCreateFormOn(day.date);
+      }),
+    [day.date],
+  );
 
   if (!day.inRange) {
     // 範囲（1900〜2199 年）の外の日。日表示へ移れない（URL が `/` に戻される）ので、リンクにしない。
@@ -63,6 +80,29 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
       className={classNames(styles.cell, boundaryClass(cellBoundary(day.date)))}
       aria-label={accessibleName}
       aria-current={isToday ? 'date' : undefined}
+      onPointerDown={(event) => {
+        longPress.start(event.clientX, event.clientY, event.pointerId, event.isPrimary);
+      }}
+      onPointerMove={(event) => {
+        longPress.move(event.clientX, event.clientY, event.pointerId);
+      }}
+      onPointerUp={(event) => {
+        longPress.stop(event.pointerId);
+      }}
+      onPointerCancel={(event) => {
+        longPress.stop(event.pointerId);
+      }}
+      onPointerLeave={(event) => {
+        longPress.stop(event.pointerId);
+      }}
+      // 長押しで、Android のリンクのメニューや、マウスの右クリックのメニューが出ないようにする。
+      onContextMenu={(event) => {
+        event.preventDefault();
+      }}
+      onClick={(event) => {
+        // 長押しでフォームを開いたあとの click で、日表示へ移らない（Link は、defaultPrevented なら移らない）。
+        if (longPress.consumeClick(event.detail)) event.preventDefault();
+      }}
     >
       <span className={styles.dateLine} style={{ height: DATE_HEADER_HEIGHT }}>
         <span className={numberClass}>{dayOfMonth}</span>
