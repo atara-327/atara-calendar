@@ -4,7 +4,7 @@
 
 ## Claude 連携（MCP サーバー）
 
-一時停止中（2026-11-05。1 分刻みの対応を先にしたため）。MCP サーバー（PR #39）はマージ済み。残りは、ユーザーが Claude Desktop に入れて試すこと（下準備: サービストークン・Access の許可・`ALLOWED_SERVICE_TOKEN_ID`）と、Google カレンダーからの移行（MC-5）。要件は[要件定義書 5.12](requirements/requirements.md#512-claude-連携mcp)、作り方は[設計書 13章](design/design.md#13-claude-連携mcp)。
+ユーザーの試用待ち（2026-11-05 に再開。.mcpb は 1 分刻みに対応した版を渡した）。MCP サーバー（PR #39）はマージ済み。残りは、ユーザーが Claude Desktop に入れて試すこと（下準備: サービストークン・Access の許可・`ALLOWED_SERVICE_TOKEN_ID`）と、Google カレンダーからの移行（MC-5）。要件は[要件定義書 5.12](requirements/requirements.md#512-claude-連携mcp)、作り方は[設計書 13章](design/design.md#13-claude-連携mcp)。
 
 ## あったら嬉しい（W）機能
 
