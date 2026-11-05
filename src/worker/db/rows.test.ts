@@ -138,7 +138,6 @@ describe('予定の行の変換（entries）', () => {
 
   describe('読み込みは構造だけを確かめる（入力のルールを後で厳しくしても、既存の行を壊れた行にしない）', () => {
     it.each([
-      { rule: '時刻が 15 分刻み', patch: { start_time: '15:10', end_time: '16:07' } },
       {
         rule: '日付の年が 1900〜2199 年',
         patch: { start_date: '1800-01-01', end_date: '2300-12-31' },
@@ -151,7 +150,6 @@ describe('予定の行の変換（entries）', () => {
       expect(stored.entry).toMatchObject({
         title: patch.title ?? fullEntry.title,
         startDate: patch.start_date ?? fullEntry.startDate,
-        startTime: patch.start_time ?? fullEntry.startTime,
       });
     });
   });

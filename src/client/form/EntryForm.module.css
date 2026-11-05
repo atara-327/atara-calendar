@@ -189,6 +189,15 @@
   min-width: 0;
 }
 
+.minutes {
+  width: 5.5em;
+}
+
+.time {
+  flex: 0 1 8em;
+  min-width: 0;
+}
+
 .date {
   flex: 1 1 9.5em;
   min-width: 0;
@@ -198,12 +207,6 @@
   display: block;
   resize: vertical;
   line-height: 1.5;
-}
-
-.time {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .check {
@@ -218,10 +221,6 @@
   width: 18px;
   height: 18px;
   margin: 0;
-}
-
-.minutes {
-  width: 5.5em;
 }
 
 /*

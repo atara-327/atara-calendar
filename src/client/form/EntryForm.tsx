@@ -69,10 +69,6 @@ import { defaultWorkspaceId } from './workspaceChoices';
 const DATE_MIN = `${String(MIN_YEAR)}-01-01`;
 const DATE_MAX = `${String(MAX_YEAR)}-12-31`;
 
-const HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
-// 時刻の「分」は 1 分刻み（DV-3）。時と分の 2 つの選択欄は、前の 15 分刻みのときの形のまま（設計書 11.4）。
-const MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, '0'));
-
 const KINDS: readonly { kind: EntryKind; label: string }[] = [
   { kind: 'event', label: '予定' },
   { kind: 'block', label: 'タイムブロック' },
@@ -151,49 +147,28 @@ function invalidProps(error: string | undefined, errorId: string) {
   };
 }
 
-function TimeSelect({
+function TimeInput({
   label,
   value,
   onChange,
+  invalidProps: invalid,
 }: {
   label: string;
   value: string;
   onChange: (time: string) => void;
+  invalidProps: ReturnType<typeof invalidProps>;
 }) {
-  const hour = value.slice(0, 2);
-  const minute = value.slice(3, 5);
   return (
-    <span className={styles.time}>
-      <select
-        className={styles.select}
-        aria-label={`${label}の時`}
-        value={hour}
-        onChange={(event) => {
-          onChange(`${event.target.value}:${minute}`);
-        }}
-      >
-        {HOURS.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-      <span aria-hidden="true">:</span>
-      <select
-        className={styles.select}
-        aria-label={`${label}の分`}
-        value={minute}
-        onChange={(event) => {
-          onChange(`${hour}:${event.target.value}`);
-        }}
-      >
-        {MINUTES.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </span>
+    <input
+      className={classNames(styles.input, styles.time)}
+      type="time"
+      aria-label={`${label}の時刻`}
+      value={value}
+      onChange={(event) => {
+        onChange(event.target.value);
+      }}
+      {...invalid}
+    />
   );
 }
 
@@ -685,7 +660,11 @@ export function EntryForm({ target }: { target: FormTarget }) {
               </div>
             )}
 
-            <Field label="開始" error={shown.startDate} errorId={`${ids}-start-error`}>
+            <Field
+              label="開始"
+              error={shown.startDate ?? shown.startTime}
+              errorId={`${ids}-start-error`}
+            >
               <input
                 className={classNames(styles.input, styles.date)}
                 name="startDate"
@@ -700,8 +679,9 @@ export function EntryForm({ target }: { target: FormTarget }) {
                 {...invalidProps(shown.startDate, `${ids}-start-error`)}
               />
               {!values.allDay && (
-                <TimeSelect
+                <TimeInput
                   label="開始"
+                  invalidProps={invalidProps(shown.startTime, `${ids}-start-error`)}
                   value={values.startTime}
                   onChange={(startTime) => {
                     setValues((current) => moveStart(current, { startTime }));
@@ -710,7 +690,11 @@ export function EntryForm({ target }: { target: FormTarget }) {
               )}
             </Field>
 
-            <Field label="終了" error={shown.endDate ?? shown.range} errorId={`${ids}-end-error`}>
+            <Field
+              label="終了"
+              error={shown.endDate ?? shown.endTime ?? shown.range}
+              errorId={`${ids}-end-error`}
+            >
               <input
                 className={classNames(styles.input, styles.date)}
                 name="endDate"
@@ -725,8 +709,9 @@ export function EntryForm({ target }: { target: FormTarget }) {
                 {...invalidProps(shown.endDate ?? shown.range, `${ids}-end-error`)}
               />
               {!values.allDay && (
-                <TimeSelect
+                <TimeInput
                   label="終了"
+                  invalidProps={invalidProps(shown.endTime, `${ids}-end-error`)}
                   value={values.endTime}
                   onChange={(endTime) => {
                     update({ endTime });

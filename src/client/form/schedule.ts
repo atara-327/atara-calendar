@@ -6,7 +6,7 @@ import {
   type DateStr,
 } from '../../shared/date';
 import { lastCoveredDate } from '../../shared/recurrence';
-import { inputDateSchema } from '../../shared/schema';
+import { inputDateSchema, timeStringSchema } from '../../shared/schema';
 
 // フォームの、開始・終了（終日・日付・時刻）の計算（設計書 11.4）。画面に依存しない。
 // 日付と時刻は、日本時間の文字列で持ち、計算は shared/date の整数（日数）と「その日の 0:00 からの分」で行う
@@ -25,7 +25,7 @@ export interface StartPoint {
 
 /**
  * フォームの、開始と終了。日付は入力欄の値なので、空や、範囲（1900〜2199 年）の外のこともある。
- * 時刻は、選択欄の値（'HH:MM'）で、いつも正しい形。終日のときも持つ（時間指定に戻したときの値）。
+ * 時刻は、入力欄の値（'HH:MM'）。欄が空にされると、空や正しくない形になる。終日のときも持つ（時間指定に戻したときの値）。
  */
 export interface Schedule {
   allDay: boolean;
@@ -49,6 +49,8 @@ export interface ScheduleAnchor {
 export interface ScheduleErrors {
   startDate?: string;
   endDate?: string;
+  startTime?: string;
+  endTime?: string;
   /** 開始と終了の前後関係。 */
   range?: string;
 }
@@ -56,6 +58,10 @@ export interface ScheduleErrors {
 /** 日付の入力欄の値を、日数にする。API の入力と同じ判定（shared の inputDateSchema）で、通らなければ null。 */
 function dayOf(date: string): number | null {
   return inputDateSchema.safeParse(date).success ? dateToDays(date) : null;
+}
+
+function isTime(time: string): boolean {
+  return timeStringSchema.safeParse(time).success;
 }
 
 function timeToMinutes(time: string): number {
@@ -67,9 +73,10 @@ function minutesToTime(minutes: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minutes - hour * 60).padStart(2, '0')}`;
 }
 
-/** 「1970-01-01 の 0:00 から何分目か」。終日は、時刻を見ない（日の頭）。日付が正しくなければ null。 */
+/** 「1970-01-01 の 0:00 から何分目か」。終日は、時刻を見ない（日の頭）。日付か（時間指定の）時刻が正しくなければ null。 */
 function absoluteMinutes(date: string, time: string, allDay: boolean): number | null {
   const day = dayOf(date);
+  if (!allDay && !isTime(time)) return null;
   return day === null ? null : day * MINUTES_PER_DAY + (allDay ? 0 : timeToMinutes(time));
 }
 
@@ -86,7 +93,7 @@ export function nextFullHour(nowMs: number): StartPoint {
 
 /**
  * start から始まる、1 時間の時間指定の、開始と終了。終了は、日付をまたいでもよい（23:30 なら、翌日の 0:30。TB-6）。
- * start の時刻は、15 分刻みの 'HH:MM'（日表示のタップが、15 分単位に切り下げて渡す。設計書 11.3）。
+ * start の時刻は 'HH:MM'（日表示のタップは、15 分単位に切り下げて渡す。設計書 11.3）。
  */
 export function scheduleFromStart(start: StartPoint): Schedule {
   const end = fromAbsoluteMinutes(
@@ -188,8 +195,16 @@ export function validateSchedule(schedule: Schedule): ScheduleErrors {
   const errors: ScheduleErrors = {};
   const start = absoluteMinutes(schedule.startDate, schedule.startTime, schedule.allDay);
   const end = absoluteMinutes(schedule.endDate, schedule.endTime, schedule.allDay);
-  if (start === null) errors.startDate = `開始の日付を入力してください（${DATE_RANGE_HINT}）`;
-  if (end === null) errors.endDate = `終了の日付を入力してください（${DATE_RANGE_HINT}）`;
+  if (dayOf(schedule.startDate) === null) {
+    errors.startDate = `開始の日付を入力してください（${DATE_RANGE_HINT}）`;
+  }
+  if (dayOf(schedule.endDate) === null) {
+    errors.endDate = `終了の日付を入力してください（${DATE_RANGE_HINT}）`;
+  }
+  if (!schedule.allDay && !isTime(schedule.startTime))
+    errors.startTime = '開始の時刻を入力してください';
+  if (!schedule.allDay && !isTime(schedule.endTime))
+    errors.endTime = '終了の時刻を入力してください';
   if (start === null || end === null) return errors;
   if (schedule.allDay ? end < start : end <= start) {
     errors.range = schedule.allDay

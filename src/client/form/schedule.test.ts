@@ -352,6 +352,24 @@ describe('開始・終了のエラー', () => {
     expect(validateSchedule(timed())).toEqual({});
   });
 
+  it.each(['', '9:00', '24:00'])(
+    '時間指定は、開始の時刻が「%s」だと、時刻の欄にエラー（日付のエラーにしない）',
+    (startTime) => {
+      const errors = validateSchedule(timed({ startTime }));
+
+      expect(errors.startTime).toBeDefined();
+      expect(errors.startDate).toBeUndefined();
+    },
+  );
+
+  it('時間指定は、終了の時刻が空だと、時刻の欄にエラー', () => {
+    expect(validateSchedule(timed({ endTime: '' })).endTime).toBeDefined();
+  });
+
+  it('終日は、時刻が空でもエラーにしない（時刻の欄は見えない）', () => {
+    expect(validateSchedule(allDay({ startTime: '', endTime: '' }))).toEqual({});
+  });
+
   it('時間指定は、終了が開始と同じ日時だとエラー', () => {
     expect(validateSchedule(timed({ endTime: '15:00' })).range).toBeDefined();
   });

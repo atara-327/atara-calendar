@@ -54,6 +54,17 @@ describe('保存の前の確認', () => {
       expect(validateForm(valid({ endDate: '' })).endDate).toBeDefined();
     });
 
+    it('時刻が空なら、その欄の誤りだけを出す（ほかの欄や、画面の上の誤りは重ねない）', () => {
+      expect(Object.keys(validateForm(valid({ endTime: '' })))).toEqual(['endTime']);
+      expect(Object.keys(validateForm(valid({ startTime: '' })))).toEqual(['startTime']);
+    });
+
+    it('繰り返しを付けていても、時刻が空なら、繰り返しの欄に誤りを出さない', () => {
+      const errors = validateForm(valid({ endTime: '', repeat: 'daily' }));
+      expect(errors.repeat).toBeUndefined();
+      expect(errors.endTime).toBeDefined();
+    });
+
     it('日付が 1900〜2199 年の外なら、誤り', () => {
       expect(
         validateForm(valid({ startDate: '2200-01-01', endDate: '2200-01-02' })).startDate,
