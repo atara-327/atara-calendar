@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isStale } from '../../shared/conflict';
 import {
   entryKindSchema,
   entrySchema,
@@ -469,15 +470,6 @@ async function readCurrentRows(
     ),
     family: familyIds.length > 0 ? parseRows(rowsAt(results, 2), entryFromRow) : [],
   };
-}
-
-/** 今の行の edited_at が、書き込む行の edited_at 以上か（同じ id の行が、まだなければ false）。 */
-function isStale(
-  row: { id: string; editedAt: number },
-  current: ReadonlyMap<string, { editedAt: number }>,
-) {
-  const stored = current.get(row.id);
-  return stored !== undefined && stored.editedAt >= row.editedAt;
 }
 
 /** 同じ id の既存の行と kind が違う行があれば、KindMismatchError。 */

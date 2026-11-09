@@ -1,4 +1,5 @@
 import type { WriteResponse } from '../../shared/api';
+import { isSameException } from '../../shared/conflict';
 import type { Entry } from '../../shared/schema';
 import {
   applyWrite,
@@ -36,15 +37,6 @@ export async function commit(db: Database, request: WriteRequest): Promise<Write
 export interface NewIdContext {
   newId: string;
   loaded: readonly Entry[];
-}
-
-/** 同じ回の例外の行か（どちらも例外の行で、系列と回の日付が同じ）。 */
-function isSameException(stored: Entry, written: Entry): boolean {
-  return (
-    stored.seriesId !== null &&
-    stored.seriesId === written.seriesId &&
-    stored.originalDate === written.originalDate
-  );
 }
 
 /**

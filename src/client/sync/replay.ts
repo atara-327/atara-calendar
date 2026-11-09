@@ -1,3 +1,4 @@
+import { isSameException, isStale } from '../../shared/conflict';
 import {
   InvalidChangeError,
   OccurrenceNotFoundError,
@@ -25,18 +26,6 @@ export interface RowSet {
 export interface Write {
   workspaces: Workspace[];
   entries: Entry[];
-}
-
-/**
- * 今の行の編集時刻が、書く行の編集時刻以上か。サーバーの applyWrite（store.ts）と同じ決め方で、
- * 「以上」にするのは、同じ依頼の 2 回目を、反映済みとして当てないため（設計書 6.2）。
- */
-function isStale(
-  row: { id: string; editedAt: number },
-  current: ReadonlyMap<string, { editedAt: number }>,
-): boolean {
-  const stored = current.get(row.id);
-  return stored !== undefined && stored.editedAt >= row.editedAt;
 }
 
 /** 1 行でも、サーバーの方が新しい（または同じ）なら、依頼全体を当てない（設計書 6.4）。 */
@@ -102,15 +91,6 @@ function workspaceEntries(rows: RowSet, workspaceId: string): Entry[] {
       entry.workspaceId === workspaceId ||
       (entry.seriesId !== null && seriesInside.has(entry.seriesId)) ||
       seriesOfExceptionsInside.has(entry.id),
-  );
-}
-
-/** 同じ回の例外の行か（どちらも例外の行で、系列と回の日付が同じ）。worker/api/write.ts の isSameException と同じ。 */
-function isSameException(stored: Entry, written: Entry): boolean {
-  return (
-    stored.seriesId !== null &&
-    stored.seriesId === written.seriesId &&
-    stored.originalDate === written.originalDate
   );
 }
 
