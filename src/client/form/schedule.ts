@@ -1,6 +1,9 @@
 import {
+  MINUTES_PER_DAY,
   dateToDays,
   daysToDate,
+  minutesToTime,
+  timeToMinutes,
   utcMsToJstDate,
   utcMsToJstMinuteOfDay,
   type DateStr,
@@ -11,8 +14,6 @@ import { inputDateSchema, timeStringSchema } from '../../shared/schema';
 // フォームの、開始・終了（終日・日付・時刻）の計算（設計書 11.4）。画面に依存しない。
 // 日付と時刻は、日本時間の文字列で持ち、計算は shared/date の整数（日数）と「その日の 0:00 からの分」で行う
 // （Date を使わない理由は、設計書 2章の「日付・時刻の扱い」）。
-
-const MINUTES_PER_DAY = 24 * 60;
 
 /** 終了の初期値は、開始の 1 時間後（設計書 11.4）。 */
 export const DEFAULT_LENGTH_MIN = 60;
@@ -62,15 +63,6 @@ function dayOf(date: string): number | null {
 
 function isTime(time: string): boolean {
   return timeStringSchema.safeParse(time).success;
-}
-
-function timeToMinutes(time: string): number {
-  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-}
-
-function minutesToTime(minutes: number): string {
-  const hour = Math.floor(minutes / 60);
-  return `${String(hour).padStart(2, '0')}:${String(minutes - hour * 60).padStart(2, '0')}`;
 }
 
 /** 「1970-01-01 の 0:00 から何分目か」。終日は、時刻を見ない（日の頭）。日付か（時間指定の）時刻が正しくなければ null。 */

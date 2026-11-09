@@ -1,5 +1,9 @@
-import type { DateStr } from '../../shared/date';
-import { utcMsToJstMinuteOfDay } from '../../shared/date';
+import {
+  MINUTES_PER_DAY,
+  minutesToTime,
+  utcMsToJstMinuteOfDay,
+  type DateStr,
+} from '../../shared/date';
 import { formatTime } from '../dateFormat';
 import type { StartPoint } from '../form/schedule';
 
@@ -7,8 +11,6 @@ import type { StartPoint } from '../form/schedule';
 // ファイル名を timeline.ts にしない: 同じフォルダの Timeline.tsx と、大文字小文字だけが違い、大文字小文字を
 // 区別しないファイルシステム（macOS・Windows）で、`./Timeline` が、このファイルに解決されるため。
 // 数値は CSS の px と対応する（Timeline.module.css）。時間は、その日の 0:00 からの分。
-
-export const MINUTES_PER_DAY = 24 * 60;
 
 /** 1 時間の高さ（px）。15 分の項目でも、題名が 1 行読める高さにするため（設計書 11.3）。 */
 export const HOUR_HEIGHT = 60;
@@ -33,12 +35,6 @@ export const FALLBACK_TOP_MINUTE = 8 * 60;
 
 /** 今日を開いたとき、今の時刻より、どれだけ前から表示するか（分）。 */
 const LEAD_BEFORE_NOW_MINUTES = 60;
-
-/** 分（0〜1440）を 'HH:MM' にする。1440 は、タイムラインの下端の目盛り「24:00」。 */
-export function minutesToTime(minutes: number): string {
-  const hour = Math.floor(minutes / 60);
-  return `${String(hour).padStart(2, '0')}:${String(minutes - hour * 60).padStart(2, '0')}`;
-}
 
 /**
  * タイムラインの、いちばん上に出す時刻（0:00 からの分）。設計書 11.3。

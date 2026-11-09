@@ -1,11 +1,10 @@
-import { dateToDays, type DateStr } from '../../shared/date';
+import { MINUTES_PER_DAY, dateToDays, timeToMinutes, type DateStr } from '../../shared/date';
 import { holidayName, namedDatesBetween } from '../../shared/holidays';
 import { occurrencesInPeriod } from '../../shared/period';
 import type { Occurrence } from '../../shared/recurrence';
 import type { Entry } from '../../shared/schema';
 import { formatShortDate, formatTime } from '../dateFormat';
 import type { WorkspaceDisplay } from '../workspaceDisplay';
-import { MINUTES_PER_DAY } from './timelineGeometry';
 
 // その日の日表示に出す項目を、展開した回から求める（設計書 11.3）。画面に依存しない。
 // 回の開始・終了を、「1970-01-01 の 0:00 からの分」にして、長さと、その日の範囲との重なりを求める。
@@ -59,10 +58,10 @@ export interface DayItems {
   timeline: TimelineItem[];
 }
 
-function timeToMinutes(time: string | null): number {
+function minuteOfDay(time: string | null): number {
   // 時間指定で時刻が欠けた行（本来はありえない）は、0:00 として扱う。1 行の不正で、画面全体を止めないため
   // （shared/recurrence.ts の並べ替えと同じ）。
-  return time === null ? 0 : Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  return time === null ? 0 : timeToMinutes(time);
 }
 
 /** 回の開始と終了を、「1970-01-01 の 0:00 からの分」にする。終日は、開始日の 0:00 から、最終日の翌日の 0:00 まで。 */
@@ -71,8 +70,8 @@ function absoluteRange(occurrence: Occurrence): { start: number; end: number } {
   const endDay = dateToDays(occurrence.endDate) * MINUTES_PER_DAY;
   if (occurrence.allDay) return { start: startDay, end: endDay + MINUTES_PER_DAY };
   return {
-    start: startDay + timeToMinutes(occurrence.startTime),
-    end: endDay + timeToMinutes(occurrence.endTime),
+    start: startDay + minuteOfDay(occurrence.startTime),
+    end: endDay + minuteOfDay(occurrence.endTime),
   };
 }
 

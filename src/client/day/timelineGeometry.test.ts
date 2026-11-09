@@ -5,7 +5,6 @@ import {
   HOUR_LABELS,
   addButtonStart,
   initialTopMinute,
-  minutesToTime,
   shouldPlace,
   tapStartTime,
 } from './timelineGeometry';
@@ -86,14 +85,6 @@ describe('空いているところをタップしたときの、開始の時刻'
     expect(tapStartTime(-20)).toBe('00:00');
     expect(tapStartTime(1440)).toBe('23:45');
     expect(tapStartTime(2000)).toBe('23:45');
-  });
-});
-
-describe('分から時刻', () => {
-  it('0 を付けた 2 桁の時と分にする', () => {
-    expect(minutesToTime(h(9, 5))).toBe('09:05');
-    expect(minutesToTime(0)).toBe('00:00');
-    expect(minutesToTime(h(23, 45))).toBe('23:45');
   });
 });
 

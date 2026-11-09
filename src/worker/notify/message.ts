@@ -1,4 +1,10 @@
-import { dateToDays, dayOfWeek, utcMsToJstDate, type DateStr } from '../../shared/date';
+import {
+  MINUTES_PER_DAY,
+  dateToDays,
+  dayOfWeek,
+  utcMsToJstDate,
+  type DateStr,
+} from '../../shared/date';
 import { WEEKDAY_LABELS, formatShortDate, formatTime } from '../../shared/dateFormat';
 import { dayPath } from '../../shared/paths';
 import type { Occurrence } from '../../shared/recurrence';
@@ -23,7 +29,6 @@ export type NotifyMessageFields = Pick<
 export const DISCORD_CONTENT_LIMIT = 2000;
 
 const MINUTES_PER_HOUR = 60;
-const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
 
 /** 「1日1時間30分」。0 でない単位だけを並べる。minutes は 1 以上。 */
 function formatDuration(minutes: number): string {

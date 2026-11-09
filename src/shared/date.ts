@@ -10,6 +10,8 @@ export interface Ymd {
   day: number;
 }
 
+export const MINUTES_PER_DAY = 24 * 60;
+
 const MS_PER_DAY = 86_400_000;
 const JST_OFFSET_MS = 9 * 3_600_000;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -134,6 +136,17 @@ export function nthWeekday(year: number, month: number, weekday: number, n: numb
   return ymdToDate(year, month, day);
 }
 
+/** 'HH:MM' を、その日の 0:00 からの分にする。形は確かめない（確かめるのは、入力の検証。schema.ts）。 */
+export function timeToMinutes(time: string): number {
+  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+}
+
+/** その日の 0:00 からの分（0〜1440）を 'HH:MM' にする。1440 は '24:00'（日表示の下端の目盛り）。 */
+export function minutesToTime(minutes: number): string {
+  const hour = Math.floor(minutes / 60);
+  return `${String(hour).padStart(2, '0')}:${String(minutes - hour * 60).padStart(2, '0')}`;
+}
+
 /** UTC のミリ秒を、日本時間の日付にする。 */
 export function utcMsToJstDate(utcMs: number): DateStr {
   return daysToDate(Math.floor((utcMs + JST_OFFSET_MS) / MS_PER_DAY));
@@ -151,7 +164,7 @@ export function utcMsToJstMinuteOfDay(utcMs: number): number {
  * 日本時間は夏時間がなく +9 時間で固定なので、日数と分の足し算だけで求まる（Date は使わない）。
  */
 export function jstToUtcMs(date: DateStr, minuteOfDay: number): number {
-  if (!Number.isInteger(minuteOfDay) || minuteOfDay < 0 || minuteOfDay >= 24 * 60) {
+  if (!Number.isInteger(minuteOfDay) || minuteOfDay < 0 || minuteOfDay >= MINUTES_PER_DAY) {
     throw new RangeError(`0:00 からの分が不正です: ${String(minuteOfDay)}`);
   }
   return dateToDays(date) * MS_PER_DAY + minuteOfDay * 60_000 - JST_OFFSET_MS;
