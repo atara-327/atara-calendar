@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { compareText } from './compareText';
 import { addDays, dateToDays, dateToYmd, dayOfWeek, daysToDate, type DateStr } from './date';
 import { isDayOff, isWeekday } from './holidays';
 import { MAX_YEAR, MIN_YEAR } from './solarTerms';
@@ -81,10 +82,6 @@ export function normalizeStart(rrule: Rrule, { startDate, endDate }: DateRange):
 
 function diffDays(from: DateStr, to: DateStr): number {
   return dateToDays(to) - dateToDays(from);
-}
-
-function compareStrings(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 type CoverageFields = Pick<Entry, 'allDay' | 'startDate' | 'endDate' | 'endTime'>;
@@ -177,12 +174,12 @@ function isNewerException(candidate: Entry, current: Entry): boolean {
 
 /** 時刻が欠けた行（本来はありえない）は、0:00 として並べる。1 行の不正で、画面全体を止めないため。 */
 function compareOccurrences(a: Occurrence, b: Occurrence): number {
-  if (a.startDate !== b.startDate) return compareStrings(a.startDate, b.startDate);
+  if (a.startDate !== b.startDate) return compareText(a.startDate, b.startDate);
   if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
-  const byTime = compareStrings(a.startTime ?? '', b.startTime ?? '');
+  const byTime = compareText(a.startTime ?? '', b.startTime ?? '');
   if (byTime !== 0) return byTime;
   // 最後は id で決める。入力の並びに依存すると、同じ内容でも結果の並びが変わってしまうため。
-  return compareStrings(a.entryId, b.entryId) || compareStrings(a.occurrenceDate, b.occurrenceDate);
+  return compareText(a.entryId, b.entryId) || compareText(a.occurrenceDate, b.occurrenceDate);
 }
 
 /**
