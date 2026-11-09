@@ -312,6 +312,15 @@ export function EntryForm({ target }: { target: FormTarget }) {
   };
 
   /**
+   * 想定外の例外（確認とサーバーの決まりの食い違い・shared の関数の例外など）を、ログに残して、入力を残したまま知らせる。
+   * 握りつぶして閉じると、保存したつもりで、保存されない。
+   */
+  function reportFailure(action: '保存' | '削除', error: unknown): void {
+    console.error(`予定を${action}できませんでした`, error);
+    setFailure(`${action}できませんでした。入力内容を確かめてください`);
+  }
+
+  /**
    * エンジンに渡す処理を実行する。受け付けられなかったとき（null）は、理由を出して null を返す。
    * 確認（validateForm）を通った入力で、エンジンが例外を投げるのは、確認とサーバーの決まりの食い違い。
    * 黙って閉じず、入力を残して知らせる。
@@ -322,8 +331,7 @@ export function EntryForm({ target }: { target: FormTarget }) {
       if (accepted !== null) return accepted;
       setFailure(unavailableMessage(getSyncEngine().store.getState().phase, action));
     } catch (error) {
-      console.error(`予定を${action}できませんでした`, error);
-      setFailure(`${action}できませんでした。入力内容を確かめてください`);
+      reportFailure(action, error);
     }
     return null;
   }
@@ -339,16 +347,12 @@ export function EntryForm({ target }: { target: FormTarget }) {
     closeEntryForm();
   }
 
-  /**
-   * 想定外の例外（確認とサーバーの決まりの食い違い・shared の関数の例外など）を、ログに残して、入力を残したまま知らせる。
-   * 握りつぶして閉じると、保存したつもりで、保存されない。
-   */
+  /** 範囲を決める処理などを実行する。例外は、reportFailure で知らせる。 */
   function guard(action: '保存' | '削除', run: () => void): void {
     try {
       run();
     } catch (error) {
-      console.error(`予定を${action}できませんでした`, error);
-      setFailure(`${action}できませんでした。入力内容を確かめてください`);
+      reportFailure(action, error);
     }
   }
 
