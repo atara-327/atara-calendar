@@ -1,7 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { ChangesResponse } from '../../shared/api';
+import { createEditedAtClock, type EditedAtClock } from '../../shared/editedAtClock';
 import type { Entry, EntryChanges, EntryDraft, Scope, Workspace } from '../../shared/schema';
-import { createEditedAtClock, type EditedAtClock } from './editedAt';
 import { fetchChanges, sendRequest, type FetchFn, type WriteOutcome } from './http';
 import type { TabLock, TabLockHandle } from './lock';
 import { editedAtOf, pendingRequestSchema, type PendingRequest } from './requests';

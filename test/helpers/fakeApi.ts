@@ -1,6 +1,6 @@
 import type { ApiEnv } from '../../mcp/apiClient';
-import { createEditedAtClock } from '../../mcp/editedAtClock';
 import type { ToolDeps } from '../../mcp/tools';
+import { createEditedAtClock } from '../../src/shared/editedAtClock';
 
 /** 偽の fetch が受け取った依頼。headers のキーは小文字。 */
 export interface RecordedRequest {
@@ -67,9 +67,10 @@ export function createFakeDeps(
   { nowMs = 1_000_000 }: { nowMs?: number } = {},
 ): ToolDeps {
   let count = 0;
+  const clock = createEditedAtClock({ now: () => nowMs });
   return {
     api,
     newId: () => `id-${String((count += 1))}`,
-    nextEditedAt: createEditedAtClock(() => nowMs),
+    nextEditedAt: () => clock.next(),
   };
 }

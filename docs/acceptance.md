@@ -411,7 +411,7 @@
 | ID | 確かめ方 | 結果 |
 | --- | --- | --- |
 | [MC-1](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（list_events・list_workspaces。31 日ずつの区切り・366 日の上限・ワークスペースの名前）・`mcp/server.test.ts` | 対象外（リリース（v1.0）の条件に入れない。リリース前に並行して作ったリリース後の機能のため。Claude Desktop に入れたあと、ユーザーが試す） |
-| [MC-2](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（create_event・update_event・delete_event。editedAt・送り直し・stale・not_found・4xx の文言）・`mcp/editedAtClock.test.ts` | 同上 |
+| [MC-2](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（create_event・update_event・delete_event。editedAt・送り直し・stale・not_found・4xx の文言）・`src/shared/editedAtClock.test.ts` | 同上 |
 | [MC-3](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（list_workspaces・create_workspace。色の名前・省略したときの色と sortOrder）・`src/shared/workspaceColors.test.ts` | 同上 |
 | [MC-4](requirements/requirements.md#512-claude-連携mcp) | `mcp/config.test.ts`（設定）。`npm run pack:mcpb` で `.mcpb` を作れること（manifest の検証が通る）。Claude Desktop に入れて、設定画面でサービストークンを入れる操作は、ユーザーが試す | 同上 |
 | [MC-5](requirements/requirements.md#512-claude-連携mcp) | Google カレンダーの MCP で読み、こちらの MCP で書き込む。コードはなく（Claude が 2 つの MCP を使う）、ユーザーが試す | 同上 |

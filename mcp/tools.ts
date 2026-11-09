@@ -27,14 +27,14 @@ import {
 } from './toolSchemas';
 
 // 6 つのツール（設計書 13.3）の中身。MCP の SDK には依存しない（server.ts が、入力の検証と結果の包みを受け持つ）。
-// 判断（期間の区切り・色の選び方・editedAt・送り直し）をここと、apiClient.ts・editedAtClock.ts に置き、
+// 判断（期間の区切り・色の選び方・editedAt・送り直し）をここと、apiClient.ts・shared の editedAtClock.ts に置き、
 // fetch・時計・UUID は引数で差し替えて、テストできるようにする。
 
 export interface ToolDeps {
   api: ApiEnv;
   /** 新しい行の id（PUT の :id、PATCH・DELETE の newId）に使う UUID。 */
   newId: () => string;
-  /** 書き込みの editedAt。editedAtClock.ts。 */
+  /** 書き込みの editedAt。shared の editedAtClock.ts。 */
   nextEditedAt: () => number;
 }
 
