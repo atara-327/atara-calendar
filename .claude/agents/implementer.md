@@ -10,7 +10,10 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 ## 最初に読むもの
 
 - [CLAUDE.md](../../CLAUDE.md): 目的・スタック・決まりごと
-- [docs/design/design.md](../../docs/design/design.md): どう作るか（データ設計・API・同期・画面）
+- [docs/design/design.md](../../docs/design/design.md): どう作るか。**全文は読まない**。読むのは、次の 2 つだけ。
+  - 冒頭（P1〜P4）と、2章・3章（全体に効く決まり）
+  - 作業に関係する章（呼び出し元が示した章。示されていなければ、目次から選ぶ）。読んでいる章が指す、ほかの章の節も、必要なら読む
+  - Why: 全文は長く、毎回読むとトークンを使うため（2026-11-10 のユーザーの指示）。関係する章が分からないときは、推測で絞らず、呼び出し元に確認する
 - [docs/requirements/requirements.md](../../docs/requirements/requirements.md): 何を作るか（要件 ID はここにある）
 
 ## 実装の原則
