@@ -85,7 +85,7 @@ atara-calendar/
 └─ wrangler.jsonc    Cloudflare の設定（毎分の定期実行のトリガ `triggers.crons` を含む）
 ```
 
-- `src/shared/`: 画面と Worker の両方が使うコード。日付と時刻の計算・祝日と記念日・繰り返しの展開と変更・ワークスペースの削除・食い違いの判定（`conflict.ts`。[6.4](#64-食い違ったときsy-3)）・`editedAt` の時計（`editedAtClock.ts`。6.4）・データの型と入力チェック（Zod）・項目をまたぐ確認（`entryRules.ts`。[4.2](#42-テーブル定義)）・API の本文と応答の形（`api.ts`）・日付や URL のパスの表記（`dateFormat.ts`・`paths.ts`。画面と、通知の文面・リンク（[9.4](#94-通知の文面)）が同じものを使う）。
+- `src/shared/`: 画面と Worker の両方が使うコード。日付と時刻の計算・祝日と記念日・繰り返しの展開と変更・ワークスペースの削除・食い違いの判定（`conflict.ts`。[6.4](#64-食い違ったときsy-3)）・`editedAt` の時計（`editedAtClock.ts`。画面と MCP が使う。6.4・[13.4](#134-書き込みの決まり)）・データの型と入力チェック（Zod）・項目をまたぐ確認（`entryRules.ts`。[4.2](#42-テーブル定義)）・API の本文と応答の形（`api.ts`）・日付や URL のパスの表記（`dateFormat.ts`・`paths.ts`。画面と、通知の文面・リンク（[9.4](#94-通知の文面)）が同じものを使う）。
 - `src/worker/`: 入口 `index.ts`（`{ fetch, scheduled }` を出す）・認証・セキュリティ・設定の型と、次のフォルダ。
   - `api/`: エンドポイント（[5章](#5-api-設計)）。
   - `db/`: D1 の読み書き。DB の行（snake_case）と型（camelCase）の変換は `db/rows.ts`。
