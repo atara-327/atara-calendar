@@ -40,12 +40,6 @@ export const deleteEntryRequestSchema = z.strictObject({
   editedAt: editedAtSchema,
 });
 
-export type PutWorkspaceRequest = z.infer<typeof putWorkspaceRequestSchema>;
-export type DeleteWorkspaceRequest = z.infer<typeof deleteWorkspaceRequestSchema>;
-export type PutEntryRequest = z.infer<typeof putEntryRequestSchema>;
-export type PatchEntryRequest = z.infer<typeof patchEntryRequestSchema>;
-export type DeleteEntryRequest = z.infer<typeof deleteEntryRequestSchema>;
-
 // 応答の型も、Zod のスキーマから導く。厳密（strictObject）にしないのは、サーバーが後から項目を足したときに、
 // 古い画面が、応答を読めなくならないため。
 // このスキーマは、応答の形（型）を表す。実行時に応答を確かめる（画面の同期）のに、そのまま使わないこと。

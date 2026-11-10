@@ -1,3 +1,4 @@
+import { MINUTES_PER_DAY } from '../../shared/date';
 import { INPUT_LIMITS } from '../../shared/schema';
 
 // 通知のタイミング（設計書 11.4。要件 NT-2・NT-3）。タイミングは、開始の何分前かの 1 つの数で持つ（設計書 4.3）。
@@ -21,8 +22,6 @@ export function parseNotifyOffset(text: string): number | null {
   // -0 にしない（保存する値と、比べる値が、見かけ上同じ 0 になるように）。
   return value === 0 ? 0 : value;
 }
-
-const MINUTES_PER_DAY = 24 * 60;
 
 /**
  * 終日の通知の時刻の表記。ふつうは「当日 6:00」。

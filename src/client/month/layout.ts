@@ -1,3 +1,4 @@
+import { compareText } from '../../shared/compareText';
 import { dateToDays, type DateStr } from '../../shared/date';
 import type { Occurrence } from '../../shared/recurrence';
 
@@ -77,10 +78,6 @@ function isMultiDay(event: MonthEvent): boolean {
 /** 時間指定の、その日だけの予定か。横棒で出すのは、これ以外（複数日の予定・終日の予定・祝日・記念日）。 */
 function isTimedEntry(event: MonthEvent): event is EntryMonthEvent {
   return event.source === 'entry' && !event.allDay && !isMultiDay(event);
-}
-
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**

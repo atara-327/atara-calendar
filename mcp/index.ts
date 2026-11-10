@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createEditedAtClock } from '../src/shared/editedAtClock';
 import { ConfigError, loadConfig } from './config';
-import { createEditedAtClock } from './editedAtClock';
 import { createServer } from './server';
 import { createTools } from './tools';
 
@@ -15,6 +15,7 @@ function log(message: string): void {
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
+  const clock = createEditedAtClock({ now: () => Date.now() });
   const tools = createTools({
     api: {
       fetch: globalThis.fetch.bind(globalThis),
@@ -26,7 +27,7 @@ async function main(): Promise<void> {
       log,
     },
     newId: () => randomUUID(),
-    nextEditedAt: createEditedAtClock(() => Date.now()),
+    nextEditedAt: () => clock.next(),
   });
   await createServer(tools).connect(new StdioServerTransport());
   log(`起動しました（${config.baseUrl}）`);

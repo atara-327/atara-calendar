@@ -8,7 +8,9 @@ import {
   daysToDate,
   isLeapYear,
   jstToUtcMs,
+  minutesToTime,
   nthWeekday,
+  timeToMinutes,
   todayJst,
   utcMsToJstDate,
   utcMsToJstMinuteOfDay,
@@ -275,6 +277,21 @@ describe('jstToUtcMs', () => {
 
   it('存在しない日付は例外を投げる', () => {
     expect(() => jstToUtcMs('2026-02-30', 0)).toThrow(RangeError);
+  });
+});
+
+describe('時刻（HH:MM）と、0:00 からの分', () => {
+  it.each([
+    ['00:00', 0],
+    ['09:05', 9 * 60 + 5],
+    ['23:45', 23 * 60 + 45],
+  ])('%s は %d 分で、逆も同じ', (time, minutes) => {
+    expect(timeToMinutes(time)).toBe(minutes);
+    expect(minutesToTime(minutes)).toBe(time);
+  });
+
+  it('1440 分は 24:00（日表示の下端の目盛り）', () => {
+    expect(minutesToTime(24 * 60)).toBe('24:00');
   });
 });
 

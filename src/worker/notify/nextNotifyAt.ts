@@ -1,8 +1,10 @@
 import {
+  MINUTES_PER_DAY,
   addDays,
   dateToYmd,
   daysInMonth,
   jstToUtcMs,
+  timeToMinutes,
   utcMsToJstDate,
   ymdToDate,
   type DateStr,
@@ -14,14 +16,9 @@ import { INPUT_LIMITS, type Entry } from '../../shared/schema';
 // 保存（db/store.ts）が、保存したときに呼ぶ。定期実行（cron.ts）も、通知を送る回の確認と、その次の回を探すのに使う。
 
 const MS_PER_MINUTE = 60_000;
-const MINUTES_PER_DAY = 24 * 60;
 
 /** 通知の時刻の計算に使う項目。行（Entry）も、展開した回（Occurrence）も、この形を満たす。 */
 export type NotifyFields = Pick<Entry, 'allDay' | 'startDate' | 'startTime' | 'notifyOffsetMin'>;
-
-function timeToMinutes(time: string): number {
-  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-}
 
 /**
  * 1 回の通知の時刻（UTC のミリ秒）= 開始 − notifyOffsetMin 分（設計書 4.3）。

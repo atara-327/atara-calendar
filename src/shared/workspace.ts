@@ -1,3 +1,4 @@
+import { compareText } from './compareText';
 import { markCancelled, markDeleted } from './recurrence';
 import type { Entry, Workspace } from './schema';
 
@@ -77,10 +78,6 @@ export function isInLiveWorkspace(
   liveIds: ReadonlySet<string>,
 ): boolean {
   return row.workspaceId === null || liveIds.has(row.workspaceId);
-}
-
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
