@@ -114,6 +114,7 @@ export function DayView({ date }: { date: DateStr }) {
     const track = trackRef.current;
     if (track === null) return;
     settlingRef.current = true;
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     track.style.transition = `transform ${String(SLIDE_MS)}ms ease-out`;
     track.style.transform =
       target === null ? 'translateX(0)' : `translateX(${direction === 'left' ? '-100%' : '100%'})`;
@@ -152,6 +153,8 @@ export function DayView({ date }: { date: DateStr }) {
     onPointerUp: (event: PointerEvent) => {
       // 2 本目の指の離しは、見ない（最初の指は、2 本目が触れた時点で、追跡をやめている）。
       if (event.pointerType === 'mouse' || !event.isPrimary) return;
+      // 滑っている間に置いた指（onPointerDown で見ていない）の離しは、見ない。2 回目の settle で、滑りが途中で戻るため。
+      if (settlingRef.current) return;
       const direction = swipe.end(event.clientX, event.pointerId, event.timeStamp);
       // この直後に click が届いても、空いているところのタップ（タイムブロックの作成）にしない。
       if (direction !== null) swipedRef.current = true;
@@ -167,7 +170,8 @@ export function DayView({ date }: { date: DateStr }) {
       if (draggingRef.current && event.isPrimary && !settlingRef.current) settle(null, null);
     },
     onClickCapture: (event: MouseEvent) => {
-      const swallow = isClickAfterSwipe(swipedRef.current, event.detail);
+      // 滑っている間のタップは、切り替わる前の日の操作になるので、捨てる。
+      const swallow = settlingRef.current || isClickAfterSwipe(swipedRef.current, event.detail);
       swipedRef.current = false;
       if (!swallow) return;
       event.preventDefault();

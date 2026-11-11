@@ -69,7 +69,11 @@ export function DayPane({
     side === 'after' && styles.after,
   );
   return (
-    <div className={className} aria-hidden={side === undefined ? undefined : true}>
+    <div
+      className={className}
+      aria-hidden={side === undefined ? undefined : true}
+      inert={side !== undefined}
+    >
       {/* key を日付にして、日を動いたら、作り直す。上部の欄のスクロール位置を、先頭に戻すため。
           両方の日に欄があると、同じ DOM が使い回され、前の日のスクロール位置が残る。 */}
       <BannerList key={date} items={items.banner} />
