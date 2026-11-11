@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -6,7 +7,7 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
-import { addDays, todayJst, utcMsToJstMinuteOfDay, type DateStr } from '../../shared/date';
+import { addDays, todayJst, type DateStr } from '../../shared/date';
 import { isDateInSupportedYears } from '../../shared/schema';
 import { AddEntryButton } from '../form/AddEntryButton';
 import { openCreateForm } from '../form/instance';
@@ -16,37 +17,22 @@ import { useSyncState } from '../sync/instance';
 import { SyncOverview } from '../sync/SyncStatus';
 import type { SyncState } from '../sync/state';
 import { workspaceDisplayOf } from '../workspaceDisplay';
-import { BannerList } from './BannerList';
 import { DayHeader } from './DayHeader';
 import { dayItemsOf, isHolidayShown } from './dayItems';
 import styles from './DayView.module.css';
-import { layoutDay } from './layout';
-import { createSwipeTracker, isClickAfterSwipe } from './swipe';
-import {
-  MIN_ITEM_HEIGHT,
-  PX_PER_MINUTE,
-  addButtonStart,
-  initialTopMinute,
-  shouldPlace,
-  tapStartTime,
-  type PlacedState,
-} from './timelineGeometry';
-import { Timeline } from './Timeline';
+import { DayPane, NeighborPane, firstItemStartOf, placementsOf, topPixelsFor } from './DayPane';
+import { createSwipeTracker, followOffset, isClickAfterSwipe } from './swipe';
+import { addButtonStart, shouldPlace, tapStartTime, type PlacedState } from './timelineGeometry';
 
 function selectReady(state: SyncState): boolean {
   return state.phase === 'ready';
 }
 
-/** いちばん上に出す位置（px）。今日は今の 1 時間前、他の日は最初の項目（なければ 8:00）。設計書 11.3。 */
-function topPixelsFor(date: DateStr, firstItemStart: number | null): number {
-  const nowMs = Date.now();
-  return (
-    initialTopMinute({
-      isToday: todayJst(nowMs) === date,
-      nowMinute: utcMsToJstMinuteOfDay(nowMs),
-      firstItemStart,
-    }) * PX_PER_MINUTE
-  );
+/** 隣の日へ滑る（元へ戻る）時間（ms）。 */
+const SLIDE_MS = 200;
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /**
@@ -61,20 +47,11 @@ export function DayView({ date }: { date: DateStr }) {
   const view = useSyncState(selectView);
 
   const display = useMemo(() => workspaceDisplayOf(view.workspaces.values()), [view]);
+  const entries = useMemo(() => [...view.entries.values()], [view]);
   // データ（行）か日付が変わったときだけ、回を求め直す。
-  const items = useMemo(
-    () => dayItemsOf({ entries: [...view.entries.values()], display, date }),
-    [view, display, date],
-  );
+  const items = useMemo(() => dayItemsOf({ entries, display, date }), [entries, display, date]);
   const isHoliday = useMemo(() => isHolidayShown(date, display), [date, display]);
-  // 短い項目は、描く高さ（MIN_ITEM_HEIGHT）と同じ長さで並べ方を決める。本当の終わりで決めると、
-  // すぐ後の項目と同じ列に並び、伸ばして描いた分が重なって隠れる。
-  const placements = useMemo(() => {
-    const minMinutes = MIN_ITEM_HEIGHT / PX_PER_MINUTE;
-    return layoutDay(
-      items.timeline.map((item) => ({ ...item, end: Math.max(item.end, item.start + minMinutes) })),
-    );
-  }, [items.timeline]);
+  const placements = useMemo(() => placementsOf(items.timeline), [items.timeline]);
 
   const previousDate = addDays(date, -1);
   const nextDate = addDays(date, 1);
@@ -84,11 +61,7 @@ export function DayView({ date }: { date: DateStr }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const placedRef = useRef<PlacedState | null>(null);
 
-  // タイムラインの最初の項目の開始（上部の欄のものは数えない）。
-  const firstItemStart = items.timeline.reduce<number | null>(
-    (first, item) => (first === null ? item.start : Math.min(first, item.start)),
-    null,
-  );
+  const firstItemStart = firstItemStartOf(items.timeline);
 
   // 最初に表示する位置を、描く前に決める（描いたあとに動かすと、一瞬、0:00 が見える）。
   // 決め直すのは、日付が変わったとき（‹ ›・スワイプ・［今日］）と、/day/... を直接開いて、最初の読み込みが
@@ -119,30 +92,79 @@ export function DayView({ date }: { date: DateStr }) {
 
   // 左右のスワイプ（DV-5）。縦のスクロールはブラウザに任せ（touch-action: pan-y pinch-zoom）、判定は swipe.ts。
   // PC（マウス）は対象にしない。PC は ‹ › ボタンで動く。
+  // 動かしている間は、中身（track）を translateX で動かす。毎フレームの再描画は避けたいので、動きは DOM に直接
+  // 書き、React の state は「動かしている間だけ、隣の日を描く」ための 1 つだけにする。
   const [swipe] = useState(createSwipeTracker);
   const swipedRef = useRef(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
+  const settlingRef = useRef(false);
+  const followRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  // 指を離したあとの動き。target があればその日へ滑って切り替え、なければ元の位置へ戻る。
+  const settle = (direction: 'left' | 'right' | null, target: DateStr | null) => {
+    const track = trackRef.current;
+    if (track === null) return;
+    settlingRef.current = true;
+    track.style.transition = `transform ${String(SLIDE_MS)}ms ease-out`;
+    track.style.transform =
+      target === null ? 'translateX(0)' : `translateX(${direction === 'left' ? '-100%' : '100%'})`;
+    // Why not transitionend: 動きが無効になった（要素が隠れた）ときなどに届かず、画面が動かしたまま固まるため。
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      track.style.transition = 'none';
+      track.style.transform = '';
+      if (target !== null) replaceDay(target);
+      draggingRef.current = false;
+      settlingRef.current = false;
+      setDragging(false);
+    }, SLIDE_MS);
+  };
+
   const swipeHandlers = {
     onPointerDown: (event: PointerEvent) => {
       swipedRef.current = false;
-      if (event.pointerType === 'mouse') return;
-      swipe.start(event.clientX, event.clientY, event.pointerId, event.isPrimary);
+      if (event.pointerType === 'mouse' || settlingRef.current) return;
+      // 「動きを減らす」設定のときは、指についてくる動きも滑る動きも付けず、離したときにすぐ切り替える。
+      followRef.current = !prefersReducedMotion();
+      swipe.start(event.clientX, event.clientY, event.pointerId, event.isPrimary, event.timeStamp);
     },
     onPointerMove: (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
-      swipe.move(event.clientX, event.clientY, event.pointerId);
+      const dx = swipe.move(event.clientX, event.clientY, event.pointerId, event.timeStamp);
+      const track = trackRef.current;
+      if (dx === null || !followRef.current || track === null) return;
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${String(followOffset(dx, hasPrevious, hasNext))}px)`;
+      if (!draggingRef.current) {
+        draggingRef.current = true;
+        setDragging(true);
+      }
     },
     onPointerUp: (event: PointerEvent) => {
-      if (event.pointerType === 'mouse') return;
-      const direction = swipe.end(event.clientX, event.pointerId);
-      if (direction === null) return;
+      // 2 本目の指の離しは、見ない（最初の指は、2 本目が触れた時点で、追跡をやめている）。
+      if (event.pointerType === 'mouse' || !event.isPrimary) return;
+      const direction = swipe.end(event.clientX, event.pointerId, event.timeStamp);
       // この直後に click が届いても、空いているところのタップ（タイムブロックの作成）にしない。
-      swipedRef.current = true;
-      if (direction === 'left' && hasNext) replaceDay(nextDate);
-      if (direction === 'right' && hasPrevious) replaceDay(previousDate);
+      if (direction !== null) swipedRef.current = true;
+      let target: DateStr | null = null;
+      if (direction === 'left' && hasNext) target = nextDate;
+      if (direction === 'right' && hasPrevious) target = previousDate;
+      if (draggingRef.current) settle(direction, target);
+      else if (target !== null) replaceDay(target);
     },
     // ブラウザが縦のスクロールを始めると届く。動き始めが縦だった、ということ。
     onPointerCancel: (event: PointerEvent) => {
       swipe.cancel(event.pointerId);
+      if (draggingRef.current && event.isPrimary && !settlingRef.current) settle(null, null);
     },
     onClickCapture: (event: MouseEvent) => {
       const swallow = isClickAfterSwipe(swipedRef.current, event.detail);
@@ -178,17 +200,35 @@ export function DayView({ date }: { date: DateStr }) {
         }}
         onToday={goToToday}
       />
-      {/* key を日付にして、日を動いたら、作り直す。上部の欄のスクロール位置を、先頭に戻すため。
-          両方の日に欄があると、同じ DOM が使い回され、前の日のスクロール位置が残る。 */}
-      <BannerList key={date} items={items.banner} />
       <div className={styles.body}>
-        <div ref={scrollerRef} className={styles.scroller} {...swipeHandlers}>
-          <Timeline
-            items={items.timeline}
-            placements={placements}
+        <div ref={trackRef} className={styles.track}>
+          {dragging && hasPrevious && (
+            <NeighborPane
+              key="before"
+              date={previousDate}
+              entries={entries}
+              display={display}
+              side="before"
+            />
+          )}
+          <DayPane
+            key="current"
             date={date}
+            items={items}
+            placements={placements}
+            scrollerRef={scrollerRef}
+            scrollerProps={swipeHandlers}
             onTrackClick={onTrackClick}
           />
+          {dragging && hasNext && (
+            <NeighborPane
+              key="after"
+              date={nextDate}
+              entries={entries}
+              display={display}
+              side="after"
+            />
+          )}
         </div>
         <SyncOverview />
       </div>

@@ -207,6 +207,44 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  /* 動かしている中身が、画面の外にはみ出して、横のスクロールを起こさないため。 */
+  overflow: hidden;
+}
+
+/*
+ * 日の中身（上部の欄とタイムライン）を、まとめて横に動かす（スワイプ。DV-5）。動きは transform だけで、
+ * レイアウトの計算は要らない。隣の日は、動かしている間だけ、左右に並べて描く。
+ */
+.track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 隣の日は、見せるだけ。押せない・選べない。 */
+.neighbor {
+  pointer-events: none;
+}
+
+.before {
+  transform: translateX(-100%);
+}
+
+.after {
+  transform: translateX(100%);
+}
+
+.paneBody {
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 /*
