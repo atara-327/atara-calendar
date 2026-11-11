@@ -53,17 +53,19 @@ function TimelineButton({ item, placement, dragDy, onDragDy }: TimelineButtonPro
 
   // ドラッグ中は、縦のスクロールを止める。touch-action は、指を置いたあとでは変えられないので、
   // touchmove を、passive でない listener で止める（React の onTouchMove は passive で、止められない）。
+  // Why not ドラッグが始まってから付ける: 指を置いた時点で passive でない listener がないと、ブラウザが
+  // その後の touchmove を止められない形で送り、縦のスクロールが始まって、ドラッグが取り消されるため。
   useEffect(() => {
     const button = buttonRef.current;
-    if (!dragging || button === null) return;
+    if (!item.movable || button === null) return;
     const prevent = (event: TouchEvent) => {
-      if (event.cancelable) event.preventDefault();
+      if (tracker.isDragging() && event.cancelable) event.preventDefault();
     };
     button.addEventListener('touchmove', prevent, { passive: false });
     return () => {
       button.removeEventListener('touchmove', prevent);
     };
-  }, [dragging]);
+  }, [item.movable, tracker]);
 
   // 1 分刻みなので、短い項目でも題名が読めるよう、15 分ぶんの高さを下限にする。
   const height = Math.max(MIN_ITEM_HEIGHT, (item.end - item.start) * PX_PER_MINUTE);
