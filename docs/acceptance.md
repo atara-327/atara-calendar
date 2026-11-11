@@ -147,7 +147,7 @@
 - 端末: Android（電車の中を想定）
 - 手順:
   1. 月表示を開いたままにする（読み込み済みの状態）。
-  2. 機内モードにする。**ページは読み込み直さない**（読み込み直すと表示されない。[SY-4](requirements/requirements.md#59-同期オフライン)は、その挙動を受け入れている）。
+  2. 機内モードにする。ページを読み込み直しても、表示される（[PW-2](requirements/requirements.md#513-ホーム画面への追加pwa)。[2.16](#216-ホーム画面への追加と電波がない間の表示pw)）。ここでは、読み込み直さずに確かめる。
   3. 予定を作り、その予定の題名を変える（消さない）。月表示のスクロールや、日表示も見る。
   4. 機内モードを切る。
   5. PC（または別の端末）で開いて、3 で変えた題名の予定が出ることを見る。
@@ -228,6 +228,19 @@
 - 見るもの: 一覧や日付の選択画面を開いたままの外側の押し方で、フォームまで閉じるか／キーボードを出したままの外側の押し方で、入力が消えて困らないか／( + ) のダブルクリックで、開いてすぐ閉じないか。
 - **Why**: 1 は、ブラウザと OS で動きが違うかもしれず、手元では確かめきれないため。2 は、実際の指の習慣で困るかは、実機で見ないと分からないため。3 は、開いてすぐ閉じる不具合を直したので、実機でも確かめるため（[設計書 11.4](design/design.md#114-フォームev-14tb-12)）。
 - 結果: 未
+
+### 2.16 ホーム画面への追加と電波がない間の表示（PW）
+
+- 要件: [PW-1](requirements/requirements.md#513-ホーム画面への追加pwa)・[PW-2](requirements/requirements.md#513-ホーム画面への追加pwa)・[PW-3](requirements/requirements.md#513-ホーム画面への追加pwa)・[SY-4](requirements/requirements.md#59-同期オフライン)
+- 端末: Android と PC。リリース後の機能なので、リリース（v1.0）の条件には入れない。
+- 手順:
+  1. 電波のある状態で、本番を開く（一度、予定が出るまで）。ブラウザのメニューから、ホーム画面（PC ではアプリとして）に追加し、追加したアイコンから開く。ブラウザのバーがないこと。
+  2. 機内モードにして、追加したアイコン（またはブラウザ）から `/` を開き、`/day/` の日表示も開く（URL を直接開く）。画面が出て、予定が見えること。
+  3. Access のログインが切れた状態（Cookie を消す）で、電波のあるときに開く。保存した画面ではなく、ログイン画面へ行くこと。
+  4. デプロイの後、電波のある状態で、何も操作せずに 1〜2 回開き直す。新しい版になること（画面の変更で見分ける）。
+- 見るもの: 上の 4 つ。実機で追加できないときは、[設計書 14.1](design/design.md#141-ホーム画面への追加)の Access の Bypass の設定を足す。
+- **Why**: Access の後ろでのマニフェストの取得・ホーム画面への追加・Service Worker の切り替わりは、本物のブラウザと Access でしか確かめられないため。
+- 結果: 対象外（リリースの条件に入れない。リリース後の機能）
 
 ## 3. 本番の CPU 時間
 
@@ -377,7 +390,7 @@
 | [SY-1](requirements/requirements.md#59-同期オフライン) | `src/worker/api/changes.test.ts`（SY-1）、`src/client/sync/sync.integration.test.ts`（2 台で見る）。本番で 2 台: 実機（[2.1](#21-pc-とスマホで同じ予定が見える)） | 未（実機の分が残る） |
 | [SY-2](requirements/requirements.md#59-同期オフライン) | `src/client/sync/engine.test.ts`（電波がない間の編集と、戻ったあとの送信）。実際の電波: 実機（[2.8](#28-機内モードでの編集と同期)・[2.9](#29-電波がない間に溜めた編集の重さ)） | 未（実機の分が残る） |
 | [SY-3](requirements/requirements.md#59-同期オフライン) | `src/client/sync/sync.integration.test.ts`（SY-3。2 台の食い違い）、`src/worker/db/store.test.ts`・`src/worker/api/entries.test.ts`（SY-3） | 済（自動テスト） |
-| [SY-4](requirements/requirements.md#59-同期オフライン) | Service Worker を作っていない（`src/`・`public/` に登録がない）。電波がない状態で開くと「読み込めませんでした」と再試行が出る: `src/client/sync/engine.test.ts`（SY-4） | 対象外 |
+| [SY-4](requirements/requirements.md#59-同期オフライン) | Service Worker で満たす（[PW-2](#415-ホーム画面への追加pw)。判断: `src/sw/rules.test.ts`）。Service Worker が入る前の端末で、電波がない状態で開くと「読み込めませんでした」と再試行が出る: `src/client/sync/engine.test.ts`（SY-4）。実機: [2.16](#216-ホーム画面への追加と電波がない間の表示pw) | 対象外（リリースの条件に入れない。リリース後の機能） |
 
 ### 4.11 ログイン（AU）
 
@@ -415,6 +428,14 @@
 | [MC-3](requirements/requirements.md#512-claude-連携mcp) | `mcp/tools.test.ts`（list_workspaces・create_workspace。色の名前・省略したときの色と sortOrder）・`src/shared/workspaceColors.test.ts` | 同上 |
 | [MC-4](requirements/requirements.md#512-claude-連携mcp) | `mcp/config.test.ts`（設定）。`npm run pack:mcpb` で `.mcpb` を作れること（manifest の検証が通る）。Claude Desktop に入れて、設定画面でサービストークンを入れる操作は、ユーザーが試す | 同上 |
 | [MC-5](requirements/requirements.md#512-claude-連携mcp) | Google カレンダーの MCP で読み、こちらの MCP で書き込む。コードはなく（Claude が 2 つの MCP を使う）、ユーザーが試す | 同上 |
+
+### 4.15 ホーム画面への追加（PW）
+
+| ID | 確かめ方 | 結果 |
+| --- | --- | --- |
+| [PW-1](requirements/requirements.md#513-ホーム画面への追加pwa) | マニフェストのファイル・アイコン。ホーム画面への追加は、ユーザーが試す（[2.16](#216-ホーム画面への追加と電波がない間の表示pw)） | 対象外（リリース（v1.0）の条件に入れない。リリース後の機能のため） |
+| [PW-2](requirements/requirements.md#513-ホーム画面への追加pwa) | `src/sw/rules.test.ts`（PW-2。URL ごとの扱い・保存してよい応答）。`vite preview` と Playwright で、オフラインでも開けることを確かめた。実機は 2.16 | 同上 |
+| [PW-3](requirements/requirements.md#513-ホーム画面への追加pwa) | `src/sw/rules.test.ts`（PW-3。古いキャッシュの片づけ）・`src/worker/staticHeaders.test.ts`（PW-3。`sw.js` を覚えさせない）。実機は 2.16 | 同上 |
 
 ## 5. 見つかった問題
 

@@ -37,8 +37,8 @@ describe('画面（静的ファイル）のセキュリティヘッダー（NF-2
   const rules = parseHeadersFile(read('public/_headers'));
   const all = rules.get('/*');
 
-  it('すべてのパス（/*）に、ヘッダーを付ける。そのほかに決めたパスは、絵文字の画像（/emoji/*）だけ', () => {
-    expect([...rules.keys()]).toEqual(['/*', '/emoji/*']);
+  it('すべてのパス（/*）に、ヘッダーを付ける。そのほかに決めたパスは、絵文字の画像（/emoji/*）と Service Worker（/sw.js）だけ', () => {
+    expect([...rules.keys()]).toEqual(['/*', '/emoji/*', '/sw.js']);
   });
 
   it('X-Content-Type-Options: nosniff と Referrer-Policy: no-referrer を付ける', () => {
@@ -91,5 +91,13 @@ describe('index.html は、CSP で止まるものを含まない（NF-2）', () 
 
   it('onclick のようなイベントの属性や、style 属性がない', () => {
     expect(html).not.toMatch(/<[^>]+\s(on[a-z]+|style)\s*=/i);
+  });
+});
+
+describe('PW-3 Service Worker（public/_headers）', () => {
+  const sw = parseHeadersFile(read('public/_headers')).get('/sw.js');
+
+  it('ブラウザに覚えさせない（新しい版への切り替えが遅れないように）', () => {
+    expect(sw?.get('cache-control')).toBe('no-cache');
   });
 });

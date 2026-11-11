@@ -6,6 +6,7 @@ import './global.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { registerServiceWorker } from './registerServiceWorker';
 import { getFormController } from './form/instance';
 import { getSidebarController } from './sidebar/instance';
 import { getSyncEngine } from './sync/instance';
@@ -28,6 +29,8 @@ void getSyncEngine()
 getFormController().start();
 // サイドメニューも同じ。履歴の印が残っているときの戻し方は、フォームと同じ仕組み（historyMark.ts）。
 getSidebarController().start();
+
+registerServiceWorker();
 
 createRoot(root).render(
   <StrictMode>
