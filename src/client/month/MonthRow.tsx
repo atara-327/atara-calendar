@@ -199,10 +199,10 @@ function TimedChip({ item }: { item: TimedItem }) {
       type="button"
       aria-label={eventAccessibleName(event)}
       className={classNames(styles.timed, styles.movable, drag.dragging && styles.dragging)}
-      style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}
+      // 左端の線の色は、ワークスペースの色。実行時に決まるので、CSSOM で与える（設計書 11.2）。
+      style={{ gridColumn: item.col + 1, gridRow: item.row + 1, borderLeftColor: event.color }}
       {...drag.props}
     >
-      <span className={styles.dot} style={{ backgroundColor: event.color }} />
       {event.startTime !== null && <span className={styles.time}>{event.startTime}</span>}
       <span className={styles.timedText}>
         <EmojiText text={event.title} />

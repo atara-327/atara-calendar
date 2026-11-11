@@ -162,19 +162,19 @@
 .more {
   box-sizing: border-box;
   min-width: 0;
-  margin: 1px 2px;
+  margin: 1px 1px;
   line-height: 18px;
   white-space: nowrap;
 }
 
 /*
- * 予定の文字（時間指定の予定・横棒の題名）は 10px。マスが 1 / 7 の幅（約 55px）しかなく、12px では、
- * 予定名が数文字しか見えないため。「+N件」は、予定名ではないので、12px のまま。
+ * 予定の文字（時間指定の予定・横棒の題名）は 9px。マスが 1 / 7 の幅（約 55px）しかなく、
+ * 予定名を 1 文字でも多く見せるため（ユーザーの指示）。9px より小さいと、スマホで漢字がつぶれる。「+N件」は、予定名ではないので、12px のまま。
  * 行の高さ（line-height: 18px）は変えない。マスの高さの計算（sizing.ts の SLOT_HEIGHT）と合わせてあるため。
  */
 .bar,
 .timed {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .more {
@@ -212,8 +212,8 @@
 }
 
 .bar {
-  padding: 0 4px;
-  border-radius: 4px;
+  padding: 0 1px;
+  border-radius: 3px;
 }
 
 /*
@@ -243,20 +243,18 @@
   border-bottom-right-radius: 0;
 }
 
+/*
+ * 時間指定の予定。ワークスペースの色は、左端の 2px の線で見せる（色は CSSOM）。
+ * Why not 色の点: 点と余白で約 8px を取り、予定名が 1〜2 文字減るため（ユーザーの選択。2026-11-12）。
+ */
 .timed {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 2px;
+  gap: 2px;
+  padding: 0 1px 0 2px;
   overflow: hidden;
-  border-radius: 4px;
-}
-
-.dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  border-left: 2px solid transparent;
+  border-radius: 0 3px 3px 0;
 }
 
 .time {
