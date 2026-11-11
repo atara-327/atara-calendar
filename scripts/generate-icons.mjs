@@ -1,5 +1,5 @@
 // public/icons/icon.svg から、PNG（192・512・maskable 512）を作る（設計書 14.1）。
-// 実行: npm run gen:icons（Playwright が必要）。作った PNG はコミットする。
+// 実行: npx playwright install chromium のあとに、npm run gen:icons（ブラウザは、npm install では入らない）。作った PNG はコミットする。
 // Why ビルドのたびに作らないのか: ブラウザを要する道具をビルドに入れたくなく、アイコンはめったに変わらないため。
 // Why maskable も同じ絵なのか: SVG が、最初から中心の安全な領域に収まっているため。
 import { readFileSync, writeFileSync } from 'node:fs';
