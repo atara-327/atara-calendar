@@ -17,6 +17,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "cf-typegen": "wrangler types --strict-vars=false --env-file /dev/null",
+    "gen:icons": "node scripts/generate-icons.mjs",
     "gen:vsop87": "node scripts/generate-vsop87-earth.mjs"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "fake-indexeddb": "^6.2.6",
     "globals": "^17.13.0",
     "miniflare": "5.20261019.0-beta",
+    "playwright": "^1.56.1",
     "prettier": "^3.9.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
