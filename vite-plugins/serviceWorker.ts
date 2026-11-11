@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import type { Plugin } from 'vite';
-import { isPrecached } from '../src/sw/rules.ts';
+import { isPrecached, missingFromPage } from '../src/sw/rules.ts';
 
 // Service Worker（src/sw/sw.ts。設計書 14.2）を、ビルドの出力から作る。
 //
@@ -26,6 +26,14 @@ export function serviceWorker(): Plugin {
         .sort();
       const html = bundle['index.html'];
       if (html?.type !== 'asset') throw new Error('bundle に index.html がありません');
+      // install は、取ったページが一覧の JS・CSS をすべて指しているかを確かめる（rules.ts）。指していないファイルが
+      // あると、端末で install が黙って失敗し続けるので、ビルドで止めて気づけるようにする。
+      const page =
+        typeof html.source === 'string' ? html.source : new TextDecoder().decode(html.source);
+      const missing = missingFromPage(page, urls);
+      if (missing.length > 0) {
+        throw new Error(`index.html が指していない JS・CSS があります: ${missing.join(', ')}`);
+      }
 
       const bundleSw = async (version: string, codeHash: string, precache: readonly string[]) => {
         const result = await build({
