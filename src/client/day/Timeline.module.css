@@ -148,3 +148,19 @@
   border-radius: 50%;
   background-color: var(--color-now);
 }
+
+/*
+ * ドラッグで動かせる項目（EV-6）。スマホの長押しで、文字が選ばれたり、メニューが出たりしないようにする。
+ * 動かしている間は、手前に出し、動かせることが見て分かるようにする。
+ */
+.movable {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.dragging {
+  z-index: 3;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  cursor: grabbing;
+  touch-action: none;
+}
