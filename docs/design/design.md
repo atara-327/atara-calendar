@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 版 | 3.4（確定。変更は[changelog.md](changelog.md)） |
+| 版 | 3.5（確定。変更は[changelog.md](changelog.md)） |
 | 作成日 | 2026-10-19 |
 | 元にした要件 | [要件定義書 v1.8](../requirements/requirements.md) |
 
@@ -80,12 +80,13 @@ atara-calendar/
 ├─ src/
 │  ├─ shared/        画面・Worker・MCP が共有するコード
 │  ├─ worker/        Cloudflare Worker（api/・db/・notify/・cron.ts・認証）
+│  ├─ sw/            Service Worker（14章）。rules.ts が判断、sw.ts がイベントの受け取り
 │  └─ client/        画面（React。month/・day/・form/・sidebar/・sync/・emoji/）
 ├─ mcp/             Claude Desktop の MCP サーバー（13章）
 ├─ migrations/       D1 のテーブル定義と、最初から入れる行（4.2）
-├─ public/           そのまま配信するファイル（静的ファイルのヘッダー `_headers`）
-├─ scripts/          開発用のスクリプト（天文計算のデータの生成・MCP のビルド）
-├─ vite-plugins/     Vite のプラグイン（絵文字の画像の生成。11.1）
+├─ public/           そのまま配信するファイル（静的ファイルのヘッダー `_headers`・マニフェスト・アイコン `icons/`）
+├─ scripts/          開発用のスクリプト（天文計算のデータの生成・MCP のビルド・アイコンの PNG の生成）
+├─ vite-plugins/     Vite のプラグイン（絵文字の画像の生成［11.1］・`sw.js` の生成［14.2］）
 ├─ third_party/      配布物に含める、第三者のライセンス全文
 ├─ test/fixtures/    テストの正解データ（内閣府の祝日一覧・国立天文台の暦要項）
 ├─ test/helpers/     テストで共通に使う道具（ローカル D1、同期の端末、偽の時計・電波・錠）
@@ -1023,6 +1024,9 @@ Claude Desktop ──(標準入出力)── MCP サーバー（PC の上で動�
 - **`/api/*` は扱いません**（そのまま通す）。**Why**: データは、同期の仕組み（6章。IndexedDB）が持っています。二重に持つと、食い違うため。
 - **新しい版への切り替え**: `sw.js` はブラウザに覚えさせません（`Cache-Control: no-cache`）。新しい Service Worker は、入ったらすぐ切り替わり、古い保存を消します（Q3）。
 - **壊れたとき**: ページはネットワークを先に使うので、直した `sw.js` を出せば、次に開いたときに戻ります。
+- **作り方**: `vite-plugins/serviceWorker.ts` が、ビルドの出力から、保存するファイルの一覧と版（ファイル名の hash）を求め、`src/sw/sw.ts` に埋めて `sw.js` を作ります（版はキャッシュの名前に入る）。URL ごとの扱いの判断は `src/sw/rules.ts`。登録は、本番のビルドのときだけ（`src/client/registerServiceWorker.ts`）。**Why**: `vite dev` で登録すると、保存したファイルが開発中の変更を隠すため。
+- **細部**: 保存するのは、ok で、転送されていない同じ origin の応答だけです（ログイン画面を「アプリ」として保存しないため）。install では、一覧のファイルに加えて `/` も保存します（古いキャッシュを消すとき、開いたばかりのページも消えるため）。フォント（`.woff2`）は数百個あるので、install では保存せず、使ったときに保存します。
+- アイコンの PNG は、`npm run gen:icons`（Playwright）で `icon.svg` から作り、コミットします。**Why**: ビルドにブラウザを入れたくなく、めったに変わらないため。maskable も同じ絵です（絵が、最初から中心の安全な領域に収まっている）。
 
 ---
 
