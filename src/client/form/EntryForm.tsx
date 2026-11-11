@@ -79,7 +79,7 @@ function selectViewWorkspaces(state: SyncState): SyncState['view']['workspaces']
 }
 
 function initialValues(
-  target: FormTarget,
+  target: EditorTarget,
   choices: readonly Workspace[],
   originalRrule: Rrule | null,
 ): FormValues {
@@ -224,7 +224,10 @@ function NotifyTiming({
   );
 }
 
-export function EntryForm({ target }: { target: FormTarget }) {
+/** 入力の段のある、フォームの対象（ドラッグで移したあとの 'move' は、MoveDialog が受ける）。 */
+type EditorTarget = Exclude<FormTarget, { mode: 'move' }>;
+
+export function EntryForm({ target }: { target: EditorTarget }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const ids = useId();
   const workspaces = useSyncState(selectViewWorkspaces);

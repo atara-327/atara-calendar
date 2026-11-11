@@ -51,6 +51,11 @@ export interface TimelineItem {
   timeLabel: string;
   accessibleName: string;
   occurrence: Occurrence;
+  /**
+   * ドラッグで時刻を移せるか。その日の中だけに収まる、時間指定のもの（EV-6。設計書 11.3）。
+   * 前の日・次の日にかかるものは、日を変える動きになるので、動かせない。
+   */
+  movable: boolean;
 }
 
 export interface DayItems {
@@ -135,6 +140,7 @@ function toTimeline(
     timeLabel,
     accessibleName: accessibleNameOf(occurrence, [endDate > startDate ? datedRange : timeLabel]),
     occurrence,
+    movable: !occurrence.allDay && startDate === endDate,
   };
 }
 

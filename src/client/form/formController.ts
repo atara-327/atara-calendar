@@ -1,5 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { Occurrence } from '../../shared/recurrence';
+import type { EntryChanges, Scope } from '../../shared/schema';
 import { createHistoryMark, type HistoryEnv, type HistoryPort } from '../historyMark';
 import type { StartPoint } from './schedule';
 import type { EntryKind } from './values';
@@ -12,7 +13,19 @@ export type { HistoryPort };
 export type FormTarget =
   /** start は、開始の初期値。なければ、今日の次の正時（日表示が、見ている日と、タップした時刻を渡す）。 */
   | { mode: 'create'; kind: EntryKind; openedAt: number; start?: StartPoint }
-  | { mode: 'edit'; occurrence: Occurrence; openedAt: number };
+  | { mode: 'edit'; occurrence: Occurrence; openedAt: number }
+  /**
+   * 日表示のドラッグで時刻を移したあとの、範囲を聞く段（scopes）か、保存できなかった理由（message）。
+   * 入力の段はなく、フォームは開かない（move.ts。設計書 11.3）。
+   */
+  | {
+      mode: 'move';
+      occurrence: Occurrence;
+      changes: EntryChanges;
+      scopes: readonly Scope[] | null;
+      message: string | null;
+      openedAt: number;
+    };
 
 export interface FormState {
   /** 開いているフォーム。閉じているときは null。 */

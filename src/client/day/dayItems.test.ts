@@ -641,3 +641,29 @@ describe('ヘッダーの日付の色（祝日）', () => {
     expect(isHolidayShown('2026-11-03', off)).toBe(true);
   });
 });
+
+describe('ドラッグで時刻を移せる項目（EV-6）', () => {
+  it('EV-6: その日の中に収まる時間指定の予定・タイムブロックは、動かせる', () => {
+    const { timeline } = itemsOf('2026-10-19', [
+      timed({ id: 'e1', startDate: '2026-10-19' }),
+      block({ id: 'b1', startDate: '2026-10-19' }),
+    ]);
+
+    expect(timeline.map((item) => item.movable)).toEqual([true, true]);
+  });
+
+  it('EV-6: 前の日・次の日にかかる項目は、どちらの日でも動かせない', () => {
+    const entries = [
+      block({
+        id: 'b1',
+        startDate: '2026-10-19',
+        startTime: '22:00',
+        endDate: '2026-10-20',
+        endTime: '02:00',
+      }),
+    ];
+
+    expect(itemsOf('2026-10-19', entries).timeline.map((item) => item.movable)).toEqual([false]);
+    expect(itemsOf('2026-10-20', entries).timeline.map((item) => item.movable)).toEqual([false]);
+  });
+});
