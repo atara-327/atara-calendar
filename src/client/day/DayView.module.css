@@ -4,6 +4,13 @@
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  /*
+   * 画面の文字は選べないようにする。予定の長押し（ドラッグ。EV-6）で、Android の Chrome が、指の近くの別の文字
+   * （日付・時刻の目盛りなど）を選び始め、ドラッグが取り消されるため。項目だけを選べなくしても防げなかった。
+   * フォームの入力欄は、この外（FormHost）にあるので、影響しない。
+   */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .header {
