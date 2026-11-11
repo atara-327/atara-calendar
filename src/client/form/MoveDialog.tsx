@@ -7,6 +7,7 @@ import type { FormTarget } from './formController';
 import { CloseIcon } from './icons';
 import { closeEntryForm } from './instance';
 import { scopeChangedMessage, scopeUnavailableMessage, unavailableMessage } from './messages';
+import { outcomesOf } from './outcomes';
 import { recheckScope } from './scope';
 import { ScopeStep } from './ScopeStep';
 
@@ -77,7 +78,7 @@ export function MoveDialog({ target }: { target: MoveTarget }) {
     <dialog
       ref={dialogRef}
       className={styles.dialog}
-      aria-label="予定の時刻を移す"
+      aria-label="予定を移す"
       onCancel={(event) => {
         event.preventDefault();
         closeEntryForm();
@@ -106,7 +107,13 @@ export function MoveDialog({ target }: { target: MoveTarget }) {
             action="save"
             scopes={scopes}
             selected={selected}
-            outcomes={{}}
+            outcomes={outcomesOf({
+              rows: getSyncEngine().store.getState().view.entries.values(),
+              occurrence,
+              changes,
+              scopes,
+              shownStartDate: changes.startDate ?? occurrence.startDate,
+            })}
             error={null}
             onSelect={setSelected}
             onBack={closeEntryForm}

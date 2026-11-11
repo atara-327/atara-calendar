@@ -31,22 +31,16 @@ import { loadLastWorkspaceId, saveLastWorkspaceId } from './lastWorkspace';
 import { mapSearchUrl, openableUrl } from './links';
 import { scopeChangedMessage, scopeUnavailableMessage, unavailableMessage } from './messages';
 import { TIMED_NOTIFY_RANGE, describeAllDayNotify, parseNotifyOffset } from './notify';
+import { outcomesOf } from './outcomes';
 import { RepeatControls } from './RepeatControls';
 import {
   describeFirstOccurrence,
-  describeSeriesAfter,
   firstOccurrence,
   repeatDescriptionDate,
   seriesRruleOf,
 } from './repeat';
 import { moveStart } from './schedule';
-import {
-  decideScope,
-  recheckScope,
-  seriesAfterChange,
-  type ScopeAction,
-  type ScopeDecision,
-} from './scope';
+import { decideScope, recheckScope, type ScopeAction, type ScopeDecision } from './scope';
 import { ScopeStep, type ScopeStepKind } from './ScopeStep';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
@@ -369,29 +363,18 @@ export function EntryForm({ target }: { target: EditorTarget }) {
     return getSyncEngine().store.getState().view.entries.values();
   }
 
-  /**
-   * 範囲ごとの、保存したあとの系列の説明。ルールか開始日を変えていないとき（題名だけなど）は、保存したあとの系列が
-   * 変わらないので、出さない（範囲の名前の下の 1 行だけ）。
-   * 範囲によって、基準の日が違い（「すべて」は系列の開始日、「これ以降すべて」は開いた回の日付に、日付の変更を足した日）、
-   * 入力の段では、毎月 N 日などが決まらない。shared の関数を当てた結果から作る（画面にずらしの決まりを書き写さない）。
-   */
-  function outcomesOf(
+  function outcomesFor(
     scopes: readonly Scope[],
     changes: EntryChanges,
   ): Partial<Record<Scope, string>> {
     if (target.mode !== 'edit') return {};
-    if (changes.rrule === undefined && changes.startDate === undefined) return {};
-    const outcomes: Partial<Record<Scope, string>> = {};
-    for (const scope of scopes) {
-      const after = seriesAfterChange({
-        rows: viewRows(),
-        occurrence: target.occurrence,
-        changes,
-        scope,
-      });
-      if (after !== null) outcomes[scope] = describeSeriesAfter(after, values.startDate);
-    }
-    return outcomes;
+    return outcomesOf({
+      rows: viewRows(),
+      occurrence: target.occurrence,
+      changes,
+      scopes,
+      shownStartDate: values.startDate,
+    });
   }
 
   function changeEntry(scope: Scope, changes: EntryChanges): void {
@@ -431,7 +414,7 @@ export function EntryForm({ target }: { target: EditorTarget }) {
             scopes: decision.scopes,
             selected: decision.scopes[0],
             changes,
-            outcomes: outcomesOf(decision.scopes, changes),
+            outcomes: outcomesFor(decision.scopes, changes),
           });
           return;
         default:
