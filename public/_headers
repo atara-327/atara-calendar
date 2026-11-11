@@ -7,3 +7,7 @@
 # 一度読み込んだ画像を、電波がない間も出せるようにするため（設計書 11.1）。
 /emoji/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Service Worker は、ブラウザに覚えさせない。覚えると、新しい版への切り替えが遅れる（設計書 14.2）。
+/sw.js
+  Cache-Control: no-cache
