@@ -34,6 +34,13 @@
   border-left: 1px solid var(--color-grid);
 }
 
+/* ドラッグ（EV-6）で、離すと落ちる日。 */
+.dropTarget {
+  background-color: rgb(138 180 248 / 25%);
+  outline: 2px solid var(--color-today);
+  outline-offset: -2px;
+}
+
 /* 範囲（1900〜2199 年）の外の日。リンクではなく、日付の数字だけを薄く出す。 */
 .outOfRange {
   color: var(--color-observance);
@@ -291,4 +298,22 @@
 
 .more:hover {
   background-color: var(--color-grid);
+}
+
+/*
+ * ドラッグで動かせる予定（EV-6）。長押しで、文字の選択と、スマホのメニューが出ないようにする。
+ * 動かしている間は、touch-action: none で、縦のスクロールを起こさない（touchmove の listener と合わせて）。
+ * 影は、予定の層が overflow: hidden で切るので、使わない。
+ */
+.movable {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.dragging {
+  opacity: 0.7;
+  outline: 2px solid var(--color-today);
+  cursor: grabbing;
+  touch-action: none;
 }

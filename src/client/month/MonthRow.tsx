@@ -1,21 +1,23 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef, type CSSProperties } from 'react';
 import { dateToYmd, dayOfWeek, type DateStr } from '../../shared/date';
 import { classNames } from '../classNames';
 import { readableTextColor } from '../color';
 import { formatMonthDay } from '../dateFormat';
 import { EmojiText } from '../emoji/EmojiText';
-import { openCreateForm, openEditForm } from '../form/instance';
+import { openCreateForm } from '../form/instance';
 import { nextFullHour } from '../form/schedule';
 import { Link } from '../Link';
 import { dayPath } from '../route';
 import { getSyncEngine } from '../sync/instance';
 import { cellBoundary } from './boundaries';
 import { eventAccessibleName } from './eventLabel';
+import { useIsDropDate } from './dropTarget';
 import { dayLabelParts } from './labels';
 import { createLongPressTracker } from './longPress';
-import type { BarItem, MoreItem, TimedItem } from './layout';
+import type { BarItem, EntryMonthEvent, MoreItem, TimedItem } from './layout';
 import styles from './MonthRow.module.css';
 import { DATE_HEADER_HEIGHT, SLOT_HEIGHT } from './sizing';
+import { useChipDrag } from './useChipDrag';
 import type { DayView, WeekView } from './weekViewCache';
 
 const SUNDAY = 0;
@@ -40,6 +42,7 @@ function openCreateFormOn(date: DateStr): void {
 function DayCell({ day, today }: { day: DayView; today: DateStr }) {
   const { day: dayOfMonth } = dateToYmd(day.date);
   const weekday = dayOfWeek(day.date);
+  const isDropTarget = useIsDropDate(day.date);
   const longPress = useMemo(
     () =>
       createLongPressTracker(() => {
@@ -77,7 +80,13 @@ function DayCell({ day, today }: { day: DayView; today: DateStr }) {
   return (
     <Link
       to={dayPath(day.date)}
-      className={classNames(styles.cell, boundaryClass(cellBoundary(day.date)))}
+      className={classNames(
+        styles.cell,
+        boundaryClass(cellBoundary(day.date)),
+        isDropTarget && styles.dropTarget,
+      )}
+      // ドラッグ中の落ち先を探すための印（dropTarget.ts）。範囲の外のマスには付けない。
+      data-date={day.date}
       aria-label={accessibleName}
       aria-current={isToday ? 'date' : undefined}
       // Android の Chrome は、リンクの長押しをドラッグにして pointercancel を送り、長押しが成り立たなくなるため。
@@ -144,20 +153,34 @@ function BarChip({ item }: { item: BarItem }) {
     );
   }
 
-  const { occurrence } = event;
+  return <EntryBar item={item} event={event} placement={placement} />;
+}
+
+function EntryBar({
+  item,
+  event,
+  placement,
+}: {
+  item: BarItem;
+  event: EntryMonthEvent;
+  placement: CSSProperties;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const drag = useChipDrag(ref, event.occurrence);
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={eventAccessibleName(event)}
       className={classNames(
         styles.bar,
+        styles.movable,
+        drag.dragging && styles.dragging,
         item.continuesBefore && styles.continuesBefore,
         item.continuesAfter && styles.continuesAfter,
       )}
       style={placement}
-      onClick={() => {
-        openEditForm(occurrence);
-      }}
+      {...drag.props}
     >
       <span className={styles.barText}>
         <EmojiText text={event.title} />
@@ -168,15 +191,16 @@ function BarChip({ item }: { item: BarItem }) {
 
 function TimedChip({ item }: { item: TimedItem }) {
   const { event } = item;
+  const ref = useRef<HTMLButtonElement>(null);
+  const drag = useChipDrag(ref, event.occurrence);
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={eventAccessibleName(event)}
-      className={styles.timed}
+      className={classNames(styles.timed, styles.movable, drag.dragging && styles.dragging)}
       style={{ gridColumn: item.col + 1, gridRow: item.row + 1 }}
-      onClick={() => {
-        openEditForm(event.occurrence);
-      }}
+      {...drag.props}
     >
       <span className={styles.dot} style={{ backgroundColor: event.color }} />
       {event.startTime !== null && <span className={styles.time}>{event.startTime}</span>}
