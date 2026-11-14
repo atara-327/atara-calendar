@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { WEEKDAY_LABELS } from '../dateFormat';
 import { AddEntryButton } from '../form/AddEntryButton';
+import { nextFullHour } from '../form/schedule';
 import { MenuButton } from '../sidebar/MenuButton';
 import { PendingBadge, SyncOverview } from '../sync/SyncStatus';
 import { useToday } from './useToday';
@@ -77,7 +78,7 @@ export function MonthView() {
         </div>
         <SyncOverview />
       </div>
-      <AddEntryButton kind="event" />
+      <AddEntryButton kind="event" start={() => ({ ...nextFullHour(Date.now()), allDay: true })} />
     </div>
   );
 }

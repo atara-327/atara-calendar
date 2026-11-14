@@ -104,6 +104,18 @@ describe('開始を決めて作るときの開始と終了（日表示のタッ�
   });
 });
 
+describe('月表示から作るときは、終日で開く', () => {
+  it('その日 1 日の終日になり、時刻は時間指定に切り替えたときの値として残る', () => {
+    expect(scheduleFromStart({ date: '2026-10-22', time: '23:00', allDay: true })).toEqual({
+      allDay: true,
+      startDate: '2026-10-22',
+      startTime: '23:00',
+      endDate: '2026-10-22',
+      endTime: '00:00',
+    });
+  });
+});
+
 describe('新しく作るときの開始と終了', () => {
   it('開始は今日の次の正時、終了はその 1 時間後（時間指定）', () => {
     expect(defaultSchedule(AT_1420)).toEqual({

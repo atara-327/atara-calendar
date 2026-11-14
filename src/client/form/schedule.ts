@@ -22,6 +22,8 @@ export const DEFAULT_LENGTH_MIN = 60;
 export interface StartPoint {
   date: DateStr;
   time: string;
+  /** 終日で開くか。月表示から予定を作るときは終日（設計書 11.4）。time は、時間指定に切り替えたときの値。 */
+  allDay?: boolean;
 }
 
 /**
@@ -92,10 +94,11 @@ export function scheduleFromStart(start: StartPoint): Schedule {
     dateToDays(start.date) * MINUTES_PER_DAY + timeToMinutes(start.time) + DEFAULT_LENGTH_MIN,
   );
   return {
-    allDay: false,
+    allDay: start.allDay === true,
     startDate: start.date,
     startTime: start.time,
-    endDate: end.date,
+    // 終日は、開始の日の 1 日だけ。
+    endDate: start.allDay === true ? start.date : end.date,
     endTime: end.time,
   };
 }

@@ -35,8 +35,8 @@ function boundaryClass({ top, left }: ReturnType<typeof cellBoundary>): string {
 function openCreateFormOn(date: DateStr): void {
   // 最初の読み込みが終わるまでは開かない（( + ) が押せないのと同じ理由。AddEntryButton.tsx）。
   if (getSyncEngine().store.getState().phase !== 'ready') return;
-  // ( + ) と同じ予定のフォームで、開始の日付だけを、長押しした日にする。時刻は、( + ) と同じ次の正時。
-  openCreateForm('event', { date, time: nextFullHour(Date.now()).time });
+  // ( + ) と同じ予定のフォーム（終日）で、開始の日付だけを、長押しした日にする。時刻は、( + ) と同じ次の正時。
+  openCreateForm('event', { date, time: nextFullHour(Date.now()).time, allDay: true });
 }
 
 function DayCell({ day, today }: { day: DayView; today: DateStr }) {
