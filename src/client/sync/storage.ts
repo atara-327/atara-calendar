@@ -27,6 +27,9 @@ const storedRequestSchema = z.strictObject({
   request: pendingRequestSchema,
 });
 
+/** 前の版が使っていたデータベースの名前（送信待ちの形を変えたときに、名前を変える。設計書 14.2）。 */
+export const LEGACY_DB_NAMES: readonly string[] = ['atara-calendar-sync'];
+
 /**
  * 依頼 1 つを、1 つのキー（依頼の id）で保存する。列全体を、1 つのキーに配列で入れない。
  * Why: 同じ端末の複数のタブ（設計書 6.7）で、古いタブが止まる直前に書き込みが重なったとき、配列を
@@ -36,9 +39,15 @@ const storedRequestSchema = z.strictObject({
  * 同じデータベース名に、別の表名で作っても、表は増えない。
  */
 export function createIdbStorage({
-  dbName = 'atara-calendar-sync',
+  dbName = 'atara-calendar-sync-v2',
   storeName = 'pending-requests',
-}: { dbName?: string; storeName?: string } = {}): PendingStorage {
+  legacyDbNames = [],
+}: {
+  dbName?: string;
+  storeName?: string;
+  /** 前の版が使っていた名前。起動時に、ここにある送信待ちも読み、引き継ぐ。 */
+  legacyDbNames?: readonly string[];
+} = {}): PendingStorage {
   // IndexedDB を開くのは、最初の読み書きまで遅らせる。idb-keyval の createStore は、作った時点で開くので、
   // IndexedDB が使えない環境（プライベートブラウズなど）では、ここで例外になり、画面を描く前に落ちる。
   // 読み書きの中で失敗すれば、エンジンが storageFailed にして、メモリの上では動き続けられる。
@@ -48,12 +57,43 @@ export function createIdbStorage({
     return opened;
   };
 
+  /**
+   * 前の名前のデータベースにある送信待ちを、新しいデータベースに移す。移したら、前の方は消す。
+   * Why: 送信待ちの形を、互換でなく変えたとき（予定とタイムブロックの変換で、changes に kind が増えた。
+   * 設計書 14.2）、電波がない間は、端末に保存した古い版の画面が開き、古い版は、知らない形の送信待ちを消す。
+   * 名前を変えれば、古い版は、新しい版の依頼に触れない。
+   * Why not データベースごと消す（deleteDatabase）: idb-keyval は、開いた接続を閉じないので、自分の接続に
+   * 邪魔されて消えない。
+   */
+  async function migrateLegacy(target: UseStore): Promise<number> {
+    let discarded = 0;
+    for (const legacyName of legacyDbNames) {
+      const legacy = createStore(legacyName, storeName);
+      for (const [key, value] of await entries<IDBValidKey, unknown>(legacy)) {
+        const parsed = storedRequestSchema.safeParse(value);
+        if (parsed.success && parsed.data.id === key) {
+          await set(parsed.data.id, parsed.data, target);
+        } else {
+          discarded += 1;
+        }
+        await del(key, legacy);
+      }
+    }
+    return discarded;
+  }
+
   return {
     async load() {
       const store = openStore();
+      let discarded = 0;
+      try {
+        discarded = await migrateLegacy(store);
+      } catch (error) {
+        // 古い DB が読めなくても、新しい DB の送信待ちは読む（止めると、新しい編集まで送れなくなる）。
+        console.error('古い送信待ちの引き継ぎに失敗しました', error);
+      }
       const stored = await entries<IDBValidKey, unknown>(store);
       const requests: StoredRequest[] = [];
-      let discarded = 0;
       for (const [key, value] of stored) {
         const parsed = storedRequestSchema.safeParse(value);
         if (parsed.success && parsed.data.id === key) {

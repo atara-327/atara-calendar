@@ -12,6 +12,7 @@ import { makeWorkspace } from '../test/helpers/workspaces';
 import type { Workspace } from '../src/shared/schema';
 import type { Occurrence } from '../src/shared/recurrence';
 import { createTools, splitPeriod, type ToolDeps } from './tools';
+import { updateEventInputSchema } from './toolSchemas';
 
 // 応答の組み立て。
 function changesReply(workspaces: Workspace[]): Response {
@@ -391,6 +392,20 @@ describe('書き込みのヘッダーと本文（MC-2・MC-4）', () => {
     );
     expect(changes[0]).toMatchObject({ notifyOffsetMin: -120 });
     expect(changes[1]).toEqual({ title: 'a' });
+  });
+
+  it('EV-9: update_event の入力は、kind を弾く（MCP からは、予定とタイムブロックを変換できない）', () => {
+    const input = {
+      seriesId: 's1',
+      occurrenceDate: '2026-10-19',
+      scope: 'all',
+      changes: { kind: 'block' },
+    };
+
+    expect(updateEventInputSchema.safeParse(input).success).toBe(false);
+    expect(updateEventInputSchema.safeParse({ ...input, changes: { title: '改名' } }).success).toBe(
+      true,
+    );
   });
 
   it('update_event: 変える項目がなければ、送らずに断る', async () => {

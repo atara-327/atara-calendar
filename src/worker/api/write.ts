@@ -83,7 +83,15 @@ export async function commitEntries(
   entries: readonly Entry[],
   editedAt: number,
   newIdContext: NewIdContext,
+  { allowKindChange = false }: { allowKindChange?: boolean } = {},
 ): Promise<WriteResponse> {
+  // 変換（EV-9）の依頼（PATCH で changes.kind がある）だけ、読み込み済みの行と kind が違う行を通す。
+  // 印がなければ、kind が違う行は applyWrite が例外にする（PATCH・DELETE の計算の誤りを、隠さないため）。
+  const kindChangeIds = (allowKindChange ? entries : [])
+    .filter((entry) =>
+      newIdContext.loaded.some(({ id, kind }) => id === entry.id && kind !== entry.kind),
+    )
+    .map(({ id }) => id);
   assertWritableEntries(entries);
   const collision = await checkNewId(db, entries, newIdContext, editedAt);
   if (collision !== null) return collision;
@@ -111,5 +119,5 @@ export async function commitEntries(
   for (const { workspace } of workspaces.values()) {
     if (workspace.deletedAt !== null) return dropped(workspace, editedAt);
   }
-  return commit(db, { entries });
+  return commit(db, { entries, kindChangeIds });
 }

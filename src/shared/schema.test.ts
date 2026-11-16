@@ -213,8 +213,9 @@ describe('RP-4: 変更の中身は、ユーザーが変えた項目だけ', () =
     expect(entryChangesSchema.safeParse({ rrule: null }).success).toBe(true);
   });
 
-  it('kind は作成した後に変えられないので通らない', () => {
-    expect(entryChangesSchema.safeParse({ kind: 'block' }).success).toBe(false);
+  it('EV-9: kind を入れると、予定とタイムブロックの変換になる。知らない種類は通らない', () => {
+    expect(entryChangesSchema.safeParse({ kind: 'block' }).success).toBe(true);
+    expect(entryChangesSchema.safeParse({ kind: 'task' }).success).toBe(false);
   });
 
   it('id や editedAt のような、変更で指定しない項目は通らない', () => {
@@ -338,8 +339,9 @@ describe('入力用: 変更の中身', () => {
     });
   });
 
-  it('kind と、知らないキーは通らない', () => {
-    expect(entryChangesInputSchema.safeParse({ kind: 'block' }).success).toBe(false);
+  it('EV-9: kind は通る（変換）。知らない種類と、知らないキーは通らない', () => {
+    expect(entryChangesInputSchema.safeParse({ kind: 'block' }).success).toBe(true);
+    expect(entryChangesInputSchema.safeParse({ kind: 'task' }).success).toBe(false);
     expect(entryChangesInputSchema.safeParse({ editedAt: 1 }).success).toBe(false);
   });
 

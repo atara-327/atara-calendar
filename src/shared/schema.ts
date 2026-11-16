@@ -103,12 +103,11 @@ export type EntryDraft = z.infer<typeof entryDraftSchema>;
 
 /**
  * 変更で、ユーザーが変えた項目だけ。undefined（キーがない）は「変えていない」、null は「空にした」。
- * kind は作成した後に変えられないので入れない。strictObject にして、kind が混ざった入力を弾く
- * （普通の object だと、知らないキーを黙って捨ててしまい、変わったと思い込ませてしまう）。
+ * kind を入れると、予定とタイムブロックの変換になる（EV-9。設計書 4.5）。strictObject にして、知らない
+ * キーを弾く（普通の object だと、黙って捨ててしまい、変わったと思い込ませてしまう。古い版が保存した、
+ * 新しい項目を知らない送信待ちを、起動時に見分けるためにも要る。設計書 14.2）。
  */
-export const entryChangesSchema = z.strictObject(
-  entryDraftSchema.omit({ kind: true }).partial().shape,
-);
+export const entryChangesSchema = z.strictObject(entryDraftSchema.partial().shape);
 
 export type EntryChanges = z.infer<typeof entryChangesSchema>;
 
@@ -212,10 +211,8 @@ export const entryDraftInputSchema = z.strictObject({
     .max(INPUT_LIMITS.notifyOffsetMin.max),
 });
 
-/** 変更の中身の、入力用。entryChangesSchema と同じく、kind を弾く。 */
-export const entryChangesInputSchema = z.strictObject(
-  entryDraftInputSchema.omit({ kind: true }).partial().shape,
-);
+/** 変更の中身の、入力用。 */
+export const entryChangesInputSchema = z.strictObject(entryDraftInputSchema.partial().shape);
 
 /**
  * ワークスペースの 1 行の、入力用。deletedAt は null だけを通す。PUT で論理削除すると、組み込みと

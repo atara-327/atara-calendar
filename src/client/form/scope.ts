@@ -4,6 +4,7 @@ import {
   OccurrenceNotFoundError,
   changeEntry,
   deleteEntry,
+  hasAllDayException,
   type Occurrence,
 } from '../../shared/recurrence';
 import type { Entry, EntryChanges, Scope } from '../../shared/schema';
@@ -35,8 +36,11 @@ const SCOPE_ORDER: readonly Scope[] = ['this', 'following', 'all'];
 
 export type ScopeAction = { kind: 'change'; changes: EntryChanges } | { kind: 'delete' };
 
-/** 選べない理由。ruleAndDate は、ルールを変えて、日付も同時に変えたこと（片方ずつなら、保存できる）。 */
-export type UnavailableReason = 'ruleAndDate' | 'other';
+/**
+ * 選べない理由。ruleAndDate は、ルールを変えて、日付も同時に変えたこと（片方ずつなら、保存できる）。
+ * allDayOccurrence は、終日にした回があって、タイムブロックに変換できないこと（EV-9）。
+ */
+export type UnavailableReason = 'ruleAndDate' | 'allDayOccurrence' | 'other';
 
 export type ScopeDecision =
   /** 繰り返さない予定。範囲を聞かずに、書き換える（設計書 4.5。ルールを付けて、繰り返す予定にする場合も含む）。 */
@@ -143,6 +147,26 @@ export function decideScope({
     .filter(({ result }) => result === 'accepted')
     .map(({ scope }) => scope);
   if (first !== undefined) return { kind: 'choose', scopes: [first, ...rest] };
+
+  // タイムブロックへの変換が、終日の回があるせいで拒まれたとき。判定は shared の hasAllDayException（サーバーと同じ。P1）。
+  if (
+    action.kind === 'change' &&
+    action.changes.kind === 'block' &&
+    hasAllDayException(seriesRows, seriesId) &&
+    // 終日の回を外しても通るときだけ、それが原因とする（ほかの理由で拒まれたときは、今までの文言）。
+    trial(
+      seriesRows.map((row) =>
+        row.allDay && row.seriesId === seriesId
+          ? { ...row, allDay: false, startTime: '09:00', endTime: '10:00' }
+          : row,
+      ),
+      target,
+      'all',
+      action,
+    ) === 'accepted'
+  ) {
+    return { kind: 'unavailable', reason: 'allDayOccurrence' };
+  }
 
   // どの範囲も選べないのが、ルールと日付を同時に変えたためか。次の 3 つが、すべて当てはまるときだけ、そうとする。
   // - ルールも日付も変えている。

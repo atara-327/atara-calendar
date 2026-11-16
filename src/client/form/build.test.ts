@@ -3,7 +3,7 @@ import { makeOccurrence } from '../../../test/helpers/entries';
 import type { Occurrence } from '../../shared/recurrence';
 import { entryDraftInputSchema, type Rrule } from '../../shared/schema';
 import { toChanges, toDraft } from './build';
-import { createValues, editValues, setAllDay, type FormValues } from './values';
+import { convertKind, createValues, editValues, setAllDay, type FormValues } from './values';
 
 // 日本時間 2026-10-22（木）の 14:20（UTC 05:20）。
 const AT_1420 = Date.UTC(2026, 9, 22, 5, 20);
@@ -368,7 +368,7 @@ describe('変更の中身（変えた項目だけ。設計書 4.5）', () => {
     });
   });
 
-  it('kind と繰り返しのルールは、入らない（作成後に変えられない・フォームにまだない）', () => {
+  it('EV-9: 種類を切り替えていなければ、kind は入らない。繰り返しのルールも、変えていなければ入らない', () => {
     const changes = toChanges(edit({ title: '別の題名', endTime: '17:00' }), original(), null);
 
     expect(changes).not.toHaveProperty('kind');
@@ -439,5 +439,53 @@ describe('変更の中身: 繰り返しのルール（設計書 4.5）', () => {
     const values = { ...editValues(occurrence, AT_1420, weeklyRrule), title: '英会話' };
 
     expect(toChanges(values, occurrence, weeklyRrule)).toEqual({ title: '英会話' });
+  });
+});
+
+describe('EV-9: 変更の中身: 予定とタイムブロックの変換', () => {
+  const eventOriginal = makeOccurrence({
+    title: '歯医者',
+    workspaceId: 'w1',
+    allDay: false,
+    startTime: '15:00',
+    endTime: '16:00',
+    notifyEnabled: true,
+    notifyOffsetMin: 30,
+  });
+  const blockOriginal = makeOccurrence({
+    kind: 'block',
+    workspaceId: null,
+    title: '作業',
+    allDay: false,
+    startTime: '09:00',
+    endTime: '10:00',
+    notifyEnabled: false,
+    notifyOffsetMin: 10,
+  });
+
+  it('予定 → タイムブロック: kind が入り、ワークスペースは null になる。通知は、今の値のまま（入らない）', () => {
+    const values = convertKind(editValues(eventOriginal, AT_1420, null, 'w9'), 'block');
+
+    expect(toChanges(values, eventOriginal, null)).toEqual({ kind: 'block', workspaceId: null });
+  });
+
+  it('タイムブロック → 予定: kind と、前回使ったワークスペースが入る。通知は、今の値のまま', () => {
+    const values = convertKind(editValues(blockOriginal, AT_1420, null, 'w9'), 'event');
+
+    expect(toChanges(values, blockOriginal, null)).toEqual({ kind: 'event', workspaceId: 'w9' });
+  });
+
+  it('終日の予定 → タイムブロック: 時間指定になり、フォームの時刻と、時間指定の初期の通知のタイミングが入る', () => {
+    const allDay = makeOccurrence({ workspaceId: 'w1', notifyOffsetMin: -360 });
+    const values = convertKind(editValues(allDay, AT_1420, null), 'block');
+
+    expect(toChanges(values, allDay, null)).toEqual({
+      kind: 'block',
+      workspaceId: null,
+      allDay: false,
+      startTime: '15:00',
+      endTime: '16:00',
+      notifyOffsetMin: 10,
+    });
   });
 });

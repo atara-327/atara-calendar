@@ -646,9 +646,85 @@ interface ChangeArguments {
 /**
  * 予定・タイムブロックの変更（設計書 4.5）。changes は、ユーザーが変えた項目だけ。
  * 日付と時刻は、フォームに出ていた、その回の値に対する変更後の値。
- * kind は作成した後に変えられないので、changes に含めない。
+ * changes.kind があれば、予定とタイムブロックの変換（EV-9）。
  */
-export function changeEntry({
+export function changeEntry(args: ChangeArguments): Entry[] {
+  const series = findSeriesRow(args.entries, args.target.seriesId);
+  const to = args.changes.kind;
+  if (to === undefined || to === series.kind) return changeRows(args);
+
+  // 繰り返しの系列は、全体だけ。系列の行と例外の行で kind が混ざると、同期や通知の計算で間違いやすいため。
+  // 最初の回の「これ以降すべて」は、「すべて」と同じ扱いにするが、変換では許さない（範囲を聞く段で、選べる
+  // 範囲を「すべて」だけにそろえるため）。
+  if (series.rrule !== null && args.scope !== 'all') {
+    throw new InvalidChangeError(
+      '繰り返す予定の種類は、「すべて」でだけ変えられます（「この予定のみ」「これ以降すべて」では変えられません）',
+    );
+  }
+  return convertKind(args, series, to, changeRows(args));
+}
+
+/** 種類を変えた結果の行。系列の行と、その例外の行（削除した回を含む）の kind をそろえる。 */
+function convertKind(
+  { entries, changes, editedAt }: ChangeArguments,
+  series: Entry,
+  to: Entry['kind'],
+  rows: readonly Entry[],
+): Entry[] {
+  let workspaceId: string | null = null;
+  if (to === 'event') {
+    // 例外の行にも同じワークスペースを入れるので、変更で渡させる（元のタイムブロックは持っていない）。
+    if (changes.workspaceId === undefined || changes.workspaceId === null) {
+      throw new InvalidChangeError('タイムブロックを予定にするには、ワークスペースが必要です');
+    }
+    workspaceId = changes.workspaceId;
+  }
+  const converted = (row: Entry): Entry => ({ ...row, kind: to, workspaceId });
+  const written = rows.map(converted);
+  const newSeries = written.find(({ id }) => id === series.id);
+  // 変更で書かれなかった例外の行（削除した回を含む）も、kind を変えて書く。
+  const writtenIds = new Set(written.map(({ id }) => id));
+  for (const exception of liveExceptionsOf(entries, series.id)) {
+    if (!writtenIds.has(exception.id)) {
+      written.push({ ...converted(cloneRow(exception)), editedAt });
+    }
+  }
+  if (to === 'block' && newSeries !== undefined) {
+    // 削除した回（cancelled）は画面に出ないので、終日のままだと、利用者が直せないまま変換できなくなる。
+    // 終日を外し、時刻を変換後の系列に合わせて書く（長さも系列と同じ）。
+    const length = diffDays(newSeries.startDate, newSeries.endDate);
+    for (const [index, row] of written.entries()) {
+      if (row.cancelled && row.deletedAt === null && row.allDay) {
+        written[index] = {
+          ...row,
+          allDay: false,
+          startTime: newSeries.startTime,
+          endTime: newSeries.endTime,
+          endDate: addDays(row.startDate, length),
+        };
+      }
+    }
+  }
+  if (
+    to === 'block' &&
+    written.some((row) => row.deletedAt === null && !row.cancelled && row.allDay)
+  ) {
+    throw new InvalidChangeError(
+      '終日の回があるため、タイムブロックに変換できません（タイムブロックは終日にできません）',
+    );
+  }
+  return written;
+}
+
+/**
+ * 終日の回（終日にした例外の行。削除した回は含めない）があるか。あると、タイムブロックに変換できない（changeEntry）。
+ * フォームが、送る前に、同じ判定で確かめるため公開している（設計書 P2）。
+ */
+export function hasAllDayException(entries: readonly Entry[], seriesId: string): boolean {
+  return liveExceptionsOf(entries, seriesId).some(({ allDay, cancelled }) => allDay && !cancelled);
+}
+
+function changeRows({
   entries,
   target,
   scope,

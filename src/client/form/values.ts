@@ -79,8 +79,15 @@ export function createValues({
  * 新しく作るときと同じ初期値（今日の次の正時から 1 時間）を入れる。
  * 繰り返しの欄には、系列の行のルール（rrule）を出す。回（Occurrence）はルールを持たないので、呼び出し側が、
  * 同期のエンジンの行から seriesId で系列の行を引いて渡す。例外の回も、系列のルール（例外の行はルールを持たない）。
+ * タイムブロックはワークスペースを持たないので、予定に変換したときの値として、workspaceFallback
+ * （前回使ったワークスペース。EV-8。新しく作るときと同じ）を入れる。
  */
-export function editValues(occurrence: Occurrence, nowMs: number, rrule: Rrule | null): FormValues {
+export function editValues(
+  occurrence: Occurrence,
+  nowMs: number,
+  rrule: Rrule | null,
+  workspaceFallback: string | null = null,
+): FormValues {
   const fallback = defaultSchedule(nowMs);
   return {
     kind: occurrence.kind,
@@ -90,7 +97,7 @@ export function editValues(occurrence: Occurrence, nowMs: number, rrule: Rrule |
     startTime: occurrence.startTime ?? fallback.startTime,
     endDate: occurrence.endDate,
     endTime: occurrence.endTime ?? fallback.endTime,
-    workspaceId: occurrence.workspaceId,
+    workspaceId: occurrence.workspaceId ?? workspaceFallback,
     ...repeatFieldsOf(rrule),
     notifyEnabled: occurrence.notifyEnabled,
     notifyOffsetText: String(occurrence.notifyOffsetMin),
@@ -98,6 +105,36 @@ export function editValues(occurrence: Occurrence, nowMs: number, rrule: Rrule |
     url: occurrence.url ?? '',
     memo: occurrence.memo ?? '',
   };
+}
+
+/** 終日・時刻・通知のタイミングを、開いたときの値に戻す（終日の切り替えで変わる項目）。 */
+function restoreSchedule(values: FormValues, opened: FormValues): FormValues {
+  return {
+    ...values,
+    allDay: opened.allDay,
+    endDate: opened.endDate,
+    startTime: opened.startTime,
+    endTime: opened.endTime,
+    anchor: undefined,
+    notifyOffsetText: opened.notifyOffsetText,
+  };
+}
+
+/**
+ * 開いた予定の種類を切り替える（変換。EV-9。設計書 11.4）。通知は、今の値を残す（変換先の初期値にしない）。
+ * ただし、終日の予定をタイムブロックにして時間指定になるときは、終日を切り替えたときと同じく、タイミングだけ、
+ * 時間指定の初期値に戻す（数の意味が違うため。setAllDay）。
+ * ワークスペースは、触らない。予定にしたときの値は、開いたときに入れてある（editValues）。
+ */
+export function convertKind(values: FormValues, kind: EntryKind, opened?: FormValues): FormValues {
+  if (values.kind === kind) return values;
+  // 開いたときの種類に押し戻したときは、変換で変わった項目を、開いたときの値に戻す（変えていない項目を送らない。P4）。
+  if (opened !== undefined && opened.kind === kind) {
+    const restored = values.allDay === opened.allDay ? values : restoreSchedule(values, opened);
+    return { ...restored, kind, workspaceId: opened.workspaceId };
+  }
+  if (kind === 'block' && values.allDay) return { ...setAllDay(values, false), kind };
+  return { ...values, kind };
 }
 
 /**
