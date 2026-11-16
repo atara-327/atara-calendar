@@ -125,6 +125,46 @@ describe('送信待ちの IndexedDB への保存（設計書 6.2）', () => {
   });
 });
 
+describe('送信待ちの形を変えたときの、データベース名の引き継ぎ（EV-9。設計書 14.2）', () => {
+  const legacyName = 'test-legacy-pending';
+
+  async function writeLegacy(key: string, value: unknown): Promise<void> {
+    await set(key, value, createStore(legacyName, 'pending-requests'));
+  }
+
+  it('古い名前のデータベースの送信待ちを、新しい名前のデータベースに引き継ぎ、古い方は消す', async () => {
+    const dbName = newDbName();
+    await writeLegacy('old', stored('old', 500));
+    const storage = createIdbStorage({ dbName, legacyDbNames: [legacyName] });
+    await storage.save(stored('new', 1000));
+
+    const loaded = await storage.load();
+
+    expect(loaded.requests.map(({ id }) => id)).toEqual(['old', 'new']);
+    expect(loaded.discarded).toBe(0);
+    expect(await entries(createStore(legacyName, 'pending-requests'))).toEqual([]);
+    expect((await createIdbStorage({ dbName }).load()).requests.map(({ id }) => id)).toEqual([
+      'old',
+      'new',
+    ]);
+  });
+
+  it('古い名前のデータベースの、形の合わない依頼は、引き継がずに、捨てた数に数える', async () => {
+    await writeLegacy('bad', { id: 'bad', request: { type: 'moveEntry' } });
+    const storage = createIdbStorage({ dbName: newDbName(), legacyDbNames: [legacyName] });
+
+    expect(await storage.load()).toEqual({ requests: [], discarded: 1 });
+    expect(await entries(createStore(legacyName, 'pending-requests'))).toEqual([]);
+  });
+
+  it('古い名前を渡さなければ、古いデータベースには触れない', async () => {
+    await writeLegacy('old', stored('old', 500));
+
+    expect((await createIdbStorage({ dbName: newDbName() }).load()).requests).toEqual([]);
+    expect(await entries(createStore(legacyName, 'pending-requests'))).toHaveLength(1);
+  });
+});
+
 describe('IndexedDB が使えない環境', () => {
   it('保存先を作っただけでは、IndexedDB に触れない（画面を描く前に落ちない）。読み書きで、失敗として返す', async () => {
     vi.stubGlobal('indexedDB', undefined);
