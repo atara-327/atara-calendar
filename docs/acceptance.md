@@ -330,6 +330,7 @@
 | [EV-6](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
 | [EV-7](requirements/requirements.md#53-予定) | 作っていない（[バックログ](BACKLOG.md#あったら嬉しいw機能)）。優先度 W | 対象外（W） |
 | [EV-8](requirements/requirements.md#53-予定) | 初期値の決め方: `src/client/form/workspaceChoices.test.ts`。記憶: `src/client/form/lastWorkspace.test.ts`。ブラウザ: フォームで、前回のワークスペースが選ばれる。**ブラウザ（2026-10-29）**: 前回選んだワークスペースが初期値になる。そのワークスペースが削除されていたら、並び順が最初のもの | 済（自動テスト・ブラウザ。2026-10-29） |
+| [EV-9](requirements/requirements.md#53-予定) | 繰り返さない予定・「すべて」の変換: `src/shared/recurrenceEdit.test.ts`（EV-9）、`src/worker/api/entries.test.ts`（EV-9）、`src/worker/db/store.test.ts`（EV-9）。端末とサーバーの同値: `src/client/sync/replay.equivalence.test.ts`（EV-9）。フォームの値・範囲: `src/client/form/values.test.ts`・`build.test.ts`・`scope.test.ts`・`messages.test.ts`（EV-9）。送信待ちの引き継ぎ: `src/client/sync/storage.test.ts`。MCP からは変換できない: `mcp/tools.test.ts` | 済（自動テスト） |
 
 ### 4.5 タイムブロック（TB）
 
