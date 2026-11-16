@@ -241,7 +241,8 @@ export function EntryForm({ target }: { target: EditorTarget }) {
       ? seriesRruleOf(getSyncEngine().store.getState().view.entries, target.occurrence.seriesId)
       : null,
   );
-  const [values, setValues] = useState(() => initialValues(target, choices, originalRrule));
+  const [opened] = useState(() => initialValues(target, choices, originalRrule));
+  const [values, setValues] = useState(opened);
   // 保存を押したあとに、確認の誤りを、すべて出す。押す前は、開始・終了と、通知の分の誤り（入力の途中で、すぐ分かる）だけ出す。
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -614,7 +615,7 @@ export function EntryForm({ target }: { target: EditorTarget }) {
                       setValues((current) =>
                         target.mode === 'create'
                           ? setKind(current, kind)
-                          : convertKind(current, kind),
+                          : convertKind(current, kind, opened),
                       );
                     }}
                   />

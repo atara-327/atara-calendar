@@ -152,7 +152,18 @@ export function decideScope({
   if (
     action.kind === 'change' &&
     action.changes.kind === 'block' &&
-    hasAllDayException(seriesRows, seriesId)
+    hasAllDayException(seriesRows, seriesId) &&
+    // 終日の回を外しても通るときだけ、それが原因とする（ほかの理由で拒まれたときは、今までの文言）。
+    trial(
+      seriesRows.map((row) =>
+        row.allDay && row.seriesId === seriesId
+          ? { ...row, allDay: false, startTime: '09:00', endTime: '10:00' }
+          : row,
+      ),
+      target,
+      'all',
+      action,
+    ) === 'accepted'
   ) {
     return { kind: 'unavailable', reason: 'allDayOccurrence' };
   }

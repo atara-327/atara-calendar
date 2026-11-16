@@ -85,7 +85,13 @@ export function createIdbStorage({
   return {
     async load() {
       const store = openStore();
-      let discarded = await migrateLegacy(store);
+      let discarded = 0;
+      try {
+        discarded = await migrateLegacy(store);
+      } catch (error) {
+        // 古い DB が読めなくても、新しい DB の送信待ちは読む（止めると、新しい編集まで送れなくなる）。
+        console.error('古い送信待ちの引き継ぎに失敗しました', error);
+      }
       const stored = await entries<IDBValidKey, unknown>(store);
       const requests: StoredRequest[] = [];
       for (const [key, value] of stored) {

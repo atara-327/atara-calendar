@@ -349,6 +349,17 @@ describe('EV-9: 開いた予定の、種類の切り替え（変換）', () => {
     });
   });
 
+  it('開いたときの種類に押し戻すと、終日・時刻・通知・ワークスペースが、開いたときの値に戻る', () => {
+    const allDayEvent = makeOccurrence({ workspaceId: 'w1', allDay: true, notifyOffsetMin: -360 });
+    const opened = editValues(allDayEvent, AT_1420, null);
+
+    const toBlock = convertKind(opened, 'block', opened);
+    expect(toBlock.allDay).toBe(false);
+    const back = convertKind(toBlock, 'event', opened);
+
+    expect(back).toEqual({ ...opened, anchor: undefined });
+  });
+
   it('同じ種類への切り替えは、何も変えない', () => {
     const values = editValues(block, AT_1420, null);
 

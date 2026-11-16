@@ -157,6 +157,29 @@ describe('送信待ちの形を変えたときの、データベース名の引�
     expect(await entries(createStore(legacyName, 'pending-requests'))).toEqual([]);
   });
 
+  it('古い DB の読み込みに失敗しても、新しい DB の送信待ちは読み込める（両方に送信待ちがある場合）', async () => {
+    const dbName = newDbName();
+    await writeLegacy('old', stored('old', 500));
+    const storage = createIdbStorage({ dbName, legacyDbNames: [legacyName] });
+    await storage.save(stored('new', 1000));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const idb = indexedDB;
+    vi.stubGlobal('indexedDB', {
+      open: (name: string) => {
+        if (name === legacyName) throw new Error('壊れた DB');
+        return idb.open(name);
+      },
+    });
+    try {
+      const { requests } = await createIdbStorage({ dbName, legacyDbNames: [legacyName] }).load();
+      expect(requests.map(({ id }) => id)).toEqual(['new']);
+      expect(error).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      error.mockRestore();
+    }
+  });
+
   it('古い名前を渡さなければ、古いデータベースには触れない', async () => {
     await writeLegacy('old', stored('old', 500));
 

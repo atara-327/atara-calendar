@@ -640,4 +640,29 @@ describe('EV-9: 予定とタイムブロックの変換の範囲', () => {
       reason: 'allDayOccurrence',
     });
   });
+
+  it('削除した終日の回は、数えない。ほかの理由で拒まれたときは、終日の回の理由にしない', () => {
+    const cancelledAllDay = makeEntry({
+      id: 'x1',
+      seriesId: 's1',
+      originalDate: '2026-10-26',
+      startDate: '2026-10-26',
+      cancelled: true,
+    });
+
+    expect(decideChange([daily(), cancelledAllDay], WEDNESDAY, toBlock)).toEqual({
+      kind: 'choose',
+      scopes: ['all'],
+    });
+    // 終日のままの変換は、終日の回が原因ではない。
+    const allDayException = makeEntry({
+      id: 'x2',
+      seriesId: 's1',
+      originalDate: '2026-10-27',
+      startDate: '2026-10-27',
+    });
+    expect(
+      decideChange([daily(), allDayException], WEDNESDAY, { ...toBlock, startDate: '2026-10-22' }),
+    ).toEqual({ kind: 'unavailable', reason: 'other' });
+  });
 });
