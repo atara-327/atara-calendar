@@ -600,6 +600,60 @@ describe('EV-9: PATCH /api/entries/:id で、予定とタイムブロックを�
       },
     );
 
+    it('削除した回が終日でも、タイムブロックに変換できる', async () => {
+      await applyWrite(db(), {
+        entries: [
+          makeEntry({
+            id: 'x3',
+            seriesId: 's',
+            originalDate: '2026-10-25',
+            startDate: '2026-10-25',
+            cancelled: true,
+            editedAt: 1500,
+          }),
+        ],
+      });
+
+      const res = await patchEntry('s', {
+        scope: 'all',
+        changes: { kind: 'block', workspaceId: null },
+      });
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await kindsOf()).toContainEqual({ id: 'x3', kind: 'block', workspace_id: null });
+    });
+
+    it('kind の書き換えを通すのは、PATCH で changes.kind があるときだけ。DELETE は、kind が違う行で例外（変わらない）', async () => {
+      await applyWrite(db(), {
+        entries: [makeEntry({ id: 'e1', allDay: false, startTime: '09:00', endTime: '10:00' })],
+      });
+      const { commitEntries } = await import('./write');
+      const loaded = [makeEntry({ id: 'e1', allDay: false, startTime: '09:00', endTime: '10:00' })];
+      const converted = makeEntry({
+        id: 'e1',
+        kind: 'block',
+        workspaceId: null,
+        allDay: false,
+        startTime: '09:00',
+        endTime: '10:00',
+        editedAt: 2000,
+      });
+
+      await expect(
+        commitEntries(db(), [converted], 2000, { newId: 'n', loaded }),
+      ).rejects.toThrow();
+      expect(await kindsOf()).toContainEqual({ id: 'e1', kind: 'event', workspace_id: 'w1' });
+
+      await commitEntries(
+        db(),
+        [converted],
+        2000,
+        { newId: 'n', loaded },
+        { allowKindChange: true },
+      );
+      expect(await kindsOf()).toContainEqual({ id: 'e1', kind: 'block', workspace_id: null });
+    });
+
     it('終日にした例外の回がある系列は、タイムブロックに変換できない（400 invalid_change）', async () => {
       await applyWrite(db(), {
         entries: [

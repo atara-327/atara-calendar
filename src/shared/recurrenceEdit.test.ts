@@ -1537,6 +1537,30 @@ describe('EV-9: 予定とタイムブロックの変換', () => {
     expect(() => change(entries, '2026-10-19', 'all', toBlock)).toThrow(InvalidChangeError);
   });
 
+  it('削除した回が終日でも、終日の回に数えない。終日を外し、時刻を系列に合わせて書く', () => {
+    const cancelledAllDay = makeEntry({
+      id: 'cx',
+      seriesId: 's1',
+      originalDate: '2026-10-26',
+      startDate: '2026-10-26',
+      cancelled: true,
+    });
+    const entries = [weekly, cancelledAllDay];
+
+    expect(hasAllDayException(entries, 's1')).toBe(false);
+    const rows = change(entries, '2026-10-19', 'all', toBlock);
+
+    expect(rows.find(({ id }) => id === 'cx')).toMatchObject({
+      kind: 'block',
+      cancelled: true,
+      allDay: false,
+      startTime: '19:00',
+      endTime: '20:00',
+      endDate: '2026-10-26',
+    });
+    expect(rows.every((row) => entryProblem(row) === null)).toBe(true);
+  });
+
   it('タイムブロックを予定にするには、ワークスペースが要る。例外にも同じものが入る', () => {
     expect(() => change([block], '2026-10-19', 'all', { kind: 'event' })).toThrow(
       InvalidChangeError,

@@ -82,7 +82,15 @@ entriesRoute.patch('/:id', async (c) => {
         editedAt,
       ),
     );
-  return c.json(await commitEntries(db, rows, editedAt, { newId, loaded: entries }));
+  return c.json(
+    await commitEntries(
+      db,
+      rows,
+      editedAt,
+      { newId, loaded: entries },
+      { allowKindChange: changes.kind !== undefined },
+    ),
+  );
 });
 
 entriesRoute.delete('/:id', async (c) => {

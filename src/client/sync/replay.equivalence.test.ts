@@ -381,6 +381,20 @@ const scenarios: Scenario[] = [
     request: patchEntry('s1', { scope: 'all', changes: { kind: 'block', workspaceId: null } }),
   },
   {
+    name: 'EV-9 削除した回が終日でも、タイムブロックに変換できる（終日を外して書く）',
+    entries: [
+      daily,
+      makeEntry({
+        id: 'x5',
+        seriesId: 's1',
+        originalDate: '2026-10-24',
+        startDate: '2026-10-24',
+        cancelled: true,
+      }),
+    ],
+    request: patchEntry('s1', { scope: 'all', changes: { kind: 'block', workspaceId: null } }),
+  },
+  {
     name: 'EV-9 繰り返す予定の変換を、「この予定のみ」「これ以降すべて」では行えない（400）',
     entries: [daily],
     request: patchEntry('s1', {

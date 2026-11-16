@@ -83,9 +83,11 @@ export async function commitEntries(
   entries: readonly Entry[],
   editedAt: number,
   newIdContext: NewIdContext,
+  { allowKindChange = false }: { allowKindChange?: boolean } = {},
 ): Promise<WriteResponse> {
-  // 読み込み済みの行と kind が違う行は、変換（EV-9）で書く行。ほかの行は、kind が違えば applyWrite が例外にする。
-  const kindChangeIds = entries
+  // 変換（EV-9）の依頼（PATCH で changes.kind がある）だけ、読み込み済みの行と kind が違う行を通す。
+  // 印がなければ、kind が違う行は applyWrite が例外にする（PATCH・DELETE の計算の誤りを、隠さないため）。
+  const kindChangeIds = (allowKindChange ? entries : [])
     .filter((entry) =>
       newIdContext.loaded.some(({ id, kind }) => id === entry.id && kind !== entry.kind),
     )
