@@ -56,7 +56,8 @@ export function toDraft(values: FormValues): EntryDraft {
  * 曜日の並びだけの違いは、変えたことにしない（shared の isSameRrule。サーバーの「この予定のみ」の判定と同じ）。
  * 変えていないルールを、毎回入れない。サーバーは、変えていないルールが一緒に渡されても受け付けるが、
  * 送ると、開いてから送るまでの間に、別の端末がルールを変えていたとき、開いたときのルールで上書きしてしまう。
- * kind は入れない（作成後に変えられない）。
+ * 種類を切り替えたときは、kind を入れる（変換。EV-9）。ワークスペースは、タイムブロックにするときは null、
+ * 予定にするときは選んだもの（サーバーは、予定にするときだけ、changes のワークスペースを使う）。
  */
 export function toChanges(
   values: FormValues,
@@ -65,6 +66,7 @@ export function toChanges(
 ): EntryChanges {
   const draft = toDraft(values);
   const changes: EntryChanges = {};
+  if (draft.kind !== original.kind) changes.kind = draft.kind;
   if (draft.title !== original.title) changes.title = draft.title;
   if (draft.workspaceId !== original.workspaceId) changes.workspaceId = draft.workspaceId;
   if (draft.allDay !== original.allDay) changes.allDay = draft.allDay;

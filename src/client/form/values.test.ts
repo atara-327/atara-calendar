@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry, makeOccurrence } from '../../../test/helpers/entries';
 import { expandOccurrences } from '../../shared/recurrence';
 import { seriesRruleOf } from './repeat';
-import { createValues, defaultNotify, editValues, setAllDay, setKind } from './values';
+import { convertKind, createValues, defaultNotify, editValues, setAllDay, setKind } from './values';
 
 // 日本時間 2026-10-22（木）の 14:20（UTC 05:20）。
 const AT_1420 = Date.UTC(2026, 9, 22, 5, 20);
@@ -293,5 +293,65 @@ describe('終日と時間指定を切り替える', () => {
       startDate: '2026-10-22',
       endDate: '2026-10-22',
     });
+  });
+});
+
+describe('EV-9: 開いた予定の、種類の切り替え（変換）', () => {
+  const block = makeOccurrence({
+    kind: 'block',
+    workspaceId: null,
+    allDay: false,
+    startTime: '09:00',
+    endTime: '10:00',
+    notifyEnabled: false,
+    notifyOffsetMin: 45,
+  });
+
+  it('タイムブロックを開くと、ワークスペースは、前回使ったもの（新しく作るときと同じ）が入る', () => {
+    expect(editValues(block, AT_1420, null, 'w9').workspaceId).toBe('w9');
+    expect(editValues(block, AT_1420, null).workspaceId).toBeNull();
+  });
+
+  it('予定のワークスペースは、前回使ったものより、予定の値が優先される', () => {
+    const event = makeOccurrence({ workspaceId: 'w1' });
+
+    expect(editValues(event, AT_1420, null, 'w9').workspaceId).toBe('w1');
+  });
+
+  it('切り替えても、通知の ON/OFF と分は、今の値のまま（変換先の初期値にしない）', () => {
+    const toEvent = convertKind(editValues(block, AT_1420, null, 'w9'), 'event');
+
+    expect(toEvent).toMatchObject({
+      kind: 'event',
+      notifyEnabled: false,
+      notifyOffsetText: '45',
+      workspaceId: 'w9',
+    });
+    expect(convertKind(toEvent, 'block')).toMatchObject({
+      kind: 'block',
+      notifyEnabled: false,
+      notifyOffsetText: '45',
+    });
+  });
+
+  it('終日の予定をタイムブロックにすると、時間指定になる。通知のタイミングだけ、時間指定の初期値（10 分前）に戻る', () => {
+    const allDay = makeOccurrence({ allDay: true, notifyEnabled: true, notifyOffsetMin: -360 });
+
+    const values = convertKind(editValues(allDay, AT_1420, null), 'block');
+
+    expect(values).toMatchObject({
+      kind: 'block',
+      allDay: false,
+      startTime: '15:00',
+      endTime: '16:00',
+      notifyEnabled: true,
+      notifyOffsetText: '10',
+    });
+  });
+
+  it('同じ種類への切り替えは、何も変えない', () => {
+    const values = editValues(block, AT_1420, null);
+
+    expect(convertKind(values, 'block')).toBe(values);
   });
 });

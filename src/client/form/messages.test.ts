@@ -32,6 +32,12 @@ describe('範囲を決められなかったときの理由', () => {
     );
   });
 
+  it('EV-9: 終日の回があって、タイムブロックに変換できないときは、そう伝える', () => {
+    expect(scopeUnavailableMessage({ kind: 'unavailable', reason: 'allDayOccurrence' })).toBe(
+      '終日の回があるため、タイムブロックに変換できません',
+    );
+  });
+
   it('それ以外の理由で、どの範囲も選べないときは、汎用の文言', () => {
     expect(scopeUnavailableMessage({ kind: 'unavailable', reason: 'other' })).toBe(
       'この組み合わせの変更は保存できません',

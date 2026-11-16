@@ -45,6 +45,7 @@ import { ScopeStep, type ScopeStepKind } from './ScopeStep';
 import { showDeletedNotice } from './UndoNotices';
 import { validateForm, type FormErrors } from './validate';
 import {
+  convertKind,
   createValues,
   editValues,
   setAllDay,
@@ -77,7 +78,14 @@ function initialValues(
   choices: readonly Workspace[],
   originalRrule: Rrule | null,
 ): FormValues {
-  if (target.mode === 'edit') return editValues(target.occurrence, target.openedAt, originalRrule);
+  if (target.mode === 'edit') {
+    return editValues(
+      target.occurrence,
+      target.openedAt,
+      originalRrule,
+      defaultWorkspaceId(choices, loadLastWorkspaceId()),
+    );
+  }
   return createValues({
     kind: target.kind,
     nowMs: target.openedAt,
@@ -592,25 +600,28 @@ export function EntryForm({ target }: { target: EditorTarget }) {
               </p>
             )}
 
-            {target.mode === 'create' && (
-              <fieldset className={classNames(styles.segment, styles.wide)}>
-                <legend className={styles.visuallyHidden}>種類</legend>
-                {KINDS.map(({ kind, label }) => (
-                  <label key={kind} className={styles.segmentOption}>
-                    <input
-                      type="radio"
-                      name="kind"
-                      value={kind}
-                      checked={values.kind === kind}
-                      onChange={() => {
-                        setValues((current) => setKind(current, kind));
-                      }}
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </fieldset>
-            )}
+            {/* 開いた予定でも切り替えられる（変換。EV-9）。 */}
+            <fieldset className={classNames(styles.segment, styles.wide)}>
+              <legend className={styles.visuallyHidden}>種類</legend>
+              {KINDS.map(({ kind, label }) => (
+                <label key={kind} className={styles.segmentOption}>
+                  <input
+                    type="radio"
+                    name="kind"
+                    value={kind}
+                    checked={values.kind === kind}
+                    onChange={() => {
+                      setValues((current) =>
+                        target.mode === 'create'
+                          ? setKind(current, kind)
+                          : convertKind(current, kind),
+                      );
+                    }}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
 
             <Field
               label="タイトル"

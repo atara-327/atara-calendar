@@ -610,3 +610,34 @@ describe('範囲ごとの、保存したあとの系列（範囲を聞く段で�
     );
   });
 });
+
+describe('EV-9: 予定とタイムブロックの変換の範囲', () => {
+  const toBlock: EntryChanges = { kind: 'block', workspaceId: null };
+
+  it('繰り返す予定の変換は、「すべて」だけ選べる', () => {
+    expect(decideChange([daily()], WEDNESDAY, toBlock)).toEqual({
+      kind: 'choose',
+      scopes: ['all'],
+    });
+  });
+
+  it('繰り返さない予定の変換は、範囲を聞かずに通る', () => {
+    const single = makeEntry({ id: 's1', allDay: false, startTime: '09:00', endTime: '10:00' });
+
+    expect(decideChange([single], MONDAY, toBlock)).toEqual({ kind: 'single' });
+  });
+
+  it('終日にした回がある系列は、タイムブロックに変換できない。理由は、終日の回があること', () => {
+    const allDayException = makeEntry({
+      id: 'x1',
+      seriesId: 's1',
+      originalDate: '2026-10-26',
+      startDate: '2026-10-26',
+    });
+
+    expect(decideChange([daily(), allDayException], WEDNESDAY, toBlock)).toEqual({
+      kind: 'unavailable',
+      reason: 'allDayOccurrence',
+    });
+  });
+});

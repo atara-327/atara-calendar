@@ -21,9 +21,14 @@ export function scopeUnavailableMessage(
   decision: Extract<ScopeDecision, { kind: 'gone' | 'unavailable' }>,
 ): string {
   if (decision.kind === 'gone') return 'この予定は、ほかの端末で変更・削除されました';
-  return decision.reason === 'ruleAndDate'
-    ? '繰り返しを毎日・平日・休日に変えるときは、日付を同時に変えられません。片方ずつ保存してください'
-    : 'この組み合わせの変更は保存できません';
+  switch (decision.reason) {
+    case 'ruleAndDate':
+      return '繰り返しを毎日・平日・休日に変えるときは、日付を同時に変えられません。片方ずつ保存してください';
+    case 'allDayOccurrence':
+      return '終日の回があるため、タイムブロックに変換できません';
+    case 'other':
+      return 'この組み合わせの変更は保存できません';
+  }
 }
 
 /**
