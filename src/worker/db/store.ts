@@ -267,11 +267,17 @@ export async function advanceNextNotifyAt(
 export interface WriteRequest {
   entries?: readonly Entry[];
   workspaces?: readonly Workspace[];
+  /**
+   * kind の書き換えを通す予定の id（予定とタイムブロックの変換。EV-9）。ここにない id の行は、これまでどおり、
+   * kind が違えば例外にし、更新でも kind を書き換えない。変換の依頼で書く行だけに絞るのは、ほかの経路
+   * （呼び出し側のバグや、割り込み）で、kind が黙って変わらないようにするため。
+   */
+  kindChangeIds?: readonly string[];
 }
 
 /**
- * 同じ id の既存の行と、kind が違う行が届いた。kind は作成後に変えられない（設計書 4.5）ので、
- * 呼び出し側（API や recurrence.ts）のバグ。
+ * 同じ id の既存の行と、kind が違う行が届いた。kind を変えてよいのは、変換の依頼（kindChangeIds。設計書 4.5）で
+ * 書く行だけなので、それ以外は、呼び出し側（API や recurrence.ts）のバグ。
  * 黙って捨てたり、kind だけを残して書いたりしないのは、混ぜると、kind は event のまま中身は block、という
  * 壊れた行ができるため。同じ id の行が 2 つ届いたとき（assertNoDuplicateIds）と同じ方針で、止めて気づけるようにする。
  */
@@ -281,7 +287,7 @@ export class KindMismatchError extends Error {
 
   constructor(entryId: string, storedKind: string, requestedKind: string) {
     super(
-      `予定の kind は作成後に変えられません（id: ${entryId}、今の kind: ${storedKind}、届いた kind: ${requestedKind}）`,
+      `変換の依頼でない書き込みでは、予定の kind を変えられません（id: ${entryId}、今の kind: ${storedKind}、届いた kind: ${requestedKind}）`,
     );
     this.entryId = entryId;
   }
@@ -386,7 +392,8 @@ function upsertSql(
 const UPSERT_WORKSPACES = upsertSql('workspaces', WORKSPACE_COLUMNS, { keepOnUpdate: ['builtin'] });
 // kind は、更新の SET に入れない。kind が違う行は、書く前の確認（assertSameKinds）で例外にしているが、
 // 確認の後に別の書き込みが同じ id の行を作る割り込みは、確認をすり抜ける。割り込まれても、設計書 4.5
-// 「kind は作成後に変えられない」を、DB への書き込みの形で守る。
+// 「kind を変えるのは変換の依頼だけ」を、DB への書き込みの形で守る。変換の依頼の行だけ、別の文
+// （UPSERT_CONVERTED_ENTRIES）で書く。
 // next_notify_at は、新しい行の INSERT では書かず（NULL）、更新では NULL に戻す。更新で残すと、変更・削除した
 // 予定の通知が、古い時刻に送られる。通知の時刻は、同じ batch の、この upsert のあとの UPDATE（UPDATE_NEXT_NOTIFY_AT）で入れる。
 const UPSERT_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
@@ -416,6 +423,10 @@ const UPDATE_NEXT_NOTIFY_AT = [
   "  AND edited_at = (SELECT json_extract(value, '$.edited_at') FROM json_each(?1)",
   "    WHERE json_extract(value, '$.id') = entries.id)",
 ].join(' ');
+
+const UPSERT_CONVERTED_ENTRIES = upsertSql('entries', ENTRY_COLUMNS, {
+  extraAssignments: ['next_notify_at = NULL'],
+});
 
 type EntryKind = Entry['kind'];
 
@@ -476,10 +487,11 @@ async function readCurrentRows(
 function assertSameKinds(
   entries: readonly Entry[],
   current: ReadonlyMap<string, { kind: EntryKind }>,
+  kindChangeIds: ReadonlySet<string>,
 ): void {
   for (const { id, kind } of entries) {
     const stored = current.get(id);
-    if (stored !== undefined && stored.kind !== kind) {
+    if (stored !== undefined && stored.kind !== kind && !kindChangeIds.has(id)) {
       throw new KindMismatchError(id, stored.kind, kind);
     }
   }
@@ -526,7 +538,7 @@ export interface WriteOptions {
  */
 export async function applyWrite(
   db: Database,
-  { entries: entryInputs = [], workspaces: workspaceInputs = [] }: WriteRequest,
+  { entries: entryInputs = [], workspaces: workspaceInputs = [], kindChangeIds = [] }: WriteRequest,
   { nowMs = Date.now() }: WriteOptions = {},
 ): Promise<WriteResult> {
   // API の入力の検証だけに任せないのは、サーバーが計算した行（recurrence.ts の結果）も、ここを通って
@@ -547,7 +559,7 @@ export async function applyWrite(
     [...new Set(entries.filter(({ deletedAt }) => deletedAt === null).map(familyKey))],
   );
   // 古い行の判定より先に確かめる。kind の食い違いは、古い依頼でも呼び出し側のバグなので、「捨てた」として隠さない。
-  assertSameKinds(entries, current.entries);
+  assertSameKinds(entries, current.entries, new Set(kindChangeIds));
   if (
     workspaces.some((row) => isStale(row, current.workspaces)) ||
     entries.some((row) => isStale(row, current.entries))
@@ -559,9 +571,20 @@ export async function applyWrite(
   // 自分 1 人の利用で、2 台がほぼ同時に同じ行を書く確率がごく小さいため。割り込まれても、
   // upsert の WHERE が、新しい行を古い行で上書きすることだけは防ぐ。
   // workspaces を先に書く。entries の workspace_id は外部キーで、同じ依頼で作るワークスペースを指すことがあるため。
+  const converting = new Set(kindChangeIds);
   const tables = [
     { table: 'workspaces', sql: UPSERT_WORKSPACES, rows: workspaces.map(workspaceToRow) },
-    { table: 'entries', sql: UPSERT_ENTRIES, rows: entries.map(entryToRow) },
+    {
+      table: 'entries',
+      sql: UPSERT_ENTRIES,
+      rows: entries.filter(({ id }) => !converting.has(id)).map(entryToRow),
+    },
+    {
+      // 書けた行数を数えるときに、上の entries と取り違えないよう、別の名前にする。
+      table: 'entries（kind の変換）',
+      sql: UPSERT_CONVERTED_ENTRIES,
+      rows: entries.filter(({ id }) => converting.has(id)).map(entryToRow),
+    },
   ].filter(({ rows }) => rows.length > 0);
   // 値を分けても、かたまりの文は同じ batch に入れる。batch は 1 つのトランザクションなので、全部書くか、
   // 何も書かないかは変わらない。

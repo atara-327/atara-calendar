@@ -4,6 +4,7 @@ import {
   createEntry,
   deleteEntry,
   expandOccurrences,
+  hasAllDayException,
   InvalidChangeError,
   OccurrenceNotFoundError,
   type Occurrence,
@@ -1436,5 +1437,144 @@ describe('純粋な関数であること', () => {
       ...remove(frozen, '2026-10-26', scope),
     ];
     expect(rows.every(({ editedAt }) => editedAt === EDITED_AT)).toBe(true);
+  });
+});
+
+describe('EV-9: 予定とタイムブロックの変換', () => {
+  const toBlock: EntryChanges = { kind: 'block', workspaceId: null };
+  const block = makeEntry({
+    id: 's1',
+    kind: 'block',
+    workspaceId: null,
+    allDay: false,
+    startTime: '19:00',
+    endTime: '20:00',
+    rrule: { freq: 'weekly', days: [1, 3, 5] },
+    notifyEnabled: false,
+  });
+  const blockException = makeEntry({
+    id: 'bx',
+    kind: 'block',
+    workspaceId: null,
+    seriesId: 's1',
+    originalDate: '2026-10-21',
+    startDate: '2026-10-21',
+    allDay: false,
+    startTime: '19:00',
+    endTime: '20:00',
+  });
+
+  it('繰り返さない予定は、そのまま変換できる。題名・日時・メモ・通知は残り、ワークスペースは外れる', () => {
+    const single = makeEntry({
+      id: 'e1',
+      allDay: false,
+      startTime: '10:00',
+      endTime: '11:00',
+      memo: 'メモ',
+      notifyOffsetMin: 30,
+    });
+
+    const [row] = change([single], '2026-10-19', 'this', toBlock, 'e1');
+
+    expect(row).toEqual({
+      ...single,
+      kind: 'block',
+      workspaceId: null,
+      editedAt: EDITED_AT,
+    });
+  });
+
+  it('終日の予定は、時間指定にしないと、タイムブロックに変換できない', () => {
+    const allDay = makeEntry({ id: 'e1' });
+
+    expect(() => change([allDay], '2026-10-19', 'all', toBlock, 'e1')).toThrow(InvalidChangeError);
+    const [row] = change(
+      [allDay],
+      '2026-10-19',
+      'all',
+      { ...toBlock, allDay: false, startTime: '09:00', endTime: '10:00' },
+      'e1',
+    );
+    expect(row).toMatchObject({
+      kind: 'block',
+      allDay: false,
+      startTime: '09:00',
+      workspaceId: null,
+    });
+  });
+
+  it('繰り返す予定は、「すべて」だけ変換できる。系列と例外（削除した回も）の kind がそろう', () => {
+    const rows = change([weekly, ...exceptions], '2026-10-19', 'all', toBlock);
+
+    expect(rows.map((row) => row.id).sort()).toEqual(['ex-10-21', 'ex-10-23', 'ex-10-28', 's1']);
+    expect(rows.every((row) => row.kind === 'block' && row.workspaceId === null)).toBe(true);
+    expect(rows.every((row) => row.editedAt === EDITED_AT)).toBe(true);
+    expect(rows.every((row) => entryProblem(row) === null)).toBe(true);
+  });
+
+  it.each<Scope>(['this', 'following'])(
+    '繰り返す予定は、「%s」では変換できない（InvalidChangeError）',
+    (scope) => {
+      expect(() => change([weekly], '2026-10-21', scope, toBlock)).toThrow(InvalidChangeError);
+    },
+  );
+
+  it('最初の回の「これ以降すべて」も、変換には使えない', () => {
+    expect(() => change([weekly], '2026-10-19', 'following', toBlock)).toThrow(InvalidChangeError);
+  });
+
+  it('終日にした例外の回がある系列は、タイムブロックに変換できない', () => {
+    const allDayException = makeEntry({
+      id: 'ad',
+      seriesId: 's1',
+      originalDate: '2026-10-26',
+      startDate: '2026-10-26',
+    });
+    const entries = [weekly, ...exceptions, allDayException];
+
+    expect(hasAllDayException(entries, 's1')).toBe(true);
+    expect(hasAllDayException([weekly, ...exceptions], 's1')).toBe(false);
+    expect(() => change(entries, '2026-10-19', 'all', toBlock)).toThrow(InvalidChangeError);
+  });
+
+  it('タイムブロックを予定にするには、ワークスペースが要る。例外にも同じものが入る', () => {
+    expect(() => change([block], '2026-10-19', 'all', { kind: 'event' })).toThrow(
+      InvalidChangeError,
+    );
+    expect(() =>
+      change([block], '2026-10-19', 'all', { kind: 'event', workspaceId: null }),
+    ).toThrow(InvalidChangeError);
+
+    const rows = change([block, blockException], '2026-10-19', 'all', {
+      kind: 'event',
+      workspaceId: 'w9',
+    });
+
+    expect(rows.map(({ id, kind, workspaceId }) => [id, kind, workspaceId]).sort()).toEqual([
+      ['bx', 'event', 'w9'],
+      ['s1', 'event', 'w9'],
+    ]);
+    expect(rows.every((row) => entryProblem(row) === null)).toBe(true);
+  });
+
+  it('同じ kind を指定しても、何も変換しない（kind 以外の変更だけが当たる）', () => {
+    const rows = change([weekly], '2026-10-19', 'all', { kind: 'event', title: '改名' });
+
+    expect(rows).toEqual([{ ...weekly, title: '改名', editedAt: EDITED_AT }]);
+  });
+
+  it('通知の ON/OFF と分は、変換しても残る', () => {
+    const [row] = change([weekly], '2026-10-19', 'all', toBlock);
+
+    expect(row).toMatchObject({
+      notifyEnabled: weekly.notifyEnabled,
+      notifyOffsetMin: weekly.notifyOffsetMin,
+    });
+  });
+
+  it('入力の行を書き換えない', () => {
+    const entries = deepFreeze([weekly, ...exceptions]);
+
+    expect(() => change(entries, '2026-10-19', 'all', toBlock)).not.toThrow();
   });
 });

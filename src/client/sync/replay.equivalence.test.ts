@@ -161,6 +161,39 @@ const deletedSeries = makeEntry({
   deletedAt: 1500,
 });
 
+const timed = { allDay: false, startTime: '09:00', endTime: '10:00' } as const;
+const blockDaily = makeEntry({
+  id: 'sb',
+  kind: 'block',
+  workspaceId: null,
+  title: '作業',
+  ...timed,
+  rrule: { freq: 'daily' },
+  notifyEnabled: false,
+});
+const blockException = makeEntry({
+  id: 'bx1',
+  kind: 'block',
+  workspaceId: null,
+  seriesId: 'sb',
+  originalDate: '2026-10-21',
+  ...timed,
+});
+const blockCancelled = makeEntry({
+  id: 'bx2',
+  kind: 'block',
+  workspaceId: null,
+  seriesId: 'sb',
+  originalDate: '2026-10-23',
+  cancelled: true,
+  ...timed,
+});
+const allDayException = makeEntry({
+  id: 'x4',
+  seriesId: 's1',
+  originalDate: '2026-10-25',
+});
+
 interface Scenario {
   name: string;
   workspaces?: Workspace[];
@@ -311,6 +344,66 @@ const scenarios: Scenario[] = [
     name: '「すべて」の変更（ルールをなくす）',
     entries: [daily, exception],
     request: patchEntry('s1', { scope: 'all', changes: { rrule: null } }),
+  },
+  // 予定とタイムブロックの変換（EV-9）
+  {
+    name: 'EV-9 繰り返さない予定を、タイムブロックに変換する',
+    entries: [makeEntry({ id: 'e1', ...timed })],
+    request: patchEntry('e1', { changes: { kind: 'block', workspaceId: null } }),
+  },
+  {
+    name: 'EV-9 終日の予定を、時間指定にして、タイムブロックに変換する',
+    entries: [makeEntry({ id: 'e1' })],
+    request: patchEntry('e1', {
+      changes: {
+        kind: 'block',
+        workspaceId: null,
+        allDay: false,
+        startTime: '09:00',
+        endTime: '10:00',
+        notifyOffsetMin: 10,
+      },
+    }),
+  },
+  {
+    name: 'EV-9 終日のまま、タイムブロックに変換する（400）',
+    entries: [makeEntry({ id: 'e1' })],
+    request: patchEntry('e1', { changes: { kind: 'block', workspaceId: null } }),
+  },
+  {
+    name: 'EV-9 繰り返す予定を「すべて」で、タイムブロックに変換する（例外・削除した回も）',
+    entries: [daily, exception, lateException, cancelled],
+    request: patchEntry('s1', { scope: 'all', changes: { kind: 'block', workspaceId: null } }),
+  },
+  {
+    name: 'EV-9 終日にした回がある系列は、タイムブロックに変換できない（400）',
+    entries: [daily, exception, allDayException],
+    request: patchEntry('s1', { scope: 'all', changes: { kind: 'block', workspaceId: null } }),
+  },
+  {
+    name: 'EV-9 繰り返す予定の変換を、「この予定のみ」「これ以降すべて」では行えない（400）',
+    entries: [daily],
+    request: patchEntry('s1', {
+      scope: 'following',
+      occurrenceDate: '2026-10-22',
+      changes: { kind: 'block', workspaceId: null },
+      newId: 'n1',
+    }),
+  },
+  {
+    name: 'EV-9 繰り返すタイムブロックを「すべて」で、予定に変換する（例外にも同じワークスペース）',
+    entries: [blockDaily, blockException, blockCancelled],
+    request: patchEntry('sb', { scope: 'all', changes: { kind: 'event', workspaceId: 'w2' } }),
+  },
+  {
+    name: 'EV-9 タイムブロックを予定にするとき、ワークスペースがない（400）',
+    entries: [blockDaily],
+    request: patchEntry('sb', { scope: 'all', changes: { kind: 'event' } }),
+  },
+  {
+    name: 'EV-9 タイムブロックを、削除済みのワークスペースの予定に変換する（捨てる）',
+    entries: [blockDaily],
+    request: patchEntry('sb', { scope: 'all', changes: { kind: 'event', workspaceId: 'w3' } }),
   },
   {
     name: '「これ以降すべて」の変更（系列を切って、新しい系列を作る）',

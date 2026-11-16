@@ -84,6 +84,12 @@ export async function commitEntries(
   editedAt: number,
   newIdContext: NewIdContext,
 ): Promise<WriteResponse> {
+  // 読み込み済みの行と kind が違う行は、変換（EV-9）で書く行。ほかの行は、kind が違えば applyWrite が例外にする。
+  const kindChangeIds = entries
+    .filter((entry) =>
+      newIdContext.loaded.some(({ id, kind }) => id === entry.id && kind !== entry.kind),
+    )
+    .map(({ id }) => id);
   assertWritableEntries(entries);
   const collision = await checkNewId(db, entries, newIdContext, editedAt);
   if (collision !== null) return collision;
@@ -111,5 +117,5 @@ export async function commitEntries(
   for (const { workspace } of workspaces.values()) {
     if (workspace.deletedAt !== null) return dropped(workspace, editedAt);
   }
-  return commit(db, { entries });
+  return commit(db, { entries, kindChangeIds });
 }

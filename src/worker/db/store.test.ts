@@ -341,7 +341,7 @@ describe('applyWrite', () => {
       expect(await dump()).toEqual(before);
     });
 
-    describe('kind は作成後に変えられない（設計書 4.5）', () => {
+    describe('kind を変えられるのは、変換の依頼（kindChangeIds）で書く行だけ（設計書 4.5。EV-9）', () => {
       it('新しい行には kind を書く', async () => {
         await applyWrite(db(), {
           entries: [makeEntry({ id: 'b', kind: 'block', workspaceId: null })],
@@ -392,6 +392,40 @@ describe('applyWrite', () => {
 
           expect(result).toEqual({ applied: true, rev: 2 });
         });
+      });
+
+      it('EV-9: kindChangeIds にある id の行は、kind を書き換えられる。ほかの行は、変わらない', async () => {
+        await applyWrite(db(), {
+          entries: [makeEntry({ id: 'a', title: '元' }), makeEntry({ id: 'other', title: '元' })],
+        });
+
+        const result = await applyWrite(db(), {
+          entries: [
+            makeEntry({ id: 'a', kind: 'block', workspaceId: null, title: '更新', editedAt: 2000 }),
+          ],
+          kindChangeIds: ['a', 'other'],
+        });
+
+        expect(result).toEqual({ applied: true, rev: 2 });
+        const { entries } = await readChanges(db(), 1);
+        expect(entries.map(({ entry }) => [entry.id, entry.kind, entry.workspaceId])).toEqual([
+          ['a', 'block', null],
+        ]);
+      });
+
+      it('EV-9: kindChangeIds にない行が kind を変えようとしたら、同じ依頼に変換の行があっても、KindMismatchError', async () => {
+        await applyWrite(db(), {
+          entries: [makeEntry({ id: 'a' }), makeEntry({ id: 'c' })],
+        });
+        const write = applyWrite(db(), {
+          entries: [
+            makeEntry({ id: 'a', kind: 'block', workspaceId: null, editedAt: 2000 }),
+            makeEntry({ id: 'c', kind: 'event', editedAt: 2000 }),
+          ],
+          kindChangeIds: ['c'],
+        });
+
+        await expect(write).rejects.toThrow(KindMismatchError);
       });
 
       it('確認の後に、別の書き込みが同じ id の行を別の kind で作ったときは、kind は作成時のまま残り、ほかの列は更新される', async () => {

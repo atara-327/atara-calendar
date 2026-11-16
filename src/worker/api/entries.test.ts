@@ -476,6 +476,193 @@ describe('PUT /api/entries/:id（作成）', () => {
   });
 });
 
+describe('EV-9: PATCH /api/entries/:id で、予定とタイムブロックを変換する（設計書 4.5）', () => {
+  const timedTimes = { allDay: false, startTime: '09:00', endTime: '10:00' } as const;
+
+  async function kindsOf(): Promise<unknown[]> {
+    const { results } = await db()
+      .prepare('SELECT id, kind, workspace_id FROM entries ORDER BY id')
+      .all();
+    return results;
+  }
+
+  it('繰り返さない予定を、タイムブロックにできる。ワークスペースは外れる', async () => {
+    await seedSeries({ id: 'e1', rrule: null, ...timedTimes });
+
+    const res = await patchEntry('e1', { changes: { kind: 'block', workspaceId: null } });
+
+    expect(res.body).toEqual({ applied: true });
+    expect(await kindsOf()).toEqual([{ id: 'e1', kind: 'block', workspace_id: null }]);
+  });
+
+  it('終日の予定は、時間指定にして、タイムブロックにできる。終日のままだと 400', async () => {
+    await seedSeries({ id: 'e1', rrule: null });
+    const before = await dumpTables(db());
+
+    const stillAllDay = await patchEntry('e1', { changes: { kind: 'block', workspaceId: null } });
+    expect(stillAllDay.status).toBe(400);
+    expect(await dumpTables(db())).toEqual(before);
+
+    const timed = await patchEntry('e1', {
+      changes: { kind: 'block', workspaceId: null, ...timedTimes },
+    });
+    expect(timed.body).toEqual({ applied: true });
+    expect(await kindsOf()).toEqual([{ id: 'e1', kind: 'block', workspace_id: null }]);
+  });
+
+  it('タイムブロックを予定にできる。ワークスペースが必要で、なければ 400（invalid_change）', async () => {
+    await applyWrite(db(), {
+      entries: [
+        makeEntry({
+          id: 'b1',
+          kind: 'block',
+          workspaceId: null,
+          ...timedTimes,
+          notifyEnabled: false,
+        }),
+      ],
+    });
+    const before = await dumpTables(db());
+
+    const missing = await patchEntry('b1', { changes: { kind: 'event' } });
+    expect(missing.status).toBe(400);
+    expect(missing.body).toMatchObject({ error: 'invalid_change' });
+    expect(await dumpTables(db())).toEqual(before);
+
+    const res = await patchEntry('b1', { changes: { kind: 'event', workspaceId: 'w1' } });
+    expect(res.body).toEqual({ applied: true });
+    expect(await kindsOf()).toEqual([{ id: 'b1', kind: 'event', workspace_id: 'w1' }]);
+  });
+
+  it('存在しないワークスペースを指す変換は 409。組み込みのワークスペースは 400', async () => {
+    await applyWrite(db(), {
+      entries: [makeEntry({ id: 'b1', kind: 'block', workspaceId: null, ...timedTimes })],
+    });
+
+    const none = await patchEntry('b1', { changes: { kind: 'event', workspaceId: 'nothing' } });
+
+    expect(none.status).toBe(409);
+    expect(await kindsOf()).toEqual([{ id: 'b1', kind: 'block', workspace_id: null }]);
+  });
+
+  describe('繰り返す予定', () => {
+    beforeEach(async () => {
+      await applyWrite(db(), {
+        entries: [
+          makeEntry({ id: 's', rrule: { freq: 'daily' }, ...timedTimes }),
+          makeEntry({
+            id: 'x1',
+            seriesId: 's',
+            originalDate: '2026-10-21',
+            startDate: '2026-10-21',
+            ...timedTimes,
+          }),
+          makeEntry({
+            id: 'x2',
+            seriesId: 's',
+            originalDate: '2026-10-23',
+            startDate: '2026-10-23',
+            cancelled: true,
+            ...timedTimes,
+          }),
+        ],
+      });
+    });
+
+    it('「すべて」なら、系列とすべての例外（削除した回を含む）の kind が、そろって変わる', async () => {
+      const res = await patchEntry('s', {
+        scope: 'all',
+        changes: { kind: 'block', workspaceId: null },
+      });
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await kindsOf()).toEqual([
+        { id: 's', kind: 'block', workspace_id: null },
+        { id: 'x1', kind: 'block', workspace_id: null },
+        { id: 'x2', kind: 'block', workspace_id: null },
+      ]);
+    });
+
+    it.each<Scope>(['this', 'following'])(
+      '「%s」では変換できない（400 invalid_change）。DB は変わらない',
+      async (scope) => {
+        const before = await dumpTables(db());
+
+        const res = await patchEntry('s', {
+          scope,
+          occurrenceDate: '2026-10-22',
+          changes: { kind: 'block', workspaceId: null },
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body).toMatchObject({ error: 'invalid_change' });
+        expect(await dumpTables(db())).toEqual(before);
+      },
+    );
+
+    it('終日にした例外の回がある系列は、タイムブロックに変換できない（400 invalid_change）', async () => {
+      await applyWrite(db(), {
+        entries: [
+          makeEntry({
+            id: 'x3',
+            seriesId: 's',
+            originalDate: '2026-10-25',
+            startDate: '2026-10-25',
+            editedAt: 1500,
+          }),
+        ],
+      });
+      const before = await dumpTables(db());
+
+      const res = await patchEntry('s', {
+        scope: 'all',
+        changes: { kind: 'block', workspaceId: null },
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ error: 'invalid_change' });
+      expect(await dumpTables(db())).toEqual(before);
+    });
+
+    it('タイムブロックの系列を「すべて」で予定にすると、例外にも同じワークスペースが入る', async () => {
+      await patchEntry('s', { scope: 'all', changes: { kind: 'block', workspaceId: null } });
+      await seedWorkspace(db(), 'w2');
+
+      const res = await patchEntry('s', {
+        scope: 'all',
+        editedAt: 3000,
+        changes: { kind: 'event', workspaceId: 'w2' },
+      });
+
+      expect(res.body).toEqual({ applied: true });
+      expect(await kindsOf()).toEqual([
+        { id: 's', kind: 'event', workspace_id: 'w2' },
+        { id: 'x1', kind: 'event', workspace_id: 'w2' },
+        { id: 'x2', kind: 'event', workspace_id: 'w2' },
+      ]);
+    });
+
+    it('変換した予定の通知の時刻は、変更と同じ流れで計算し直される（9.2）', async () => {
+      const nextNotify = async () =>
+        (await db().prepare("SELECT next_notify_at FROM entries WHERE id = 's'").first())
+          ?.next_notify_at;
+      await patchEntry('s', {
+        scope: 'all',
+        changes: { kind: 'block', workspaceId: null, notifyEnabled: false },
+      });
+      expect(await nextNotify()).toBeNull();
+
+      await patchEntry('s', {
+        scope: 'all',
+        editedAt: 3000,
+        changes: { kind: 'event', workspaceId: 'w1', notifyEnabled: true },
+      });
+
+      expect(await nextNotify()).not.toBeNull();
+    });
+  });
+});
+
 describe('サーバーが計算した行の日付は、年の範囲（1900〜2199）に収める（4.2）', () => {
   it('2199-12-31 から始まる「毎週 月」の作成は、開始日が 2200 年にずれるので 400。DB は変わらない', async () => {
     const before = await dumpTables(db());
@@ -1137,7 +1324,7 @@ describe('PATCH /api/entries/:id（変更）', () => {
     });
 
     it.each<{ name: string; overrides: Record<string, unknown> }>([
-      { name: 'kind を変える', overrides: { changes: { kind: 'block' } } },
+      { name: 'kind が不正', overrides: { changes: { kind: 'task' } } },
       { name: '知らないキーがある', overrides: { changes: { untilDate: '2026-12-31' } } },
       { name: 'タイトルが空', overrides: { changes: { title: '' } } },
       { name: 'URL が javascript:', overrides: { changes: { url: 'javascript:alert(1)' } } },
