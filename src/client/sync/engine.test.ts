@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDevice, fakeResponse, type Device } from '../../../test/helpers/device';
+import { createDevice, FakeLockHub, fakeResponse, type Device } from '../../../test/helpers/device';
 import {
   createTestDatabase,
   restoredMetaStatement,
@@ -12,7 +12,7 @@ import type { Entry } from '../../shared/schema';
 import { DELETE_UNDO_MS, POLL_INTERVAL_MS } from './engine';
 import type { FetchResponse } from './http';
 import { editedAtOf } from './requests';
-import { selectPendingCount } from './state';
+import { selectPendingCount, type BaseData } from './state';
 
 // 1 台の端末の動き（設計書 6章）を、本物の Worker（Miniflare の D1 と app）につないで確かめる。
 // 2 台以上が関わる動きは、sync.integration.test.ts。
@@ -1463,5 +1463,184 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
 
     expect(accepted).not.toBeNull();
     expect(pendingOf(second)).toBe(1);
+  });
+
+  it('受け取りの応答を止めている間に編集が 200 を受けても、その受け取りの後も編集は残り、最後にサーバーと一致する', async () => {
+    const { second, saved } = await reopenedDevice();
+    let release: (response: FetchResponse) => void = () => undefined;
+    let held = false;
+    second.network.override = ({ method }) => {
+      if (method !== 'GET' || held) return undefined;
+      held = true;
+      return new Promise<FetchResponse>((resolve) => {
+        release = resolve;
+      });
+    };
+    void second.engine.start();
+    await vi.waitFor(() => {
+      expect(second.state().phase).toBe('ready');
+    });
+    // 編集の前の内容。止めている受け取りが、後で返す応答になる。
+    const probe = createDevice({ db: db(), idPrefix: 'probe' });
+    const stale = await probe.network.fetch(`/api/changes?since=${String(saved?.rev)}`, {
+      method: 'GET',
+      redirect: 'manual',
+    });
+    const staleBody: unknown = await stale.json();
+
+    const created = second.engine.createEntry(makeDraft({ title: '受け取り中の編集' }));
+    await vi.waitFor(() => {
+      expect(second.network.writeResponses.map(({ status }) => status)).toEqual([200]);
+    });
+    release(fakeResponse(200, staleBody));
+    await vi.waitFor(() => {
+      expect(second.network.reads.length).toBeGreaterThan(0);
+    });
+    await second.engine.settled();
+
+    expect(entryIn(second, created?.entryId ?? '')?.title).toBe('受け取り中の編集');
+
+    await second.engine.syncNow();
+    await second.engine.settled();
+    const server = await readAllRows(db());
+    expect(pendingOf(second)).toBe(0);
+    for (const [id, entry] of server.entries) expect(entryIn(second, id)).toEqual(entry);
+  });
+
+  it('錠を奪われたタブは、順番待ちの保存をしない', async () => {
+    const hub = new FakeLockHub();
+    const saves: BaseData[] = [];
+    let openGate: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      openGate = resolve;
+    });
+    const tab = createDevice({
+      db: db(),
+      hub,
+      idPrefix: 'tab',
+      snapshot: {
+        load: () => Promise.resolve(null),
+        save: (base) => {
+          saves.push(base);
+          return saves.length === 1 ? gate : Promise.resolve();
+        },
+      },
+    });
+    void tab.engine.start();
+    await vi.waitFor(() => {
+      expect(saves).toHaveLength(1);
+    });
+    const other = createDevice({ db: db(), idPrefix: 'other' });
+    await other.engine.start();
+    other.engine.createEntry(makeDraft({ title: '別の端末の予定' }));
+    await other.engine.settled();
+    await tab.engine.syncNow();
+    expect(tab.state().base.entries.size).toBe(1);
+
+    const thief = createDevice({ db: db(), hub, idPrefix: 'thief' });
+    await thief.engine.start();
+    expect(tab.state()).toMatchObject({ phase: 'stopped', takenOver: true });
+    openGate();
+    await tab.engine.settled();
+
+    expect(saves).toHaveLength(1);
+  });
+
+  it('epoch が変わったら、復元で消えた行が、画面に出すデータと保存した内容から消え、新しい epoch で保存し直す', async () => {
+    const { second, saved } = await reopenedDevice();
+    expect([...(saved?.entries.values() ?? [])].map(({ title }) => title)).toContain('前回の予定');
+    await db().batch([
+      db().prepare("DELETE FROM entries WHERE title = '前回の予定'"),
+      restoredMetaStatement(db(), 'restored'),
+    ]);
+
+    await second.engine.start();
+    await second.engine.settled();
+
+    const titles = [...second.state().view.entries.values()].map(({ title }) => title);
+    expect(titles).not.toContain('前回の予定');
+    const after = await second.snapshot.load();
+    expect(after?.epoch).toBe('restored');
+    expect([...(after?.entries.values() ?? [])].map(({ title }) => title)).not.toContain(
+      '前回の予定',
+    );
+  });
+
+  it('別の端末の削除を差分で受け取ると、開き直しても、その予定は表示されない', async () => {
+    const first = await startedDevice();
+    const created = first.engine.createEntry(makeDraft({ title: '消される予定' }));
+    await first.engine.settled();
+    const entryId = created?.entryId ?? '';
+    first.engine.stop();
+
+    const other = createDevice({ db: db(), idPrefix: 'other' });
+    await other.engine.start();
+    await other.engine.settled();
+    other.engine.deleteEntry(toTarget(entryId));
+    other.clock.advance(DELETE_UNDO_MS);
+    await other.engine.settled();
+
+    const second = createDevice({ db: db(), dbName: first.dbName });
+    await second.engine.start();
+    await second.engine.settled();
+    expect(entryIn(second, entryId)?.deletedAt ?? null).not.toBeNull();
+    second.engine.stop();
+
+    const third = createDevice({ db: db(), dbName: first.dbName });
+    third.network.online = false;
+    await third.engine.start();
+    await third.engine.settled();
+
+    expect(third.state().phase).toBe('ready');
+    expect(entryIn(third, entryId)?.deletedAt ?? null).not.toBeNull();
+  });
+
+  it('送信待ちがあり、電波がない状態で開き直すと、保存した内容の上に送信待ちを重ねて出す', async () => {
+    const { second } = await reopenedDevice();
+    await second.storage.save({
+      id: 'pending-1',
+      request: {
+        type: 'putEntry',
+        targetId: 'pending-entry',
+        body: { draft: makeDraft({ title: '送信待ちの予定' }), editedAt: 5000 },
+      },
+    });
+    second.network.online = false;
+
+    await second.engine.start();
+    await second.engine.settled();
+
+    expect(second.state().phase).toBe('ready');
+    expect([...second.state().view.entries.values()].map(({ title }) => title).sort()).toEqual([
+      '前回の予定',
+      '送信待ちの予定',
+    ]);
+    expect(pendingOf(second)).toBe(1);
+  });
+
+  it('rev も epoch も変わらない受け取りでは、保存しない', async () => {
+    const { first } = await reopenedDevice();
+    const saves: BaseData[] = [];
+    const second = createDevice({
+      db: db(),
+      dbName: first.dbName,
+      hub: new FakeLockHub(),
+      snapshot: {
+        load: () => first.snapshot.load(),
+        save: (base) => {
+          saves.push(base);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await second.engine.start();
+    await second.engine.settled();
+    await second.engine.syncNow();
+    await second.engine.settled();
+
+    expect(second.state().phase).toBe('ready');
+    expect(second.network.reads.length).toBeGreaterThanOrEqual(2);
+    expect(saves).toEqual([]);
   });
 });

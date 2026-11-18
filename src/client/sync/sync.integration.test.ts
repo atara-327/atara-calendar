@@ -218,10 +218,16 @@ describe('同じ予定を 2 台で編集して食い違ったとき（SY-3）', 
 });
 
 describe('同じ端末の複数のタブ（実装 #6 の確認 Q5）', () => {
-  /** 同じ端末の、古いタブと、新しく開いたタブ。錠と IndexedDB を共有する。 */
+  let tabsCounter = 0;
+
+  /**
+   * 同じ端末の、古いタブと、新しく開いたタブ。錠と IndexedDB を共有する。
+   * 端末の名前は、呼ぶたびに別にする。保存した受け取り内容が、前のテストから漏れないため。
+   */
   function twoTabs() {
     const hub = new FakeLockHub();
-    const dbName = 'shared-browser-db';
+    tabsCounter += 1;
+    const dbName = `shared-browser-db-${String(tabsCounter)}`;
     return {
       openOldTab: () => createDevice({ db: db(), hub, dbName, idPrefix: 'old' }),
       openNewTab: () => createDevice({ db: db(), hub, dbName, idPrefix: 'new' }),
@@ -249,6 +255,25 @@ describe('同じ端末の複数のタブ（実装 #6 の確認 Q5）', () => {
     oldTab.page.goOnline();
     await oldTab.engine.settled();
     expect(oldTab.network.calls).toHaveLength(callsBefore);
+  });
+
+  it('古いタブが保存した受け取り内容を、新しいタブが読んで、受け取りの応答を待たずに ready になる', async () => {
+    const { openOldTab, openNewTab } = twoTabs();
+    const oldTab = openOldTab();
+    await oldTab.engine.start();
+    const created = oldTab.engine.createEntry(makeDraft({ title: '古いタブで見えていた' }));
+    await oldTab.engine.settled();
+    const savedRev = oldTab.state().base.rev;
+
+    const newTab = openNewTab();
+    newTab.network.override = () => new Promise<ReturnType<typeof fakeResponse>>(() => undefined);
+    void newTab.engine.start();
+    await vi.waitFor(() => {
+      expect(newTab.state().phase).toBe('ready');
+    });
+
+    expect(titleOf(newTab, created?.entryId ?? '')).toBe('古いタブで見えていた');
+    expect(newTab.state().base.rev).toBe(savedRev);
   });
 
   it('タブを 3 つ開くと、最後のタブだけが動く', async () => {
