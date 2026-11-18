@@ -3,9 +3,10 @@ import type { PendingRequest } from './requests';
 
 /**
  * 同期の状態。
- * - idle: まだ動かしていない。starting: 錠を取り、送信待ちを読んでいる。loading: 最初の全データの読み込み中。
+ * - idle: まだ動かしていない。starting: 錠を取り、送信待ちと保存した受け取り内容を読んでいる。
+ * - loading: 保存した受け取り内容がなく、最初の全データを読み込んでいる。
  * - ready: 読み込めて、見ることも編集することもできる。
- * - loadFailed: 最初の読み込みに失敗した（再試行できる）。電波がない状態で開いたとき（SY-4）もここに来る。
+ * - loadFailed: 保存した受け取り内容がなく、最初の読み込みに失敗した（再試行できる）。
  * - stopped: 止めた。別のタブで開いたため（takenOver）か、止めるよう頼まれた。もう動かさない。
  */
 export type SyncPhase = 'idle' | 'starting' | 'loading' | 'ready' | 'loadFailed' | 'stopped';
