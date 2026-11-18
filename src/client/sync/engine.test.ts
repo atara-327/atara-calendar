@@ -1338,3 +1338,130 @@ describe('タイマーと止めた後（停止）', () => {
     expect(pendingOf(device)).toBe(0);
   });
 });
+
+describe('保存した受け取り内容での起動（設計書 6.1）', () => {
+  /** 1 台目で受け取った内容が保存された端末を、同じ端末の別のタブとして開き直す（2 台目。電波なし）。 */
+  async function reopenedDevice() {
+    const first = await startedDevice();
+    first.engine.createEntry(makeDraft({ title: '前回の予定' }));
+    await first.engine.settled();
+    const saved = await first.snapshot.load();
+    first.engine.stop();
+    const second = createDevice({ db: db(), dbName: first.dbName });
+    return { first, second, saved };
+  }
+
+  it('最初の受け取りの応答を待たずに、phase が ready で、保存した内容が出る', async () => {
+    const { second, saved } = await reopenedDevice();
+    second.network.override = () => new Promise<FetchResponse>(() => undefined);
+
+    void second.engine.start();
+    await vi.waitFor(() => {
+      expect(second.state().phase).toBe('ready');
+    });
+
+    expect(saved?.entries.size).toBe(1);
+    expect([...second.state().view.entries.values()].map(({ title }) => title)).toEqual([
+      '前回の予定',
+    ]);
+  });
+
+  it('その後の受け取りは、保存した rev からの差分（since=保存した rev）で行う', async () => {
+    const { second, saved } = await reopenedDevice();
+
+    await second.engine.start();
+    await second.engine.settled();
+
+    expect(second.network.reads[0]?.url).toBe(`/api/changes?since=${String(saved?.rev)}`);
+  });
+
+  it('受け取りに失敗しても、phase は ready のまま、保存した内容を出し続ける', async () => {
+    const { second } = await reopenedDevice();
+    second.network.online = false;
+
+    await second.engine.start();
+    await second.engine.settled();
+
+    expect(second.state().phase).toBe('ready');
+    expect(second.state().view.entries.size).toBe(1);
+  });
+
+  it('受け取りで rev が変わったら、その内容を保存する', async () => {
+    const { first, second } = await reopenedDevice();
+    await second.engine.start();
+    await second.engine.settled();
+    const before = await second.snapshot.load();
+
+    first.engine.stop();
+    const other = createDevice({ db: db(), idPrefix: 'other' });
+    await other.engine.start();
+    other.engine.createEntry(makeDraft({ title: '別の端末の予定' }));
+    await other.engine.settled();
+    await second.engine.syncNow();
+    await second.engine.settled();
+
+    const after = await second.snapshot.load();
+    expect(after?.rev).toBeGreaterThan(before?.rev ?? Infinity);
+    expect(after?.entries.size).toBe(2);
+  });
+
+  it('保存した内容を読み込めなくても（例外）、全データを読み込んで動く', async () => {
+    const first = await startedDevice();
+    first.engine.stop();
+    const second = createDevice({
+      db: db(),
+      snapshot: {
+        load: () => Promise.reject(new Error('IndexedDB が使えない')),
+        save: () => Promise.resolve(),
+      },
+    });
+
+    await second.engine.start();
+    await second.engine.settled();
+
+    expect(second.state().phase).toBe('ready');
+    expect(second.state().storageFailed).toBe(false);
+    expect(second.network.reads[0]?.url).toBe('/api/changes?since=0');
+  });
+
+  it('保存できなくても（例外）、動き続ける', async () => {
+    const device = createDevice({
+      db: db(),
+      snapshot: {
+        load: () => Promise.resolve(null),
+        save: () => Promise.reject(new Error('容量がない')),
+      },
+    });
+
+    await device.engine.start();
+    await device.engine.settled();
+
+    expect(device.state().phase).toBe('ready');
+    expect(device.state().storageFailed).toBe(false);
+  });
+
+  it('epoch が変わっていたら（データの復元）、全データを読み直す', async () => {
+    const { second } = await reopenedDevice();
+    await db().batch([restoredMetaStatement(db(), 'restored')]);
+
+    await second.engine.start();
+    await second.engine.settled();
+
+    expect(second.network.reads.map(({ url }) => url).at(-1)).toBe('/api/changes?since=0');
+    expect(second.state().phase).toBe('ready');
+  });
+
+  it('最初の受け取りの前の編集も、送信待ちに入り、送られる', async () => {
+    const { second } = await reopenedDevice();
+    second.network.override = () => new Promise<FetchResponse>(() => undefined);
+    void second.engine.start();
+    await vi.waitFor(() => {
+      expect(second.state().phase).toBe('ready');
+    });
+
+    const accepted = second.engine.createEntry(makeDraft({ title: '起動直後の予定' }));
+
+    expect(accepted).not.toBeNull();
+    expect(pendingOf(second)).toBe(1);
+  });
+});

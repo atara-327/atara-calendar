@@ -8,6 +8,7 @@ import {
 import type { FetchFn, FetchInit, FetchResponse } from '../../src/client/sync/http';
 import type { TabLock } from '../../src/client/sync/lock';
 import type { SyncState } from '../../src/client/sync/state';
+import { createIdbSnapshotStorage, type SnapshotStorage } from '../../src/client/sync/snapshot';
 import { createIdbStorage, type PendingStorage } from '../../src/client/sync/storage';
 import type { Bindings } from '../../src/worker/env';
 import { app } from '../../src/worker/index';
@@ -236,6 +237,7 @@ export interface Device {
   clock: ManualClock;
   page: FakePage;
   storage: PendingStorage;
+  snapshot: SnapshotStorage;
   /** IndexedDB のデータベース名。同じ名前で端末を作ると、同じ端末の別のタブになる。 */
   dbName: string;
   state(): SyncState;
@@ -254,6 +256,7 @@ export function createDevice({
   idPrefix,
   clock = new ManualClock(),
   storage: storageOverride,
+  snapshot: snapshotOverride,
 }: {
   db: D1Database;
   hub?: FakeLockHub;
@@ -262,6 +265,8 @@ export function createDevice({
   clock?: ManualClock;
   /** 送信待ちの保存先。省くと、fake-indexeddb の上の本物の実装。保存の失敗を再現するときに渡す。 */
   storage?: PendingStorage;
+  /** 受け取った内容の保存先。省くと、端末の名前（dbName）から作った、fake-indexeddb の上の本物の実装。 */
+  snapshot?: SnapshotStorage;
 }): Device {
   deviceCounter += 1;
   const name = dbName ?? `test-device-${String(deviceCounter)}`;
@@ -269,10 +274,12 @@ export function createDevice({
   const network = new WorkerNetwork(db);
   const page = new FakePage();
   const storage = storageOverride ?? createIdbStorage({ dbName: name });
+  const snapshot = snapshotOverride ?? createIdbSnapshotStorage({ dbName: `${name}-snapshot` });
   let ids = 0;
   const engine = createSyncEngine({
     fetch: network.fetch,
     storage,
+    snapshot,
     locks: hub.lock(),
     page,
     now: clock.now,
@@ -289,6 +296,7 @@ export function createDevice({
     clock,
     page,
     storage,
+    snapshot,
     dbName: name,
     state: () => engine.store.getState(),
   };

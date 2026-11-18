@@ -12,6 +12,7 @@ import {
   type QueuedRequest,
   type SyncState,
 } from './state';
+import type { SnapshotStorage } from './snapshot';
 import type { LoadedRequests, PendingStorage } from './storage';
 
 // 同期の中心（設計書 6章）。サーバーから受け取った内容と、送信待ちの列を持ち、画面に出すデータは、その
@@ -45,6 +46,8 @@ export interface PageEvents {
 export interface SyncEnvironment {
   fetch: FetchFn;
   storage: PendingStorage;
+  /** 受け取った内容の保存先（設計書 6.1）。 */
+  snapshot: SnapshotStorage;
   locks: TabLock;
   page: PageEvents;
   now(): number;
@@ -67,7 +70,7 @@ export interface EntryTarget {
 
 export interface SyncEngine {
   readonly store: StoreApi<SyncState>;
-  /** 錠を取る → 送信待ちを読む → 全データを読む → 送信を始める（設計書 6章）。 */
+  /** 錠を取る → 送信待ちを読む → 保存した受け取り内容（なければ全データ）を読む → 送信を始める（設計書 6章）。 */
   start(): Promise<void>;
   /** 止める。止めたエンジンは、再び動かさない。 */
   stop(): void;
@@ -126,6 +129,8 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
   let receiveStarted = 0;
   // 保存（IndexedDB への書き込み）は、1 本の鎖で順番に行う。同じ依頼の保存と削除の順番が、入れ替わらないため。
   let persistChain: Promise<void> = Promise.resolve();
+  // 受け取った内容の保存も、1 本の鎖で順番に行う。古い受け取りの保存が、新しい保存を追い越さないため。
+  let snapshotChain: Promise<void> = Promise.resolve();
 
   function isActive(): boolean {
     return store.getState().phase !== 'stopped';
@@ -169,6 +174,21 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       console.error('送信待ちを保存できませんでした', error);
       update({ storageFailed: true });
     });
+  }
+
+  /**
+   * 受け取った内容を、端末に保存する（設計書 6.1）。失敗しても、storageFailed にはしない。
+   * Why not 知らせる: 次の起動で全データを読み込むだけで、失うものがない（送信待ちの保存の失敗とは違う）。
+   */
+  function persistSnapshot(base: BaseData): void {
+    snapshotChain = snapshotChain
+      .then(async () => {
+        // 順番を待つ間に、錠を奪われたタブは、書かない（新しい持ち主の保存を、古い内容で上書きしないため）。
+        if (isActive()) await env.snapshot.save(base);
+      })
+      .catch((error: unknown) => {
+        console.error('受け取った内容を保存できませんでした', error);
+      });
   }
 
   // ---- 送る（設計書 6.2） ----
@@ -401,14 +421,16 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         since = 0;
         continue;
       }
+      const base = mergeChanges(state.base, changes, since === 0);
       update({
-        base: mergeChanges(state.base, changes, since === 0),
+        base,
         // この受け取りは、200 を受け取った後に始まっている依頼の結果を、含んでいる。
         confirming: state.confirming.filter(({ coverIndex }) => coverIndex > started),
         authRequired: false,
         syncError: false,
         ...(state.phase === 'loading' || state.phase === 'loadFailed' ? { phase: 'ready' } : {}),
       });
+      if (base.rev !== state.base.rev || base.epoch !== state.base.epoch) persistSnapshot(base);
       return 'ok';
     }
   }
@@ -496,6 +518,15 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       discarded: { count: loaded.discarded, clockSkew: false },
     });
 
+    let snapshot: BaseData | null = null;
+    try {
+      snapshot = await env.snapshot.load();
+    } catch (error) {
+      console.error('保存した受け取り内容を読み込めませんでした', error);
+    }
+    if (!isActive()) return;
+    if (snapshot !== null) update({ base: snapshot, phase: 'ready' });
+
     keepalive = !env.page.isVisible();
     unsubscribePage = env.page.subscribe({
       online: () => {
@@ -514,7 +545,13 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     });
     schedulePoll();
 
-    await loadInitial();
+    if (snapshot === null) {
+      await loadInitial();
+    } else {
+      // 保存した内容で、すぐ ready にしてある。受け取りが失敗しても ready のまま（loadFailed にしない）。
+      // 表示しているのは前回までの内容で、手元の編集は、送信待ちの列の重ねで食い違わない（設計書 6.1・6.4）。
+      await receive();
+    }
     if (store.getState().phase === 'ready') await syncSoon();
   }
 
@@ -542,8 +579,16 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     async settled() {
       for (;;) {
         const chain = persistChain;
-        await Promise.all([sendDone, receiveDone, chain]);
-        if (!sending.running && !receiving.running && chain === persistChain) return;
+        const snapshots = snapshotChain;
+        await Promise.all([sendDone, receiveDone, chain, snapshots]);
+        if (
+          !sending.running &&
+          !receiving.running &&
+          chain === persistChain &&
+          snapshots === snapshotChain
+        ) {
+          return;
+        }
       }
     },
     createEntry(draft) {

@@ -1,5 +1,6 @@
 import type { PageEvents, SyncEnvironment } from './engine';
 import { createWebLock } from './lock';
+import { createIdbSnapshotStorage } from './snapshot';
 import { LEGACY_DB_NAMES, createIdbStorage } from './storage';
 
 /**
@@ -39,6 +40,7 @@ export function createBrowserEnvironment(): SyncEnvironment {
     // 同じオリジンの /api/... を、ブラウザの fetch で呼ぶ。Sec-Fetch-Site: same-origin は、ブラウザが付ける（設計書 10.3）。
     fetch: (url, init) => fetch(url, init),
     storage: createIdbStorage({ legacyDbNames: LEGACY_DB_NAMES }),
+    snapshot: createIdbSnapshotStorage(),
     locks: createWebLock('locks' in navigator ? navigator.locks : undefined),
     page: browserPage(),
     now: () => Date.now(),
