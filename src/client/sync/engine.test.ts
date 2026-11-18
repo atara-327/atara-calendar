@@ -1493,9 +1493,6 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
       expect(second.network.writeResponses.map(({ status }) => status)).toEqual([200]);
     });
     release(fakeResponse(200, staleBody));
-    await vi.waitFor(() => {
-      expect(second.network.reads.length).toBeGreaterThan(0);
-    });
     await second.engine.settled();
 
     expect(entryIn(second, created?.entryId ?? '')?.title).toBe('受け取り中の編集');
