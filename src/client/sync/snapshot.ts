@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { structuralChangesResponseSchema } from '../../shared/structure';
 import type { BaseData } from './state';
 
-/** 保存の形を、互換でなく変えたときに上げる。違う版のスナップショットは、読まずに捨てて、全データを読み込む。 */
+/**
+ * 保存の形を変えたときと、行のスキーマに項目を足したとき（省略できる項目でも）に上げる。
+ * 違う版のスナップショットは、読まずに捨てて、全データを読み込む。
+ * Why 省略できる項目でも上げる: 古いスナップショットがそのまま通り、変わらない行には、その項目が差分で届かないため。
+ */
 export const SNAPSHOT_VERSION = 1;
 
 /** 受け取った内容の保存先（設計書 6.1）。画面は IndexedDB（createIdbSnapshotStorage）、テストは fake-indexeddb を使う。 */

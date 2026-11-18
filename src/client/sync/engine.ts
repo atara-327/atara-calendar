@@ -183,7 +183,8 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
   function persistSnapshot(base: BaseData): void {
     snapshotChain = snapshotChain
       .then(async () => {
-        // 順番を待つ間に、錠を奪われたタブは、書かない（新しい持ち主の保存を、古い内容で上書きしないため）。
+        // 順番を待つ間に、錠を奪われたタブは、書かない（新しい持ち主の保存を、古い内容で上書きしにくくするため）。
+        // 奪われた知らせは遅れて届くので、書くこともあるが、古くてもその rev からの差分で追いつくので、害はない。
         if (isActive()) await env.snapshot.save(base);
       })
       .catch((error: unknown) => {
