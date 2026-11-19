@@ -3,6 +3,8 @@ const FLASH_MS = 1000;
 /** 今日のマスが描かれるのを待つ、最大のフレーム数（約 0.5 秒）。 */
 const MAX_WAIT_FRAMES = 30;
 
+let current: Animation | null = null;
+
 /**
  * 今日のマスを、明るくしてから、元の色にフェードアウトさせる（［今日］を押したとき。設計書 11.2）。
  * スクロールした直後は、仮想スクロールが行をまだ描いていないことがあるので、マスが出るまでフレームごとに探す。
@@ -18,7 +20,10 @@ export function flashToday(scrollElement: HTMLElement): void {
       if (frames < MAX_WAIT_FRAMES) requestAnimationFrame(tryFlash);
       return;
     }
-    cell.animate(
+    // 続けて押されたとき、前の光り方を止めてから、元の色を読む。止めずに読むと、光っている途中の色を
+    // 「元の色」として終わり、終わった瞬間に、本当の元の色へ跳ぶ。
+    current?.cancel();
+    current = cell.animate(
       [
         { backgroundColor: 'rgb(138 180 248 / 40%)' },
         { backgroundColor: getComputedStyle(cell).backgroundColor },
