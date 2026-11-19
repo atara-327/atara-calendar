@@ -128,6 +128,9 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
   // タブが裏に回っている間の送信に、keepalive を付ける（設計書 6.6）。
   let keepalive = false;
   let inFlightId: string | null = null;
+  // このタブが、列から外した（送った・取り消した）依頼の id。IndexedDB からの削除は非同期で、終わる前に読み直すと、
+  // 外したばかりの依頼を、列に足し直してしまうため（足し直しても、サーバーは同じ edited_at を捨てるが、無駄に送る）。
+  const handledIds = new Set<string>();
   // 受け取りを始めた回数。200 を受け取った依頼を、どの受け取りで確かめられるかの印（ConfirmingRequest.coverIndex）。
   let receiveStarted = 0;
   // 保存（IndexedDB への書き込み）は、1 本の鎖で順番に行う。同じ依頼の保存と削除の順番が、入れ替わらないため。
@@ -312,6 +315,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         },
       });
     }
+    handledIds.add(item.id);
     persist(() => env.storage.remove(item.id));
   }
 
@@ -370,6 +374,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     const { queue } = store.getState();
     if (!queue.some(({ id }) => id === requestId)) return false;
     update({ queue: queue.filter(({ id }) => id !== requestId) });
+    handledIds.add(requestId);
     persist(() => env.storage.remove(requestId));
     armHoldTimer();
     // 取り消した依頼が先頭で、待ち中だったときは、その後ろの依頼が、これまで待たされていた。
@@ -467,10 +472,53 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     if (result !== 'ok') update({ phase: 'loadFailed' });
   }
 
-  async function syncNow(): Promise<void> {
+  /**
+   * IndexedDB の依頼のうち、列にも、扱い済みにもないものを、列の末尾に足す（設計書 6.7）。
+   * Why: 錠を奪われた直後の古いタブの保存が、起動時の読み込みより後に終わると、このタブは、その依頼を知らないままになる。
+   * 読み込みの失敗は、console.error だけにする。Why not storageFailed: 起動時と違い、すでに動いているタブで、
+   * 失うものはない（次のきっかけで、また読む）。自分の保存が失敗したときは、persist が知らせる。
+   */
+  async function adoptStoredRequests(): Promise<void> {
+    let loaded: LoadedRequests;
+    try {
+      loaded = await env.storage.load();
+    } catch (error) {
+      console.error('送信待ちを読み直せませんでした', error);
+      return;
+    }
+    // 読んでいる間に、状態が変わりうる。列に足すかどうかは、読み終えた今の状態で決める。
+    if (!isActive() || clock === null) return;
+    const { queue, confirming } = store.getState();
+    const known = new Set([...queue, ...confirming].map(({ id }) => id));
+    const added = loaded.requests.filter(({ id }) => !known.has(id) && !handledIds.has(id));
+    if (loaded.discarded > 0) {
+      const { discarded } = store.getState();
+      update({ discarded: { ...discarded, count: discarded.count + loaded.discarded } });
+    }
+    if (added.length === 0) return;
+    for (const { request } of added) clock.observe(editedAtOf(request));
+    update({
+      queue: [...queue, ...added.map(({ id, request }) => ({ id, request, sendAfter: 0 }))],
+    });
+  }
+
+  // 実行中の syncNow の印。settled が、読み直し（adoptStoredRequests）の await の間に、「何も動いていない」と
+  // 見なさないため。読み直しだけを印にすると、読み終えてから send が始まるまでの隙間が残る。
+  const syncing = new Set<Promise<void>>();
+
+  function syncNow(): Promise<void> {
+    const task = syncNowOnce().finally(() => {
+      syncing.delete(task);
+    });
+    syncing.add(task);
+    return task;
+  }
+
+  async function syncNowOnce(): Promise<void> {
     if (!isActive()) return;
     if (store.getState().phase === 'loadFailed') await loadInitial();
     if (store.getState().phase !== 'ready') return;
+    await adoptStoredRequests();
     await send();
     await receive();
   }
@@ -610,11 +658,12 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         flushSnapshot();
         const chain = persistChain;
         const snapshots = snapshotChain;
-        await Promise.all([sendDone, receiveDone, chain, snapshots]);
+        await Promise.all([sendDone, receiveDone, chain, snapshots, ...syncing]);
         if (
           !sending.running &&
           !receiving.running &&
           snapshotPending === null &&
+          syncing.size === 0 &&
           chain === persistChain &&
           snapshots === snapshotChain
         ) {

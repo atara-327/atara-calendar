@@ -10,6 +10,7 @@ import { readAllRows } from '../../../test/helpers/rows';
 import type { Entry } from '../../shared/schema';
 import { POLL_INTERVAL_MS } from './engine';
 import { selectPendingCount } from './state';
+import { createIdbStorage } from './storage';
 
 // 端末を 2 台以上作り、本物の Worker（Miniflare の D1 と app）につないで、同期の動きを確かめる
 // （設計書 6章。SY-1・SY-2・SY-3）。1 台の動きは、engine.test.ts。
@@ -314,6 +315,67 @@ describe('同じ端末の複数のタブ（実装 #6 の確認 Q5）', () => {
     );
     expect(titleOf(newTab, created?.entryId ?? '')).toBe('古いタブで編集した');
     expect((await newTab.storage.load()).requests).toEqual([]);
+  });
+
+  it('奪われる直前に古いタブが保存した依頼が、新しいタブの読み込みの後に入っても、次のきっかけで送られる', async () => {
+    const { openOldTab, openNewTab } = twoTabs();
+    const oldTab = openOldTab();
+    await oldTab.engine.start();
+    await oldTab.engine.settled();
+    const newTab = openNewTab();
+    await newTab.engine.start();
+    await newTab.engine.settled();
+    expect(pendingOf(newTab)).toBe(0);
+
+    // 古いタブの書き込みが、新しいタブの読み込みより後に終わった、を再現する。
+    await oldTab.storage.save({
+      id: 'late-save',
+      request: {
+        type: 'putEntry',
+        targetId: 'late-entry',
+        body: { draft: makeDraft({ title: '遅れて入った依頼' }), editedAt: newTab.clock.now() },
+      },
+    });
+    expect((await readAllRows(db())).entries.has('late-entry')).toBe(false);
+    await newTab.engine.syncNow();
+    await newTab.engine.settled();
+
+    expect((await readAllRows(db())).entries.get('late-entry')?.title).toBe('遅れて入った依頼');
+    expect(pendingOf(newTab)).toBe(0);
+    expect((await newTab.storage.load()).requests).toEqual([]);
+  });
+
+  it('送り終えた依頼を、IndexedDB からの削除が終わる前に読み直しても、2 回送らない', async () => {
+    const real = createIdbStorage({ dbName: 'slow-remove-db' });
+    let finishRemove: () => void = () => undefined;
+    let removeStarted = false;
+    const device = createDevice({
+      db: db(),
+      storage: {
+        load: () => real.load(),
+        save: (item) => real.save(item),
+        remove: async (id) => {
+          removeStarted = true;
+          await new Promise<void>((resolve) => {
+            finishRemove = resolve;
+          });
+          await real.remove(id);
+        },
+      },
+    });
+    await device.engine.start();
+    await device.engine.settled();
+
+    device.engine.createEntry(makeDraft({ title: '1 回だけ送る' }));
+    await vi.waitFor(() => {
+      expect(removeStarted).toBe(true);
+    });
+    expect((await real.load()).requests).toHaveLength(1);
+    await device.engine.syncNow();
+
+    expect(device.network.writes).toHaveLength(1);
+    finishRemove();
+    await device.engine.settled();
   });
 
   it('止まる前に送り始めていた依頼の応答は、古いタブが読まずに捨てる（列と IndexedDB に触らない）', async () => {

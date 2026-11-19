@@ -8,6 +8,8 @@
  */
 export interface EditedAtClock {
   next(): number;
+  /** 外から入ってきた依頼の editedAt を知らせる。以後に決める値は、これより大きくなる。 */
+  observe(editedAt: number): void;
 }
 
 /**
@@ -27,6 +29,9 @@ export function createEditedAtClock({
     next() {
       last = Math.max(now(), last + 1);
       return last;
+    },
+    observe(editedAt) {
+      last = Math.max(last, editedAt);
     },
   };
 }
