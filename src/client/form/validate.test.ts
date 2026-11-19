@@ -247,6 +247,16 @@ describe('保存の前の確認', () => {
       });
     });
 
+    it('開いた繰り返す予定が、31 日を超えていても、長さを変えていなければ通る（題名だけの変更）', () => {
+      const opened = allDay('2026-12-31');
+      const original = { notifyOffsetMin: 10, allDay: true, recurring: true };
+
+      expect(validateForm({ ...opened, title: '新しい題名' }, original, opened)).toEqual({});
+      expect(validateForm({ ...opened, endDate: '2027-01-01' }, original, opened).range).toBe(
+        '繰り返す予定は、1 回 31 日までです',
+      );
+    });
+
     it('繰り返さなければ、長くても通る', () => {
       expect(validateForm({ ...allDay('2027-11-22'), repeat: 'none' })).toEqual({});
     });

@@ -91,18 +91,31 @@ export function changesAffectLength(
  * 長い系列を、題名だけ直すときにも断ってしまうため。入力（新しく作る下書きと、長さを変えうる変更）にだけ当てる
  * （設計書 4.2）。時刻の形が正しくない行は、entryProblem が断るので、ここでは見ない。
  */
-export function recurringLengthProblem(
-  entry: Pick<Entry, 'allDay' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'rrule'>,
-): string | null {
+export function recurringLengthProblem(entry: LengthFields): string | null {
+  const minutes = entryLengthMinutes(entry);
+  return minutes !== null && minutes > MAX_RECURRING_LENGTH_DAYS * MINUTES_PER_DAY
+    ? RECURRING_LENGTH_MESSAGE
+    : null;
+}
+
+type LengthFields = Pick<
+  Entry,
+  'allDay' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'rrule'
+>;
+
+/**
+ * 繰り返す行の 1 回の長さ（分）。終日は、終了日の終わりまで（日数 × 1 日）。繰り返さない行と、時刻がない行は null。
+ * フォームが、開いたときの長さと比べるのにも使う（変えていないなら、上限を超えていても断らない）。
+ */
+export function entryLengthMinutes(entry: LengthFields): number | null {
   if (entry.rrule === null) return null;
   if (entry.allDay) {
-    const days = dateToDays(entry.endDate) - dateToDays(entry.startDate) + 1;
-    return days > MAX_RECURRING_LENGTH_DAYS ? RECURRING_LENGTH_MESSAGE : null;
+    return (dateToDays(entry.endDate) - dateToDays(entry.startDate) + 1) * MINUTES_PER_DAY;
   }
   if (entry.startTime === null || entry.endTime === null) return null;
-  const minutes =
+  return (
     (dateToDays(entry.endDate) - dateToDays(entry.startDate)) * MINUTES_PER_DAY +
     timeToMinutes(entry.endTime) -
-    timeToMinutes(entry.startTime);
-  return minutes > MAX_RECURRING_LENGTH_DAYS * MINUTES_PER_DAY ? RECURRING_LENGTH_MESSAGE : null;
+    timeToMinutes(entry.startTime)
+  );
 }
