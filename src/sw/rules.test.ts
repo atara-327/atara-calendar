@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cacheName,
   decideFetch,
@@ -6,6 +6,8 @@ import {
   isPrecached,
   isRuntimeCached,
   missingFromPage,
+  missingFromPrecache,
+  pageWithTimeLimit,
   runtimeCacheName,
   type ResponseInfo,
   isStaleCache,
@@ -127,5 +129,70 @@ describe('PW-3 新しい版への切り替え', () => {
 
   it('使ったときに保存するもののキャッシュ名は、アプリの版ではなく、コードの hash で決まる', () => {
     expect(runtimeCacheName('code')).not.toBe(cacheName('code'));
+  });
+});
+
+describe('PW-2 保存の一覧の確認', () => {
+  it('/assets/ の JS・CSS が、一覧にすべて入っていれば、不足なし', () => {
+    const urls = ['/assets/index-a.js', '/assets/EntryForm-b.js', '/assets/index-a.css'];
+    expect(missingFromPrecache(['/index.html', '/sw.js', ...urls], urls)).toEqual([]);
+  });
+
+  it('一覧に入っていない後から読み込む JS は、不足として返す', () => {
+    expect(
+      missingFromPrecache(['/assets/index-a.js', '/assets/EntryForm-b.js'], ['/assets/index-a.js']),
+    ).toEqual(['/assets/EntryForm-b.js']);
+  });
+});
+
+describe('PW-2 ページの取得の上限', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const later = <T>(value: T, ms: number) =>
+    new Promise<T>((resolve) =>
+      setTimeout(() => {
+        resolve(value);
+      }, ms),
+    );
+
+  it('上限の内に応答が来れば、保存があっても、その応答を返す', async () => {
+    const result = pageWithTimeLimit(later('network', 2999), () => Promise.resolve('saved'), 3000);
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(result).resolves.toBe('network');
+  });
+
+  it('上限を過ぎても応答が来ず、保存があれば、保存を返す（遅れて届く応答は使わない）', async () => {
+    const result = pageWithTimeLimit(later('network', 10000), () => Promise.resolve('saved'), 3000);
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(result).resolves.toBe('saved');
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+
+  it('保存がなければ、上限を過ぎても、ネットワークを待つ', async () => {
+    const result = pageWithTimeLimit(
+      later('network', 10000),
+      () => Promise.resolve(undefined),
+      3000,
+    );
+    await vi.advanceTimersByTimeAsync(10000);
+    await expect(result).resolves.toBe('network');
+  });
+
+  it('ネットワークが失敗したら、保存があれば保存を返し、なければ失敗する', async () => {
+    await expect(
+      pageWithTimeLimit(Promise.reject(new Error('offline')), () => Promise.resolve('saved'), 3000),
+    ).resolves.toBe('saved');
+    await expect(
+      pageWithTimeLimit(
+        Promise.reject(new Error('offline')),
+        () => Promise.resolve(undefined),
+        3000,
+      ),
+    ).rejects.toThrow('offline');
   });
 });
