@@ -1,4 +1,4 @@
-import { entryProblem } from '../../shared/entryRules';
+import { entryProblem, recurringLengthProblem } from '../../shared/entryRules';
 import type { Entry } from '../../shared/schema';
 import { badRequest } from './errors';
 
@@ -20,6 +20,19 @@ export function assertWritableEntries(entries: readonly Entry[]): void {
   for (const entry of entries) {
     if (entry.deletedAt !== null) continue;
     const problem = entryProblem(entry);
+    if (problem !== null) throw badRequest(`${problem}（id: ${entry.id}）`);
+  }
+}
+
+/**
+ * 入力（PUT の下書き、長さを変えうる PATCH の変更）の結果の行で、繰り返す予定の 1 回の長さが上限を超えていれば 400。
+ * assertWritableEntries と分けるのは、あちらは、変えていない行にも当たる確認で、上限ができる前の長い系列を、
+ * 題名だけ直すときにも断ってしまうため（shared/entryRules.ts の recurringLengthProblem）。
+ */
+export function assertRecurringLength(entries: readonly Entry[]): void {
+  for (const entry of entries) {
+    if (entry.deletedAt !== null) continue;
+    const problem = recurringLengthProblem(entry);
     if (problem !== null) throw badRequest(`${problem}（id: ${entry.id}）`);
   }
 }

@@ -43,7 +43,7 @@ export const deleteEntryRequestSchema = z.strictObject({
 // 応答の型も、Zod のスキーマから導く。厳密（strictObject）にしないのは、サーバーが後から項目を足したときに、
 // 古い画面が、応答を読めなくならないため。
 // このスキーマは、応答の形（型）を表す。実行時に応答を確かめる（画面の同期）のに、そのまま使わないこと。
-// 行の部分が entrySchema・workspaceSchema なので、入力のルール（色は #RRGGBB など）を含み、
+// 行の部分が entrySchema・workspaceSchema なので、入力のルール（weekly の曜日の重複など）を含み、
 // ルールを満たさない行が DB に 1 つあるだけで、応答全体が失敗し、全端末の受け取りが止まる（設計書 6.3 が避けている状態）。
 // 実行時に確かめるのは、構造だけを見る structure.ts の structuralChangesResponseSchema。
 

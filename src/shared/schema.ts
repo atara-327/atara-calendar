@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_YEAR, MIN_YEAR } from './solarTerms';
+import { maxUtf16 } from './utf16';
 
 // 型はすべて Zod のスキーマから導く（z.infer）。名前は camelCase で、DB の snake_case との
 // 対応は Worker の DB の層（worker/db/rows.ts）で行う（設計書 4章）。
@@ -113,7 +114,8 @@ export type EntryChanges = z.infer<typeof entryChangesSchema>;
 
 /**
  * ワークスペースの1行（設計書 4.2 の workspaces）。builtin は、組み込みの「祝日」「記念日」の印（WS-4）。
- * color は '#RRGGBB' の形だけを確かめる。8 色に絞るのは、画面の色の選択と MCP（workspaceColors.ts）だけ。
+ * color の '#RRGGBB' の確認は、入力用（workspaceInputSchema）にある。ここに置くと、DB にある行が読めなくなりうるため。
+ * 8 色に絞るのは、画面の色の選択と MCP（workspaceColors.ts）だけ。
  * Why not サーバーでも 8 色に絞る: 組み込みの「祝日」「記念日」が、8 色以外の色を持ち、例外が要るため。
  * API はユーザー専用で、サーバーで絞る必要が小さいため。
  * 絞らないと決めたのは、ユーザーの回答（推奨どおり。実装 #10 の確認 Q4。設計書 11.5）。上の理由は、推奨案のもの。
@@ -121,7 +123,7 @@ export type EntryChanges = z.infer<typeof entryChangesSchema>;
 export const workspaceSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: "色は '#RRGGBB' で指定してください" }),
+  color: z.string(),
   sortOrder: z.number().int(),
   visible: z.boolean(),
   // rows.ts の DB の読み込みと、画面の受け取りの確認（structure.ts）でも使う（workspaceSchema.shape.builtin）。
@@ -142,7 +144,7 @@ export type Scope = z.infer<typeof scopeSchema>;
 // 上の entrySchema・workspaceSchema に、長さや年の範囲を足さないのは、これらが書き込み（store.ts）の
 // 確認にも、読み込み（rows.ts）の部品にも使われるため。足すと、入力のルールを後で厳しくしたときに、
 // すでに DB にある行が、更新できない行（書き込みで ZodError）になる。入力だけを、別のスキーマで厳しくする。
-// 文字列の長さ（.max）は UTF-16 の単位で数える。上限は、1 行が D1 の値の上限（約 2MB）に余裕で収まる大きさ。
+// 文字列の長さの上限は、UTF-16 の単位で数える（maxUtf16。Zod の .max はコードポイントで数えるので使わない）。上限は、1 行が D1 の値の上限（約 2MB）に余裕で収まる大きさ。
 
 /** 入力の上限。画面のフォームも同じ値を使う（入力欄の maxLength など）。 */
 export const INPUT_LIMITS = {
@@ -187,7 +189,7 @@ function isParsableUrl(value: string): boolean {
  */
 const urlInputSchema = z
   .string()
-  .max(INPUT_LIMITS.url)
+  .check(maxUtf16(INPUT_LIMITS.url))
   .regex(/^https?:\/\//i, { message: 'URL は http:// か https:// で始めてください' })
   .refine(isParsableUrl, { message: 'URL の形が正しくありません' });
 
@@ -197,13 +199,13 @@ export const editedAtSchema = z.number().int().nonnegative();
 /** 新しく作るときの下書きの、入力用。strictObject にして、知らないキーを黙って捨てずに弾く。 */
 export const entryDraftInputSchema = z.strictObject({
   ...entryDraftSchema.shape,
-  title: z.string().min(1).max(INPUT_LIMITS.title),
+  title: z.string().min(1).check(maxUtf16(INPUT_LIMITS.title)),
   workspaceId: idInputSchema.nullable(),
   startDate: inputDateSchema,
   endDate: inputDateSchema,
-  location: z.string().max(INPUT_LIMITS.location).nullable(),
+  location: z.string().check(maxUtf16(INPUT_LIMITS.location)).nullable(),
   url: urlInputSchema.nullable(),
-  memo: z.string().max(INPUT_LIMITS.memo).nullable(),
+  memo: z.string().check(maxUtf16(INPUT_LIMITS.memo)).nullable(),
   notifyOffsetMin: z
     .number()
     .int()
@@ -221,7 +223,8 @@ export const entryChangesInputSchema = z.strictObject(entryDraftInputSchema.part
 export const workspaceInputSchema = z.strictObject({
   ...workspaceSchema.shape,
   id: idInputSchema,
-  name: z.string().min(1).max(INPUT_LIMITS.workspaceName),
+  name: z.string().min(1).check(maxUtf16(INPUT_LIMITS.workspaceName)),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: "色は '#RRGGBB' で指定してください" }),
   editedAt: editedAtSchema,
   deletedAt: z.null(),
 });

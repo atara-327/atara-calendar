@@ -28,6 +28,11 @@ describe('保存の前の確認', () => {
       expect(validateForm(valid({ title: '  　 ' })).title).toBeDefined();
     });
 
+    it('絵文字（UTF-16 で 2 単位）は、100 個までは通り、101 個は誤り', () => {
+      expect(validateForm(valid({ title: '😀'.repeat(100) }))).toEqual({});
+      expect(validateForm(valid({ title: '😀'.repeat(101) })).title).toContain('200');
+    });
+
     it('200 文字までは通り、201 文字は誤り', () => {
       expect(validateForm(valid({ title: 'あ'.repeat(200) }))).toEqual({});
       expect(validateForm(valid({ title: 'あ'.repeat(201) })).title).toContain('200');
@@ -224,6 +229,40 @@ describe('保存の前の確認', () => {
 
       expect(validateForm(valid({ url: url(2048) }))).toEqual({});
       expect(validateForm(valid({ url: url(2049) })).url).toBeDefined();
+    });
+  });
+
+  describe('繰り返す予定の 1 回の長さは 31 日まで', () => {
+    // 2026-10-22 の終日。
+    const allDay = (endDate: string) =>
+      valid({ ...setAllDay(valid(), true), repeat: 'daily', endDate });
+
+    it('終日で、ちょうど 31 日（両端を含む）は通る', () => {
+      expect(validateForm(allDay('2026-11-21'))).toEqual({});
+    });
+
+    it('終日で、32 日は、終了の欄の近くの誤り（短い文言）', () => {
+      expect(validateForm(allDay('2026-11-22'))).toEqual({
+        range: '繰り返す予定は、1 回 31 日までです',
+      });
+    });
+
+    it('繰り返す回を開いて編集するときは、ここでは断らない（範囲ごとの判断に任せる）', () => {
+      const original = { notifyOffsetMin: 10, allDay: true, recurring: true };
+
+      expect(validateForm(allDay('2026-12-31'), original)).toEqual({});
+    });
+
+    it('繰り返さない予定に、繰り返しを付けるときは、断る', () => {
+      const original = { notifyOffsetMin: 10, allDay: true, recurring: false };
+
+      expect(validateForm(allDay('2026-12-31'), original).range).toBe(
+        '繰り返す予定は、1 回 31 日までです',
+      );
+    });
+
+    it('繰り返さなければ、長くても通る', () => {
+      expect(validateForm({ ...allDay('2027-11-22'), repeat: 'none' })).toEqual({});
     });
   });
 

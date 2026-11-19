@@ -8,7 +8,7 @@ import {
   putWorkspaceRequestSchema,
 } from '../src/shared/api';
 import { addDays, dateToDays, type DateStr } from '../src/shared/date';
-import { entryProblem } from '../src/shared/entryRules';
+import { entryProblem, recurringLengthProblem } from '../src/shared/entryRules';
 import { defaultNotify } from '../src/shared/notifyDefaults';
 import type { Occurrence } from '../src/shared/recurrence';
 import type { EntryDraft, Scope } from '../src/shared/schema';
@@ -167,6 +167,8 @@ export function createTools({ api, newId, nextEditedAt }: ToolDeps) {
     };
     const problem = entryProblem({ ...draft, untilDate: null });
     if (problem !== null) return failed(`入力が正しくありません: ${problem}`);
+    const lengthProblem = recurringLengthProblem(draft);
+    if (lengthProblem !== null) return failed(`入力が正しくありません: ${lengthProblem}`);
 
     const id = newId();
     const body = putEntryRequestSchema.safeParse({ draft, editedAt: nextEditedAt() });

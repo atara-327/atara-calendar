@@ -1,4 +1,4 @@
-import { entryProblem } from '../../shared/entryRules';
+import { changesAffectLength, entryProblem, recurringLengthProblem } from '../../shared/entryRules';
 import {
   InvalidChangeError,
   OccurrenceNotFoundError,
@@ -40,7 +40,7 @@ export type ScopeAction = { kind: 'change'; changes: EntryChanges } | { kind: 'd
  * 選べない理由。ruleAndDate は、ルールを変えて、日付も同時に変えたこと（片方ずつなら、保存できる）。
  * allDayOccurrence は、終日にした回があって、タイムブロックに変換できないこと（EV-9）。
  */
-export type UnavailableReason = 'ruleAndDate' | 'allDayOccurrence' | 'other';
+export type UnavailableReason = 'ruleAndDate' | 'allDayOccurrence' | 'recurringLength' | 'other';
 
 export type ScopeDecision =
   /** 繰り返さない予定。範囲を聞かずに、書き換える（設計書 4.5。ルールを付けて、繰り返す予定にする場合も含む）。 */
@@ -56,7 +56,7 @@ export type ScopeDecision =
  * 範囲 1 つを、手元の行に当てた結果。拒まれた理由を分けるのは、どの範囲も選べないとき、ルールと日付を
  * 同時に変えたためか（InvalidChangeError）、そうでないか（長さが合わない・年の範囲を出る）を見分けるため。
  */
-type Trial = 'accepted' | 'gone' | 'invalidChange' | 'otherRejection';
+type Trial = 'accepted' | 'gone' | 'invalidChange' | 'tooLong' | 'otherRejection';
 
 /** 範囲 1 つを当てて、書く行を返す。shared の例外（対象がない・受け付けられない・日付の計算が範囲を出る）は、そのまま投げる。 */
 function apply(
@@ -92,8 +92,15 @@ function trial(
   try {
     const written = apply(seriesRows, target, scope, action);
     // 削除する行は、確かめない（worker/api/entryRules.ts と同じ。確かめると、決まりが厳しくなる前の行を削除できない）。
-    const ok = written.every((row) => row.deletedAt !== null || entryProblem(row) === null);
-    return ok ? 'accepted' : 'otherRejection';
+    if (!written.every((row) => row.deletedAt !== null || entryProblem(row) === null)) {
+      return 'otherRejection';
+    }
+    // 繰り返す予定の 1 回の長さの上限は、サーバーと同じく、長さを変えうる変更にだけ当てる（worker/api/entries.ts）。
+    const tooLong =
+      action.kind === 'change' &&
+      changesAffectLength(action.changes) &&
+      written.some((row) => row.deletedAt === null && recurringLengthProblem(row) !== null);
+    return tooLong ? 'tooLong' : 'accepted';
   } catch (error) {
     if (error instanceof OccurrenceNotFoundError) return 'gone';
     if (error instanceof InvalidChangeError) return 'invalidChange';
@@ -135,7 +142,8 @@ export function decideScope({
   if (!occurrence.recurring) {
     const result = trial(seriesRows, target, 'all', action);
     if (result === 'accepted') return { kind: 'single' };
-    return result === 'gone' ? { kind: 'gone' } : { kind: 'unavailable', reason: 'other' };
+    if (result === 'gone') return { kind: 'gone' };
+    return { kind: 'unavailable', reason: result === 'tooLong' ? 'recurringLength' : 'other' };
   }
 
   const results = SCOPE_ORDER.map((scope) => ({
@@ -166,6 +174,11 @@ export function decideScope({
     ) === 'accepted'
   ) {
     return { kind: 'unavailable', reason: 'allDayOccurrence' };
+  }
+
+  // 「すべて」「これ以降すべて」が、1 回の長さの上限（31 日）で拒まれたとき。「この予定のみ」は例外の行で、上限の外。
+  if (results.some(({ scope, result }) => scope !== 'this' && result === 'tooLong')) {
+    return { kind: 'unavailable', reason: 'recurringLength' };
   }
 
   // どの範囲も選べないのが、ルールと日付を同時に変えたためか。次の 3 つが、すべて当てはまるときだけ、そうとする。

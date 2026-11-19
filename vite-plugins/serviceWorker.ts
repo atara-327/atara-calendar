@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import type { Plugin } from 'vite';
-import { isPrecached, missingFromPage } from '../src/sw/rules.ts';
+import { isPrecached, missingFromPrecache } from '../src/sw/rules.ts';
 
 // Service Worker（src/sw/sw.ts。設計書 14.2）を、ビルドの出力から作る。
 //
@@ -26,16 +26,28 @@ export function serviceWorker(): Plugin {
         .sort();
       const html = bundle['index.html'];
       if (html?.type !== 'asset') throw new Error('bundle に index.html がありません');
-      // install は、取ったページが一覧の JS・CSS をすべて指しているかを確かめる（rules.ts）。指していないファイルが
-      // あると、端末で install が黙って失敗し続けるので、ビルドで止めて気づけるようにする。
+      // 後から読み込む chunk（フォームなど）が一覧から漏れると、電波がない間に開いた瞬間に画面が壊れるので、ビルドで止める。
+      const unsaved = missingFromPrecache(
+        Object.keys(bundle).map((file) => `/${file}`),
+        urls,
+      );
+      if (unsaved.length > 0) {
+        throw new Error(`保存の一覧に入っていない JS・CSS があります: ${unsaved.join(', ')}`);
+      }
+      // install は、取ったページが、起動時に読む JS・CSS（index.html が指すもの）をすべて指しているかを確かめる（rules.ts）。
       const page =
         typeof html.source === 'string' ? html.source : new TextDecoder().decode(html.source);
-      const missing = missingFromPage(page, urls);
-      if (missing.length > 0) {
-        throw new Error(`index.html が指していない JS・CSS があります: ${missing.join(', ')}`);
-      }
+      const pageUrls = urls.filter((url) => /\.(js|css)$/.test(url) && page.includes(url));
 
-      const bundleSw = async (version: string, codeHash: string, precache: readonly string[]) => {
+      // 空だと、install の版の確認が何もせずに通ってしまう（index.html の書き方が変わったときなど）。
+      if (pageUrls.length === 0) throw new Error('index.html が JS・CSS を指していません');
+
+      const bundleSw = async (
+        version: string,
+        codeHash: string,
+        precache: readonly string[],
+        pageUrls: readonly string[],
+      ) => {
         const result = await build({
           entryPoints: ['src/sw/sw.ts'],
           bundle: true,
@@ -47,6 +59,7 @@ export function serviceWorker(): Plugin {
             __BUILD_VERSION__: JSON.stringify(version),
             __CODE_HASH__: JSON.stringify(codeHash),
             __PRECACHE_URLS__: JSON.stringify(precache),
+            __PAGE_URLS__: JSON.stringify(pageUrls),
           },
         });
         const output = result.outputFiles[0];
@@ -61,12 +74,12 @@ export function serviceWorker(): Plugin {
 
       // 1 回目は、版と一覧を空にして作る。sw.ts・rules.ts だけを直したときも版が変わるように、コードの hash を求めるため。
       // 使ったときに保存するものの名前にも、この hash を使う（アプリの版が変わっても、消えないように）。
-      const codeHash = hash(await bundleSw('', '', []));
+      const codeHash = hash(await bundleSw('', '', [], []));
       const version = hash(urls.join('\n'), html.source, codeHash);
       this.emitFile({
         type: 'asset',
         fileName: 'sw.js',
-        source: await bundleSw(version, codeHash, urls),
+        source: await bundleSw(version, codeHash, urls, pageUrls),
       });
     },
   };

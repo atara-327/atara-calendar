@@ -692,8 +692,8 @@ describe('applyWrite', () => {
         invalid: { entries: [makeEntry({ id: 'bad', rrule: { freq: 'weekly', days: [] } })] },
       },
       {
-        reason: '色の形が違うワークスペース',
-        invalid: { workspaces: [makeWorkspace({ id: 'bad', color: 'red' })] },
+        reason: '並び順が整数でないワークスペース',
+        invalid: { workspaces: [makeWorkspace({ id: 'bad', sortOrder: 1.5 })] },
       },
     ])(
       '$reason が 1 つでもあれば、ほかの正しい行も含めて何も書かず、例外にする',

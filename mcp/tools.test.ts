@@ -269,6 +269,18 @@ describe('書き込みのヘッダーと本文（MC-2・MC-4）', () => {
     expect(result.text).toContain('認証に失敗しました');
   });
 
+  it('create_event: 繰り返す予定の 1 回が 31 日を超えるときは、送らずに断る', async () => {
+    const { tools, requests } = setup(() => APPLIED());
+    const result = await tools.createEvent({
+      ...draftInput,
+      endDate: '2026-11-19',
+      rrule: { freq: 'daily' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.text).toContain('繰り返す予定は、1 回 31 日までです');
+    expect(requests).toHaveLength(0);
+  });
+
   it('ログに、トークンを出さない', async () => {
     const { tools, logs } = setup(() => jsonReply({ error: 'forbidden' }, 403));
     await tools.createEvent(draftInput);

@@ -1,3 +1,4 @@
+import { MINUTES_PER_DAY, dateToDays, timeToMinutes } from './date';
 import { isDateInSupportedYears, type Entry } from './schema';
 
 // 項目をまたぐ確認（設計書 4.2）。スキーマに入れないのは、z.object に refine を付けると、下書きや変更の
@@ -59,4 +60,62 @@ export function entryProblem(entry: RuleFields): string | null {
     return '終了が開始より後になっていません';
   }
   return null;
+}
+
+/** 繰り返す予定の、1 回の長さの上限（日）。 */
+export const MAX_RECURRING_LENGTH_DAYS = 31;
+
+export const RECURRING_LENGTH_MESSAGE = `繰り返す予定は、1 回 ${String(MAX_RECURRING_LENGTH_DAYS)} 日までです`;
+
+/** 変更に、1 回の長さを変えうる項目が入っているか。入っていなければ、長さの確認（recurringLengthProblem）は要らない。 */
+export function changesAffectLength(
+  changes: Partial<
+    Record<'allDay' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'rrule', unknown>
+  >,
+): boolean {
+  return (
+    changes.allDay !== undefined ||
+    changes.startDate !== undefined ||
+    changes.startTime !== undefined ||
+    changes.endDate !== undefined ||
+    changes.endTime !== undefined ||
+    changes.rrule !== undefined
+  );
+}
+
+/**
+ * 繰り返す予定の 1 回の長さが、上限（31 日）を超えていれば、その説明。なければ null。
+ * 終日は、開始日から終了日までの日数（両端を含む）。時間指定は、終了と開始の差（31 × 24 時間まで）。
+ * 繰り返さない行は見ない。
+ * entryProblem に入れないのは、あれが、サーバーが計算した書く行すべてに当たり、この上限ができる前に保存された
+ * 長い系列を、題名だけ直すときにも断ってしまうため。入力（新しく作る下書きと、長さを変えうる変更）にだけ当てる
+ * （設計書 4.2）。時刻の形が正しくない行は、entryProblem が断るので、ここでは見ない。
+ */
+export function recurringLengthProblem(entry: LengthFields): string | null {
+  const minutes = entryLengthMinutes(entry);
+  return minutes !== null && minutes > MAX_RECURRING_LENGTH_DAYS * MINUTES_PER_DAY
+    ? RECURRING_LENGTH_MESSAGE
+    : null;
+}
+
+type LengthFields = Pick<
+  Entry,
+  'allDay' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'rrule'
+>;
+
+/**
+ * 繰り返す行の 1 回の長さ（分）。終日は、終了日の終わりまで（日数 × 1 日）。繰り返さない行と、時刻がない行は null。
+ * フォームが、開いたときの長さと比べるのにも使う（変えていないなら、上限を超えていても断らない）。
+ */
+export function entryLengthMinutes(entry: LengthFields): number | null {
+  if (entry.rrule === null) return null;
+  if (entry.allDay) {
+    return (dateToDays(entry.endDate) - dateToDays(entry.startDate) + 1) * MINUTES_PER_DAY;
+  }
+  if (entry.startTime === null || entry.endTime === null) return null;
+  return (
+    (dateToDays(entry.endDate) - dateToDays(entry.startDate)) * MINUTES_PER_DAY +
+    timeToMinutes(entry.endTime) -
+    timeToMinutes(entry.startTime)
+  );
 }
