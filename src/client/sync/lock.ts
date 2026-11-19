@@ -5,6 +5,12 @@
 // 邪魔されないため。
 
 export interface TabLockHandle {
+  /**
+   * 本物の錠を取れたか。錠がないブラウザや、錠を取れなかったときの代わりの動きでは false。
+   * 奪われても false にはならない（奪われたタブは、止まる。phase が stopped）。
+   * false のとき、ほかのタブも同時に動いているかもしれない。
+   */
+  readonly held: boolean;
   /** 錠を手放す。自分で止めるときに呼ぶ。奪われたときは、呼ばなくてよい。 */
   release(): void;
 }
@@ -35,7 +41,7 @@ export function createWebLock(
         console.warn(
           'このブラウザには Web Locks API がないので、複数のタブの調整をせずに動かします',
         );
-        return Promise.resolve({ release: () => undefined });
+        return Promise.resolve({ held: false, release: () => undefined });
       },
     };
   }
@@ -53,6 +59,7 @@ export function createWebLock(
         const request: Promise<unknown> = locks.request(name, { steal: true }, () => {
           granted = true;
           resolve({
+            held: true,
             release: () => {
               release();
             },

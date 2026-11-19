@@ -25,6 +25,9 @@ export const DELETE_UNDO_MS = 5000;
 /** タブが前面にある間に、受け取る間隔（ms。設計書 6.3）。 */
 export const POLL_INTERVAL_MS = 60_000;
 
+/** 受け取った内容を保存するまでの、最後の変化からの待ち時間（ms。設計書 6.1）。 */
+export const SNAPSHOT_SAVE_DELAY_MS = 2000;
+
 /** setTimeout の戻り値。ブラウザは number、Node は object。 */
 export type TimerHandle = number | object;
 
@@ -76,7 +79,7 @@ export interface SyncEngine {
   stop(): void;
   /** 今すぐ、送って、受け取る。最初の読み込みに失敗しているときは、読み込みからやり直す。 */
   syncNow(): Promise<void>;
-  /** 送信・受け取り・保存が、すべて終わるまで待つ（テスト用）。 */
+  /** 送信・受け取り・保存が、すべて終わるまで待つ（テスト用）。間引き中の保存は、待たずに今すぐ書く。 */
   settled(): Promise<void>;
 
   // 依頼を作る側の入口。editedAt と新しい id をここで付けて、列に入れる。
@@ -125,12 +128,18 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
   // タブが裏に回っている間の送信に、keepalive を付ける（設計書 6.6）。
   let keepalive = false;
   let inFlightId: string | null = null;
+  // このタブが、列から外した（送った・取り消した）依頼の id。IndexedDB からの削除は非同期で、終わる前に読み直すと、
+  // 外したばかりの依頼を、列に足し直してしまうため（足し直しても、サーバーは同じ edited_at を捨てるが、無駄に送る）。
+  const handledIds = new Set<string>();
   // 受け取りを始めた回数。200 を受け取った依頼を、どの受け取りで確かめられるかの印（ConfirmingRequest.coverIndex）。
   let receiveStarted = 0;
   // 保存（IndexedDB への書き込み）は、1 本の鎖で順番に行う。同じ依頼の保存と削除の順番が、入れ替わらないため。
   let persistChain: Promise<void> = Promise.resolve();
   // 受け取った内容の保存も、1 本の鎖で順番に行う。古い受け取りの保存が、新しい保存を追い越さないため。
   let snapshotChain: Promise<void> = Promise.resolve();
+  // 間引き中の保存（設計書 6.1）。受け取りが続く間は、最後の 1 回だけ書く。
+  let snapshotTimer: TimerHandle | null = null;
+  let snapshotPending: BaseData | null = null;
 
   function isActive(): boolean {
     return store.getState().phase !== 'stopped';
@@ -190,6 +199,29 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       .catch((error: unknown) => {
         console.error('受け取った内容を保存できませんでした', error);
       });
+  }
+
+  /** 保存を、最後の変化から SNAPSHOT_SAVE_DELAY_MS 待ってから行う。変わるたびに待ちを延ばす。 */
+  function scheduleSnapshot(base: BaseData): void {
+    snapshotPending = base;
+    // 裏に回っているタブは、待たずに書く。待っている間に凍結・終了されると、この受け取りが失われ、
+    // 次に電波なしで開いたとき、送り終えた編集が消えて見えるため。
+    // isVisible() ではなく keepalive を見るのは、pagehide で裏に回ったとき、visible のままのブラウザがあるため。
+    if (keepalive) {
+      flushSnapshot();
+      return;
+    }
+    if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
+    snapshotTimer = env.setTimeout(flushSnapshot, SNAPSHOT_SAVE_DELAY_MS);
+  }
+
+  /** 間引き中の保存を、待たずに行う。裏に回るタブは、スマホに、待っている間に閉じられるため。 */
+  function flushSnapshot(): void {
+    if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
+    snapshotTimer = null;
+    const base = snapshotPending;
+    snapshotPending = null;
+    if (base !== null) persistSnapshot(base);
   }
 
   // ---- 送る（設計書 6.2） ----
@@ -290,6 +322,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         },
       });
     }
+    handledIds.add(item.id);
     persist(() => env.storage.remove(item.id));
   }
 
@@ -348,6 +381,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     const { queue } = store.getState();
     if (!queue.some(({ id }) => id === requestId)) return false;
     update({ queue: queue.filter(({ id }) => id !== requestId) });
+    handledIds.add(requestId);
     persist(() => env.storage.remove(requestId));
     armHoldTimer();
     // 取り消した依頼が先頭で、待ち中だったときは、その後ろの依頼が、これまで待たされていた。
@@ -431,7 +465,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         syncError: false,
         ...(state.phase === 'loading' || state.phase === 'loadFailed' ? { phase: 'ready' } : {}),
       });
-      if (base.rev !== state.base.rev || base.epoch !== state.base.epoch) persistSnapshot(base);
+      if (base.rev !== state.base.rev || base.epoch !== state.base.epoch) scheduleSnapshot(base);
       return 'ok';
     }
   }
@@ -445,10 +479,55 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     if (result !== 'ok') update({ phase: 'loadFailed' });
   }
 
-  async function syncNow(): Promise<void> {
+  /**
+   * IndexedDB の依頼のうち、列にも、扱い済みにもないものを、列の末尾に足す（設計書 6.7）。
+   * Why: 錠を奪われた直後の古いタブの保存が、起動時の読み込みより後に終わると、このタブは、その依頼を知らないままになる。
+   * 読み込みの失敗は、console.error だけにする。Why not storageFailed: 起動時と違い、すでに動いているタブで、
+   * 失うものはない（次のきっかけで、また読む）。自分の保存が失敗したときは、persist が知らせる。
+   */
+  async function adoptStoredRequests(): Promise<void> {
+    let loaded: LoadedRequests;
+    try {
+      loaded = await env.storage.load();
+    } catch (error) {
+      console.error('送信待ちを読み直せませんでした', error);
+      return;
+    }
+    // 読んでいる間に、状態が変わりうる。列に足すかどうかは、読み終えた今の状態で決める。
+    // 錠を本当に持っているときだけ足す。錠がないと、ほかのタブも動いていて、そのタブの取り消し待ちの依頼を、
+    // 待たせずに送ってしまう（設計書 6.7）。
+    if (!isActive() || clock === null || lockHandle?.held !== true) return;
+    const { queue, confirming } = store.getState();
+    const known = new Set([...queue, ...confirming].map(({ id }) => id));
+    const added = loaded.requests.filter(({ id }) => !known.has(id) && !handledIds.has(id));
+    if (loaded.discarded > 0) {
+      const { discarded } = store.getState();
+      update({ discarded: { ...discarded, count: discarded.count + loaded.discarded } });
+    }
+    if (added.length === 0) return;
+    for (const { request } of added) clock.observe(editedAtOf(request));
+    update({
+      queue: [...queue, ...added.map(({ id, request }) => ({ id, request, sendAfter: 0 }))],
+    });
+  }
+
+  // 実行中の syncNow の印。settled が、読み直し（adoptStoredRequests）の await の間に、「何も動いていない」と
+  // 見なさないため。読み直しだけを印にすると、読み終えてから send が始まるまでの隙間が残る。
+  const syncing = new Set<Promise<void>>();
+
+  function syncNow(): Promise<void> {
+    const task = syncNowOnce().finally(() => {
+      syncing.delete(task);
+    });
+    syncing.add(task);
+    return task;
+  }
+
+  async function syncNowOnce(): Promise<void> {
     if (!isActive()) return;
     if (store.getState().phase === 'loadFailed') await loadInitial();
     if (store.getState().phase !== 'ready') return;
+    await adoptStoredRequests();
     await send();
     await receive();
   }
@@ -470,6 +549,10 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     if (holdTimer !== null) env.clearTimeout(holdTimer);
     pollTimer = null;
     holdTimer = null;
+    // 保存待ちは書かずに捨てる。新しい持ち主の保存を、古い内容で上書きしないため（persistSnapshot と同じ理由）。
+    if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
+    snapshotTimer = null;
+    snapshotPending = null;
     unsubscribePage?.();
     unsubscribePage = null;
     update({ phase: 'stopped', takenOver });
@@ -489,7 +572,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     } catch (error) {
       // 錠の仕組みが失敗しても、動かさないという選択はしない（lock.ts の、錠がないブラウザと同じ考え方）。
       console.error('タブの錠を取れませんでした。複数のタブの調整をせずに動かします', error);
-      handle = { release: () => undefined };
+      handle = { held: false, release: () => undefined };
     }
     if (!isActive()) {
       handle.release();
@@ -540,6 +623,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       },
       hidden: () => {
         keepalive = true;
+        flushSnapshot();
         releaseHolds();
         run(syncSoon());
       },
@@ -578,13 +662,17 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     },
     syncNow,
     async settled() {
+      // Why not タイマーが切れるのを待つ: テストの時計は、手で進めるものなので、待つと終わらない。
       for (;;) {
+        flushSnapshot();
         const chain = persistChain;
         const snapshots = snapshotChain;
-        await Promise.all([sendDone, receiveDone, chain, snapshots]);
+        await Promise.all([sendDone, receiveDone, chain, snapshots, ...syncing]);
         if (
           !sending.running &&
           !receiving.running &&
+          snapshotPending === null &&
+          syncing.size === 0 &&
           chain === persistChain &&
           snapshots === snapshotChain
         ) {

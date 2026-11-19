@@ -9,7 +9,7 @@ import { makeDraft } from '../../../test/helpers/entries';
 import { readAllRows } from '../../../test/helpers/rows';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import type { Entry } from '../../shared/schema';
-import { DELETE_UNDO_MS, POLL_INTERVAL_MS } from './engine';
+import { DELETE_UNDO_MS, POLL_INTERVAL_MS, SNAPSHOT_SAVE_DELAY_MS } from './engine';
 import type { FetchResponse } from './http';
 import { editedAtOf } from './requests';
 import { selectPendingCount, type BaseData } from './state';
@@ -1405,6 +1405,109 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
     expect(after?.entries.size).toBe(2);
   });
 
+  describe('保存の間引き（最後の変化から 2 秒。裏に回ったらすぐ）', () => {
+    function recordingDevice(hub = new FakeLockHub()) {
+      const saves: BaseData[] = [];
+      const device = createDevice({
+        db: db(),
+        hub,
+        snapshot: {
+          load: () => Promise.resolve(null),
+          save: (base) => {
+            saves.push(base);
+            return Promise.resolve();
+          },
+        },
+      });
+      return { device, saves };
+    }
+
+    it('受け取っても、すぐには保存せず、2 秒たつと保存する', async () => {
+      const { device, saves } = recordingDevice();
+      await device.engine.start();
+
+      device.clock.advance(SNAPSHOT_SAVE_DELAY_MS - 1);
+      expect(saves).toHaveLength(0);
+      device.clock.advance(1);
+      await vi.waitFor(() => {
+        expect(saves).toHaveLength(1);
+      });
+    });
+
+    it('続けて変わっても、保存は最後の 1 回（変わるたびに、待ちを延ばす）', async () => {
+      const { device, saves } = recordingDevice();
+      await device.engine.start();
+      device.clock.advance(1500);
+
+      device.engine.createEntry(makeDraft({ title: '続けて変えた予定' }));
+      await vi.waitFor(() => {
+        expect(device.state().queue).toHaveLength(0);
+        expect(device.state().confirming).toHaveLength(0);
+      });
+      device.clock.advance(SNAPSHOT_SAVE_DELAY_MS - 1);
+      expect(saves).toHaveLength(0);
+      device.clock.advance(1);
+
+      await vi.waitFor(() => {
+        expect(saves).toHaveLength(1);
+      });
+      expect(saves[0]?.entries.size).toBe(1);
+    });
+
+    it('タブが裏に回ると、待たずにすぐ保存する', async () => {
+      const { device, saves } = recordingDevice();
+      await device.engine.start();
+      expect(saves).toHaveLength(0);
+
+      device.page.hide();
+
+      await vi.waitFor(() => {
+        expect(saves).toHaveLength(1);
+      });
+    });
+
+    it('裏に回った後の受け取りは、待たずにすぐ保存する（待つ間に凍結・終了されても、送り終えた編集が残る）', async () => {
+      const { device, saves } = recordingDevice();
+      await device.engine.start();
+      device.page.hide();
+
+      device.engine.createEntry(makeDraft({ title: '裏に回った直後の編集' }));
+      await vi.waitFor(() => {
+        expect(device.state().queue).toHaveLength(0);
+        expect(device.state().confirming).toHaveLength(0);
+      });
+
+      await vi.waitFor(() => {
+        expect(saves.at(-1)?.entries.size).toBe(1);
+      });
+    });
+
+    it('錠を奪われたタブは、待っていた保存をしない', async () => {
+      const hub = new FakeLockHub();
+      const { device, saves } = recordingDevice(hub);
+      await device.engine.start();
+
+      await createDevice({ db: db(), hub, idPrefix: 'thief' }).engine.start();
+      device.clock.advance(SNAPSHOT_SAVE_DELAY_MS);
+      await device.engine.settled();
+
+      expect(device.state().takenOver).toBe(true);
+      expect(saves).toHaveLength(0);
+      expect(device.clock.pendingTimerCount).toBe(0);
+    });
+
+    it('止めたタブも、待っていた保存をしない', async () => {
+      const { device, saves } = recordingDevice();
+      await device.engine.start();
+
+      device.engine.stop();
+      device.clock.advance(SNAPSHOT_SAVE_DELAY_MS);
+      await device.engine.settled();
+
+      expect(saves).toHaveLength(0);
+    });
+  });
+
   it('保存した内容を読み込めなくても（例外）、全データを読み込んで動く', async () => {
     const first = await startedDevice();
     first.engine.stop();
@@ -1525,6 +1628,10 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
     });
     void tab.engine.start();
     await vi.waitFor(() => {
+      expect(tab.state().phase).toBe('ready');
+    });
+    tab.clock.advance(SNAPSHOT_SAVE_DELAY_MS);
+    await vi.waitFor(() => {
       expect(saves).toHaveLength(1);
     });
     const other = createDevice({ db: db(), idPrefix: 'other' });
@@ -1533,6 +1640,8 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
     await other.engine.settled();
     await tab.engine.syncNow();
     expect(tab.state().base.entries.size).toBe(1);
+    // 保存を、最初の保存（gate で止めてある）の後ろに、順番待ちで並ばせる。
+    tab.clock.advance(SNAPSHOT_SAVE_DELAY_MS);
 
     const thief = createDevice({ db: db(), hub, idPrefix: 'thief' });
     await thief.engine.start();

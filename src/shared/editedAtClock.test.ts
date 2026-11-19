@@ -45,4 +45,17 @@ describe('editedAt の時計（実装 #6 の確認 Q1・MC-2）', () => {
     const clock = createEditedAtClock({ now: () => 9000, initial: 1000 });
     expect(clock.next()).toBe(9000);
   });
+
+  it('observe で知らせた値より後は、それより大きい値を返す（外から入った依頼を、後の編集が追い越さないため）', () => {
+    const clock = createEditedAtClock({ now: () => 1000 });
+    clock.observe(5000);
+    expect(clock.next()).toBe(5001);
+  });
+
+  it('observe に、すでに決めた値より小さい値を渡しても、戻らない', () => {
+    const clock = createEditedAtClock({ now: () => 1000 });
+    clock.next();
+    clock.observe(10);
+    expect(clock.next()).toBe(1001);
+  });
 });

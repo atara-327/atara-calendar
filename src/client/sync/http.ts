@@ -93,21 +93,31 @@ async function readJson<S extends z.ZodType>(
   }
 }
 
-/** 依頼を 1 つ送る。keepalive は、タブが裏に回る・閉じるときの送信に付ける（設計書 6.6）。 */
+/**
+ * keepalive を付けてよい本文の上限（バイト）。keepalive の fetch は、本文が 64KB を超えると失敗する。
+ * 余裕を見て 60,000 にする。Why not 超えても付ける: 失敗は通信の失敗と同じに扱われ、裏に回っている間は送れない。
+ * 付けずに送れば、ページが生きている間は届く。
+ */
+export const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
+
+/** 依頼を 1 つ送る。keepalive は、タブが裏に回る・閉じるときの送信に付ける（設計書 6.6）。本文が大きいときは付けない。 */
 export async function sendRequest(
   fetchFn: FetchFn,
   request: PendingRequest,
   { keepalive }: { keepalive: boolean },
 ): Promise<WriteOutcome> {
   const { method, url, body } = toHttpRequest(request);
+  const bodyText = JSON.stringify(body);
+  const withKeepalive =
+    keepalive && new TextEncoder().encode(bodyText).length <= KEEPALIVE_BODY_LIMIT_BYTES;
   let response: FetchResponse;
   try {
     response = await fetchFn(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: bodyText,
       redirect: 'manual',
-      ...(keepalive ? { keepalive: true } : {}),
+      ...(withKeepalive ? { keepalive: true } : {}),
     });
   } catch {
     // 電波がない・タイムアウトなど。送れたかどうかは分からないが、同じ依頼を何度送っても結果は変わらない

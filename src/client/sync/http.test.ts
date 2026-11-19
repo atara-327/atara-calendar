@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { makeEntry } from '../../../test/helpers/entries';
+import { makeDraft, makeEntry } from '../../../test/helpers/entries';
 import { makeWorkspace } from '../../../test/helpers/workspaces';
 import {
   classifyWriteResponse,
   fetchChanges,
+  KEEPALIVE_BODY_LIMIT_BYTES,
   sendRequest,
   type FetchFn,
   type FetchInit,
@@ -174,6 +175,54 @@ describe('依頼の送信', () => {
     await sendRequest(fetchFn, deleteWorkspaceRequest, { keepalive: true });
 
     expect(calls[0]?.init.keepalive).toBe(true);
+  });
+
+  describe('keepalive の本文の上限（keepalive の fetch は、本文が 64KB を超えると失敗するため）', () => {
+    function putEntryWithMemo(memo: string): PendingRequest {
+      return {
+        type: 'putEntry',
+        targetId: 'e1',
+        body: { draft: makeDraft({ memo }), editedAt: 2000 },
+      };
+    }
+
+    /** 本文がちょうど bytes バイトになる依頼（メモを ASCII で埋めて調整する）。 */
+    function requestOfBodyBytes(bytes: number): PendingRequest {
+      const empty = JSON.stringify(
+        (putEntryWithMemo('') as Extract<PendingRequest, { type: 'putEntry' }>).body,
+      );
+      return putEntryWithMemo('a'.repeat(bytes - new TextEncoder().encode(empty).length));
+    }
+
+    it('本文が上限ちょうどなら、keepalive を付ける', async () => {
+      const { fetchFn, calls } = recordingFetch(response(200, { applied: true }));
+
+      await sendRequest(fetchFn, requestOfBodyBytes(KEEPALIVE_BODY_LIMIT_BYTES), {
+        keepalive: true,
+      });
+
+      expect(calls[0]?.init.keepalive).toBe(true);
+    });
+
+    it('本文が上限を超えるなら、keepalive を付けずに送る', async () => {
+      const { fetchFn, calls } = recordingFetch(response(200, { applied: true }));
+
+      await sendRequest(fetchFn, requestOfBodyBytes(KEEPALIVE_BODY_LIMIT_BYTES + 1), {
+        keepalive: true,
+      });
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.init.keepalive).toBeUndefined();
+    });
+
+    it('文字数ではなく UTF-8 のバイト数で数える', async () => {
+      const { fetchFn, calls } = recordingFetch(response(200, { applied: true }));
+
+      // 「あ」は UTF-8 で 3 バイト。25,000 文字は、文字数では上限以内だが、75,000 バイト。
+      await sendRequest(fetchFn, putEntryWithMemo('あ'.repeat(25_000)), { keepalive: true });
+
+      expect(calls[0]?.init.keepalive).toBeUndefined();
+    });
   });
 
   it.each([
