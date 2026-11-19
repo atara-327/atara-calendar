@@ -1,4 +1,4 @@
-import { entryProblem } from '../../shared/entryRules';
+import { changesAffectLength, entryProblem, recurringLengthProblem } from '../../shared/entryRules';
 import {
   InvalidChangeError,
   OccurrenceNotFoundError,
@@ -93,7 +93,12 @@ function trial(
     const written = apply(seriesRows, target, scope, action);
     // 削除する行は、確かめない（worker/api/entryRules.ts と同じ。確かめると、決まりが厳しくなる前の行を削除できない）。
     const ok = written.every((row) => row.deletedAt !== null || entryProblem(row) === null);
-    return ok ? 'accepted' : 'otherRejection';
+    // 繰り返す予定の 1 回の長さの上限は、サーバーと同じく、長さを変えうる変更にだけ当てる（worker/api/entries.ts）。
+    const lengthChecked =
+      action.kind === 'change' && changesAffectLength(action.changes)
+        ? written.every((row) => row.deletedAt !== null || recurringLengthProblem(row) === null)
+        : true;
+    return ok && lengthChecked ? 'accepted' : 'otherRejection';
   } catch (error) {
     if (error instanceof OccurrenceNotFoundError) return 'gone';
     if (error instanceof InvalidChangeError) return 'invalidChange';

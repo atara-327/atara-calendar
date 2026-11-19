@@ -1,4 +1,8 @@
-import { entryProblem } from '../../shared/entryRules';
+import {
+  RECURRING_LENGTH_MESSAGE,
+  entryProblem,
+  recurringLengthProblem,
+} from '../../shared/entryRules';
 import type { Occurrence } from '../../shared/recurrence';
 import { INPUT_LIMITS, entryDraftInputSchema } from '../../shared/schema';
 import { toDraft } from './build';
@@ -127,6 +131,19 @@ export function validateForm(
           errors.form ??= '入力内容を確かめてください';
       }
     }
+  }
+
+  // 繰り返す予定の 1 回の長さ（日付と時刻が正しいときだけ。正しくないときは、その欄の誤りが出ている）。
+  // すでに繰り返している予定は、長さを変えていなくても、ここで断る（開いた回の元の長さを、ここでは持たないため）。
+  if (
+    errors.startDate === undefined &&
+    errors.endDate === undefined &&
+    errors.startTime === undefined &&
+    errors.endTime === undefined &&
+    errors.range === undefined &&
+    recurringLengthProblem(draft) !== null
+  ) {
+    errors.range = RECURRING_LENGTH_MESSAGE;
   }
 
   // 開始日がずれた後の最初の回が、対応する年の範囲を出るとき（例: 2199-12-31 の「平日」は、2200 年の 1 月にずれる）。

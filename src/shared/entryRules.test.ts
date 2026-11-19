@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../test/helpers/entries';
-import { entryProblem } from './entryRules';
+import { changesAffectLength, entryProblem, recurringLengthProblem } from './entryRules';
 
 const timed = { allDay: false, startTime: '15:00', endTime: '16:00' } as const;
 const daily = { rrule: { freq: 'daily' } } as const;
@@ -75,5 +75,51 @@ describe('entryProblem: 項目をまたぐ確認（設計書 4.2）', () => {
     },
   ] as const)('$name は守られていない', ({ overrides }) => {
     expect(entryProblem(makeEntry({ id: 'e', ...overrides }))).toEqual(expect.any(String));
+  });
+});
+
+describe('recurringLengthProblem: 繰り返す予定の 1 回の長さは 31 日まで', () => {
+  it.each([
+    { name: '終日で、ちょうど 31 日（両端を含む）', overrides: { endDate: '2026-11-18' } },
+    { name: '終日で、1 日', overrides: {} },
+    {
+      name: '時間指定で、ちょうど 31 × 24 時間',
+      overrides: { ...timed, endDate: '2026-11-19', startTime: '15:00', endTime: '15:00' },
+    },
+    {
+      name: '繰り返さない予定は、40 日でも見ない',
+      overrides: { rrule: null, endDate: '2026-11-27' },
+    },
+    {
+      name: '繰り返さない時間指定は、長くても見ない',
+      overrides: { ...timed, rrule: null, endDate: '2026-12-31', endTime: '16:00' },
+    },
+  ])('$name は通る', ({ overrides }) => {
+    const entry = makeEntry({ id: 'e', ...daily, ...overrides });
+    expect(recurringLengthProblem(entry)).toBeNull();
+  });
+
+  it.each([
+    { name: '終日で、32 日', overrides: { endDate: '2026-11-19' } },
+    {
+      name: '時間指定で、31 × 24 時間を 1 分超える',
+      overrides: { ...timed, endDate: '2026-11-19', startTime: '15:00', endTime: '15:01' },
+    },
+  ])('$name は断る', ({ overrides }) => {
+    const entry = makeEntry({ id: 'e', ...daily, ...overrides });
+    expect(recurringLengthProblem(entry)).toBe('繰り返す予定は、1 回 31 日までです');
+  });
+});
+
+describe('changesAffectLength', () => {
+  it.each(['allDay', 'startDate', 'startTime', 'endDate', 'endTime', 'rrule'] as const)(
+    '%s を変える変更は、長さに関わる',
+    (key) => {
+      expect(changesAffectLength({ [key]: null })).toBe(true);
+    },
+  );
+
+  it('題名だけの変更は、長さに関わらない', () => {
+    expect(changesAffectLength({})).toBe(false);
   });
 });

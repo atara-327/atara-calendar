@@ -270,6 +270,31 @@ describe('PUT /api/entries/:id（作成）', () => {
       { name: 'タイトルが 201 文字', overrides: { title: 'あ'.repeat(201) } },
       { name: '場所が 201 文字', overrides: { location: 'あ'.repeat(201) } },
       { name: 'メモが 10001 文字', overrides: { memo: 'あ'.repeat(10_001) } },
+      {
+        name: 'タイトルが絵文字 100 個と 1 文字（UTF-16 で 201）',
+        overrides: { title: `${'😀'.repeat(100)}a` },
+      },
+      { name: '場所が絵文字 101 個（UTF-16 で 202）', overrides: { location: '😀'.repeat(101) } },
+      { name: 'メモが絵文字 5001 個（UTF-16 で 10002）', overrides: { memo: '😀'.repeat(5001) } },
+      {
+        name: '繰り返す終日の予定が 32 日',
+        overrides: {
+          allDay: true,
+          startTime: null,
+          endTime: null,
+          endDate: '2026-11-19',
+          rrule: { freq: 'daily' },
+        },
+      },
+      {
+        name: '繰り返す時間指定の予定が 31 × 24 時間より 1 分長い',
+        overrides: {
+          endDate: '2026-11-19',
+          endTime: '15:01',
+          startTime: '15:00',
+          rrule: { freq: 'daily' },
+        },
+      },
       { name: 'URL が javascript:', overrides: { url: 'javascript:alert(1)' } },
       { name: 'URL が ftp://', overrides: { url: 'ftp://example.com/' } },
       { name: 'URL が先頭に空白つき', overrides: { url: ' https://example.com/' } },
@@ -292,6 +317,39 @@ describe('PUT /api/entries/:id（作成）', () => {
       expect(res.status).toBe(400);
       expect(res.body).toEqual(invalidRequest);
       expect(await dumpTables(db())).toEqual(before);
+    });
+
+    it('絵文字（UTF-16 で 2 単位）でも、上限ちょうど（タイトル 100 個・場所 100 個）は通る', async () => {
+      const res = await putEntry('e1', {
+        draft: draft({ title: '😀'.repeat(100), location: '😀'.repeat(100) }),
+        editedAt: 2000,
+      });
+
+      expect(res.body).toEqual({ applied: true });
+    });
+
+    it('繰り返す終日の予定は、ちょうど 31 日なら通る', async () => {
+      const res = await putEntry('e1', {
+        draft: draft({
+          allDay: true,
+          startTime: null,
+          endTime: null,
+          endDate: '2026-11-18',
+          rrule: { freq: 'daily' },
+        }),
+        editedAt: 2000,
+      });
+
+      expect(res.body).toEqual({ applied: true });
+    });
+
+    it('繰り返さない予定は、1 年にわたっても通る', async () => {
+      const res = await putEntry('e1', {
+        draft: draft({ endDate: '2027-10-19' }),
+        editedAt: 2000,
+      });
+
+      expect(res.body).toEqual({ applied: true });
     });
 
     it('上限ちょうど（タイトル 200・場所 200・メモ 10000・URL 2048・通知 -1440 と 10080）は通る', async () => {
@@ -1261,6 +1319,58 @@ describe('PATCH /api/entries/:id（変更）', () => {
       expect(res.status).toBe(400);
       expect(res.body).toEqual(builtinWorkspace);
       expect(await dumpTables(db())).toEqual(before);
+    });
+  });
+
+  describe('繰り返す予定の 1 回の長さは 31 日まで', () => {
+    it.each<Scope>(['all', 'following'])(
+      '「%s」の変更で、32 日になると 400。DB は変わらない',
+      async (scope) => {
+        await seedSeries();
+        const before = await dumpTables(db());
+
+        const res = await patchEntry('s', { scope, changes: { endDate: '2026-11-19' } });
+
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual(invalidRequest);
+        expect(await dumpTables(db())).toEqual(before);
+      },
+    );
+
+    it('「すべて」の変更で、ちょうど 31 日なら通る', async () => {
+      await seedSeries();
+
+      const res = await patchEntry('s', { changes: { endDate: '2026-11-18' } });
+
+      expect(res.body).toEqual({ applied: true });
+    });
+
+    it('繰り返さない予定を、長いまま繰り返す予定にする変更は 400', async () => {
+      await seedSeries({ id: 's', rrule: null, endDate: '2026-12-31' });
+
+      const res = await patchEntry('s', { changes: { rrule: { freq: 'daily' } } });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('「この予定のみ」の例外は繰り返さないので、長くしても通る', async () => {
+      await seedSeries();
+
+      const res = await patchEntry('s', {
+        scope: 'this',
+        occurrenceDate: '2026-10-21',
+        changes: { endDate: '2026-12-31' },
+      });
+
+      expect(res.body).toEqual({ applied: true });
+    });
+
+    it('上限ができる前の長い系列でも、長さに関わらない変更（題名）は通る', async () => {
+      await seedSeries({ endDate: '2026-12-31' });
+
+      const res = await patchEntry('s', { changes: { title: '新しい題名' } });
+
+      expect(res.body).toEqual({ applied: true });
     });
   });
 
