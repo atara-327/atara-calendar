@@ -116,8 +116,11 @@ function dateToDaysOrNull(date: string): number | null {
 /**
  * 終日・終了・通知のタイミングを、切り替える前に戻す（終日の切り替えで変わる項目）。
  * 開始は、今の値のまま保ち、終了は、開いたときの「長さ」を保つ（開始を動かしていても、終了が開始より前にならない）。
- * 時刻とタイミングは、変換で入った値のままなら開いたときの値に、利用者が変えていれば、その値を保つ。
+ * 時刻は、変換で入った値のままなら開いたときの値に、利用者が変えていれば、その値を保つ。
  * 変換で入った値かどうかは、開いたときの値から同じ変換をして比べる。
+ * 通知のタイミングは、常に開いたときの値に戻す（終日と時間指定で数の意味が違い、終日は入力欄がないため、
+ * 時間指定の値を保つと、見えない欄の値で通知の時刻が変わる）。
+ * 時間指定に戻すとき、終了が開始より後でなければ、toTimed と同じく開始の 1 時間後にする。
  */
 function restoreSchedule(values: FormValues, opened: FormValues): FormValues {
   const converted = opened.allDay ? toTimed(opened) : toAllDay(opened);
@@ -133,16 +136,15 @@ function restoreSchedule(values: FormValues, opened: FormValues): FormValues {
   const timesBack = timesUntouched
     ? { startTime: opened.startTime, endTime: opened.endTime }
     : { startTime: values.startTime, endTime: values.endTime };
-  const notifyUntouched =
-    values.notifyOffsetText === defaultNotify(values.kind, values.allDay).notifyOffsetText;
-  return {
+  const restored = {
     ...values,
     allDay: opened.allDay,
     endDate,
     ...timesBack,
     anchor: undefined,
-    notifyOffsetText: notifyUntouched ? opened.notifyOffsetText : values.notifyOffsetText,
+    notifyOffsetText: opened.notifyOffsetText,
   };
+  return restored.allDay ? restored : toTimed(restored);
 }
 
 /**

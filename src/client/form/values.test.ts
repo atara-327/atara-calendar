@@ -386,7 +386,7 @@ describe('EV-9: 開いた予定の、種類の切り替え（変換）', () => {
     expect(validateSchedule(back)).toEqual({});
   });
 
-  it('別の種類で時刻や通知のタイミングを変えていたら、その値を保つ', () => {
+  it('別の種類で時刻を変えていたら、その値を保つ。終日に戻すとき、通知のタイミングは開いたときの値（-360）に戻る', () => {
     const opened = editValues(
       makeOccurrence({ allDay: true, notifyOffsetMin: -360 }),
       AT_1420,
@@ -397,7 +397,27 @@ describe('EV-9: 開いた予定の、種類の切り替え（変換）', () => {
     const edited = { ...toBlock, startTime: '09:00', endTime: '11:00', notifyOffsetText: '30' };
     const back = convertKind(edited, 'event', opened);
 
-    expect(back).toMatchObject({ startTime: '09:00', endTime: '11:00', notifyOffsetText: '30' });
+    expect(back).toMatchObject({ startTime: '09:00', endTime: '11:00', notifyOffsetText: '-360' });
+  });
+
+  it('タイムブロックを予定にして時刻を日またぎに変え、終日を経て戻しても、終了は開始より後になる', () => {
+    const timed = makeOccurrence({
+      kind: 'block',
+      workspaceId: null,
+      allDay: false,
+      startDate: '2026-10-20',
+      startTime: '10:00',
+      endTime: '11:00',
+    });
+    const opened = editValues(timed, AT_1420, null, 'w1');
+
+    const toEvent = convertKind(opened, 'event', opened);
+    const late = moveStart(toEvent, { startTime: '23:00' });
+    const allDay = setAllDay({ ...late, endDate: '2026-10-21', endTime: '01:00' }, true);
+    const back = convertKind(allDay, 'block', opened);
+
+    expect(back).toMatchObject({ allDay: false, startTime: '23:00', endTime: '00:00' });
+    expect(validateSchedule(back)).toEqual({});
   });
 
   it('同じ種類への切り替えは、何も変えない', () => {
