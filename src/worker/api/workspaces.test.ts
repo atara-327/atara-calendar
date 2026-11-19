@@ -224,6 +224,10 @@ describe('PUT /api/workspaces/:id（作成・更新）', () => {
       { name: '名前が空', workspace: { ...valid, name: '' } },
       { name: '名前が 51 文字', workspace: { ...valid, name: 'あ'.repeat(51) } },
       { name: '色が #RRGGBB でない', workspace: { ...valid, color: 'red' } },
+      {
+        name: '名前が絵文字 26 個（UTF-16 で 52）',
+        workspace: { ...valid, name: '😀'.repeat(26) },
+      },
       { name: '並び順が整数でない', workspace: { ...valid, sortOrder: 1.5 } },
       { name: '表示が真偽値でない', workspace: { ...valid, visible: 'yes' } },
       { name: 'editedAt が負の数', workspace: { ...valid, editedAt: -1 } },

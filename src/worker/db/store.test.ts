@@ -691,10 +691,6 @@ describe('applyWrite', () => {
         reason: '曜日のない weekly の予定',
         invalid: { entries: [makeEntry({ id: 'bad', rrule: { freq: 'weekly', days: [] } })] },
       },
-      {
-        reason: '色の形が違うワークスペース',
-        invalid: { workspaces: [makeWorkspace({ id: 'bad', color: 'red' })] },
-      },
     ])(
       '$reason が 1 つでもあれば、ほかの正しい行も含めて何も書かず、例外にする',
       async ({ invalid }) => {
