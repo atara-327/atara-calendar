@@ -1,3 +1,4 @@
+import { RECURRING_LENGTH_MESSAGE } from '../../shared/entryRules';
 import type { SyncPhase } from '../sync/state';
 import type { ScopeDecision } from './scope';
 
@@ -26,6 +27,8 @@ export function scopeUnavailableMessage(
       return '繰り返しを毎日・平日・休日に変えるときは、日付を同時に変えられません。片方ずつ保存してください';
     case 'allDayOccurrence':
       return '終日の回があるため、タイムブロックに変換できません';
+    case 'recurringLength':
+      return RECURRING_LENGTH_MESSAGE;
     case 'other':
       return 'この組み合わせの変更は保存できません';
   }

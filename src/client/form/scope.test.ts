@@ -666,3 +666,30 @@ describe('EV-9: 予定とタイムブロックの変換の範囲', () => {
     ).toEqual({ kind: 'unavailable', reason: 'other' });
   });
 });
+
+describe('繰り返す予定の 1 回の長さの上限（31 日。設計書 4.2）', () => {
+  const rows = [daily()];
+  const longEnd = { endDate: '2026-12-31' };
+
+  it('「この予定のみ」の変更は、例外の行が繰り返さないので、長くても選べる（「すべて」「これ以降すべて」は選べない）', () => {
+    expect(decideChange(rows, WEDNESDAY, longEnd)).toEqual({ kind: 'choose', scopes: ['this'] });
+  });
+
+  it('「すべて」「これ以降すべて」だけが上限に当たり、ほかに選べる範囲がなければ、専用の理由', () => {
+    expect(
+      decideChange(rows, WEDNESDAY, { ...longEnd, rrule: { freq: 'weekly', days: [3] } }),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: 'recurringLength',
+    });
+  });
+
+  it('上限ができる前の長い系列でも、長さに関わらない変更（題名）は選べる', () => {
+    const long = [daily({ endDate: '2026-12-31' })];
+
+    expect(decideChange(long, WEDNESDAY, { title: '新しい題名' })).toEqual({
+      kind: 'choose',
+      scopes: ['this', 'following', 'all'],
+    });
+  });
+});

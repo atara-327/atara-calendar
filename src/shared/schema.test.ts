@@ -151,13 +151,12 @@ describe('WS-1・WS-4: ワークスペースの行', () => {
     expect(workspaceSchema.safeParse({ ...validWorkspace, builtin: 'custom' }).success).toBe(false);
   });
 
-  it.each(['#F28B82', '#9aa0a6'])('色 %s は通る', (color) => {
-    expect(workspaceSchema.safeParse({ ...validWorkspace, color }).success).toBe(true);
-  });
-
-  it.each(['F28B82', '#F28B8', '#F28B822', '#GGGGGG', 'red', ''])('色 %s は通らない', (color) => {
-    expect(workspaceSchema.safeParse({ ...validWorkspace, color }).success).toBe(false);
-  });
+  it.each(['#F28B82', '#9aa0a6', 'red', ''])(
+    '色 %j の行も読める（色の形は入力用の確認で、DB にある行は落とさない）',
+    (color) => {
+      expect(workspaceSchema.safeParse({ ...validWorkspace, color }).success).toBe(true);
+    },
+  );
 
   it('削除した行（deletedAt が数値）は通る', () => {
     expect(workspaceSchema.safeParse({ ...validWorkspace, deletedAt: 1 }).success).toBe(true);
@@ -279,6 +278,30 @@ describe('入力用: 新しく作るときの下書き', () => {
     { name: 'タイトル 200 文字', change: { title: 'あ'.repeat(200) }, ok: true },
     { name: 'タイトル 201 文字', change: { title: 'あ'.repeat(201) }, ok: false },
     { name: 'タイトルが空', change: { title: '' }, ok: false },
+    {
+      name: 'タイトル 絵文字 100 個（UTF-16 で 200）',
+      change: { title: '😀'.repeat(100) },
+      ok: true,
+    },
+    {
+      name: 'タイトル 絵文字 100 個と 1 文字（UTF-16 で 201）',
+      change: { title: `${'😀'.repeat(100)}a` },
+      ok: false,
+    },
+    { name: '場所 絵文字 100 個', change: { location: '😀'.repeat(100) }, ok: true },
+    { name: '場所 絵文字 101 個', change: { location: '😀'.repeat(101) }, ok: false },
+    { name: 'メモ 絵文字 5000 個', change: { memo: '😀'.repeat(5000) }, ok: true },
+    { name: 'メモ 絵文字 5001 個', change: { memo: '😀'.repeat(5001) }, ok: false },
+    {
+      name: 'URL 2048 単位（絵文字を含む）',
+      change: { url: `https://example.com/${'😀'.repeat(1014)}` },
+      ok: true,
+    },
+    {
+      name: 'URL 2049 単位（絵文字を含む）',
+      change: { url: `https://example.com/${'😀'.repeat(1014)}a` },
+      ok: false,
+    },
     { name: '場所 200 文字', change: { location: 'あ'.repeat(200) }, ok: true },
     { name: '場所 201 文字', change: { location: 'あ'.repeat(201) }, ok: false },
     { name: 'メモ 10000 文字', change: { memo: 'あ'.repeat(10_000) }, ok: true },
@@ -355,6 +378,26 @@ describe('入力用: 変更の中身', () => {
 
 describe('入力用: ワークスペース', () => {
   const workspace = workspaceSchema.parse(validWorkspace);
+
+  it.each(['#F28B82', '#9aa0a6'])('色 %s は通る', (color) => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, color }).success).toBe(true);
+  });
+
+  it.each(['F28B82', '#F28B8', '#F28B822', '#GGGGGG', 'red', ''])('色 %j は通らない', (color) => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, color }).success).toBe(false);
+  });
+
+  it('名前の上限は UTF-16 の単位で数える（絵文字は 2 単位）', () => {
+    expect(workspaceInputSchema.safeParse({ ...workspace, name: '😀'.repeat(25) }).success).toBe(
+      true,
+    );
+    expect(
+      workspaceInputSchema.safeParse({ ...workspace, name: '😀'.repeat(25) + 'a' }).success,
+    ).toBe(false);
+    expect(workspaceInputSchema.safeParse({ ...workspace, name: '😀'.repeat(26) }).success).toBe(
+      false,
+    );
+  });
 
   it('名前は 1〜50 文字', () => {
     expect(workspaceInputSchema.safeParse({ ...workspace, name: 'あ'.repeat(50) }).success).toBe(

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry } from '../../test/helpers/entries';
 import { makeWorkspace } from '../../test/helpers/workspaces';
 import { changesResponseSchema, type ChangesResponse } from './api';
-import { workspaceSchema } from './schema';
+import { workspaceInputSchema } from './schema';
 import {
   structuralChangesResponseSchema,
   structuralEntrySchema,
@@ -91,7 +91,7 @@ describe('structuralWorkspaceSchema（ワークスペースの行の構造）', 
 
   it('#RRGGBB でない色の行は、構造としては通す（入力のルールは見ない）', () => {
     const row = { ...makeWorkspace({ id: 'w1' }), color: 'red' };
-    expect(workspaceSchema.safeParse(row).success).toBe(false);
+    expect(workspaceInputSchema.safeParse({ ...row, deletedAt: null }).success).toBe(false);
     expect(structuralWorkspaceSchema.safeParse(row).success).toBe(true);
   });
 });

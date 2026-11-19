@@ -7,6 +7,7 @@ import {
   inputDateSchema,
   scopeSchema,
 } from '../src/shared/schema';
+import { maxUtf16 } from '../src/shared/utf16';
 import { WORKSPACE_COLORS } from '../src/shared/workspaceColors';
 
 // ツールの入力（設計書 13.3）。項目の形と範囲は、src/shared/schema.ts の入力用のスキーマをそのまま使う
@@ -117,7 +118,7 @@ export const createWorkspaceInputSchema = z.strictObject({
   name: z
     .string()
     .min(1)
-    .max(INPUT_LIMITS.workspaceName)
+    .check(maxUtf16(INPUT_LIMITS.workspaceName))
     .describe(`ワークスペースの名前（1〜${String(INPUT_LIMITS.workspaceName)} 文字）`),
   color: z
     .enum(WORKSPACE_COLOR_NAMES)

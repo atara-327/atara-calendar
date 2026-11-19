@@ -4,6 +4,7 @@ import {
   patchEntryRequestSchema,
   putEntryRequestSchema,
 } from '../../shared/api';
+import { changesAffectLength } from '../../shared/entryRules';
 import {
   OccurrenceNotFoundError,
   changeEntry,
@@ -13,6 +14,7 @@ import {
 import type { Entry } from '../../shared/schema';
 import { readSeriesEntries } from '../db/store';
 import type { AppEnv } from '../env';
+import { assertRecurringLength } from './entryRules';
 import { badRequest } from './errors';
 import { assertEditedAtNotInFuture, parseBody, parseId } from './request';
 import { commitEntries, dropped } from './write';
@@ -50,6 +52,7 @@ entriesRoute.put('/:id', async (c) => {
 
   // 同じ id の行がすでにあっても、上書きしない（PUT は作成だけで、別の行を壊さないため。write.ts の checkNewId）。
   const rows = calculate(() => createEntry({ draft, newId: id, editedAt }));
+  assertRecurringLength(rows);
   return c.json(await commitEntries(c.env.DB, rows, editedAt, { newId: id, loaded: [] }));
 });
 
@@ -82,6 +85,7 @@ entriesRoute.patch('/:id', async (c) => {
         editedAt,
       ),
     );
+  if (changesAffectLength(changes)) assertRecurringLength(rows);
   return c.json(
     await commitEntries(
       db,
