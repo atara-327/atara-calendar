@@ -25,6 +25,9 @@ export const DELETE_UNDO_MS = 5000;
 /** タブが前面にある間に、受け取る間隔（ms。設計書 6.3）。 */
 export const POLL_INTERVAL_MS = 60_000;
 
+/** 受け取った内容を保存するまでの、最後の変化からの待ち時間（ms。設計書 6.1）。 */
+export const SNAPSHOT_SAVE_DELAY_MS = 2000;
+
 /** setTimeout の戻り値。ブラウザは number、Node は object。 */
 export type TimerHandle = number | object;
 
@@ -76,7 +79,7 @@ export interface SyncEngine {
   stop(): void;
   /** 今すぐ、送って、受け取る。最初の読み込みに失敗しているときは、読み込みからやり直す。 */
   syncNow(): Promise<void>;
-  /** 送信・受け取り・保存が、すべて終わるまで待つ（テスト用）。 */
+  /** 送信・受け取り・保存が、すべて終わるまで待つ（テスト用）。間引き中の保存は、待たずに今すぐ書く。 */
   settled(): Promise<void>;
 
   // 依頼を作る側の入口。editedAt と新しい id をここで付けて、列に入れる。
@@ -131,6 +134,9 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
   let persistChain: Promise<void> = Promise.resolve();
   // 受け取った内容の保存も、1 本の鎖で順番に行う。古い受け取りの保存が、新しい保存を追い越さないため。
   let snapshotChain: Promise<void> = Promise.resolve();
+  // 間引き中の保存（設計書 6.1）。受け取りが続く間は、最後の 1 回だけ書く。
+  let snapshotTimer: TimerHandle | null = null;
+  let snapshotPending: BaseData | null = null;
 
   function isActive(): boolean {
     return store.getState().phase !== 'stopped';
@@ -190,6 +196,22 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       .catch((error: unknown) => {
         console.error('受け取った内容を保存できませんでした', error);
       });
+  }
+
+  /** 保存を、最後の変化から SNAPSHOT_SAVE_DELAY_MS 待ってから行う。変わるたびに待ちを延ばす。 */
+  function scheduleSnapshot(base: BaseData): void {
+    snapshotPending = base;
+    if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
+    snapshotTimer = env.setTimeout(flushSnapshot, SNAPSHOT_SAVE_DELAY_MS);
+  }
+
+  /** 間引き中の保存を、待たずに行う。裏に回るタブは、スマホに、待っている間に閉じられるため。 */
+  function flushSnapshot(): void {
+    if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
+    snapshotTimer = null;
+    const base = snapshotPending;
+    snapshotPending = null;
+    if (base !== null) persistSnapshot(base);
   }
 
   // ---- 送る（設計書 6.2） ----
@@ -431,7 +453,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
         syncError: false,
         ...(state.phase === 'loading' || state.phase === 'loadFailed' ? { phase: 'ready' } : {}),
       });
-      if (base.rev !== state.base.rev || base.epoch !== state.base.epoch) persistSnapshot(base);
+      if (base.rev !== state.base.rev || base.epoch !== state.base.epoch) scheduleSnapshot(base);
       return 'ok';
     }
   }
@@ -470,6 +492,10 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     if (holdTimer !== null) env.clearTimeout(holdTimer);
     pollTimer = null;
     holdTimer = null;
+    // 保存待ちは書かずに捨てる。新しい持ち主の保存を、古い内容で上書きしないため（persistSnapshot と同じ理由）。
+    if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
+    snapshotTimer = null;
+    snapshotPending = null;
     unsubscribePage?.();
     unsubscribePage = null;
     update({ phase: 'stopped', takenOver });
@@ -540,6 +566,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       },
       hidden: () => {
         keepalive = true;
+        flushSnapshot();
         releaseHolds();
         run(syncSoon());
       },
@@ -578,13 +605,16 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     },
     syncNow,
     async settled() {
+      // Why not タイマーが切れるのを待つ: テストの時計は、手で進めるものなので、待つと終わらない。
       for (;;) {
+        flushSnapshot();
         const chain = persistChain;
         const snapshots = snapshotChain;
         await Promise.all([sendDone, receiveDone, chain, snapshots]);
         if (
           !sending.running &&
           !receiving.running &&
+          snapshotPending === null &&
           chain === persistChain &&
           snapshots === snapshotChain
         ) {
