@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { registerServiceWorker } from './registerServiceWorker';
 import { getFormController } from './form/instance';
+import { preloadEntryFormWhenIdle } from './form/lazyEntryForm';
 import { getSidebarController } from './sidebar/instance';
 import { getSyncEngine } from './sync/instance';
 
@@ -37,3 +38,5 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+preloadEntryFormWhenIdle();
