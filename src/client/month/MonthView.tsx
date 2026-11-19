@@ -12,6 +12,7 @@ import { loadScrollRows } from './scrollMemory';
 import { rowHeightFor } from './sizing';
 import { useElementHeight } from './useElementHeight';
 import { scrollRowsForToday, weekOfRow } from './weeks';
+import { flashToday } from './flashToday';
 
 const SUNDAY = 0;
 const SATURDAY = 6;
@@ -30,7 +31,9 @@ export function MonthView() {
   );
 
   const goToToday = () => {
-    scrollElement?.scrollTo({ top: scrollRowsForToday(today) * rowHeight });
+    if (scrollElement === null) return;
+    scrollElement.scrollTo({ top: scrollRowsForToday(today) * rowHeight });
+    flashToday(scrollElement);
   };
 
   return (
