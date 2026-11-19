@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 版 | 3.13（確定。変更は[changelog.md](changelog.md)） |
+| 版 | 3.14（確定。変更は[changelog.md](changelog.md)） |
 | 作成日 | 2026-10-19 |
 | 元にした要件 | [要件定義書 v1.11](../requirements/requirements.md) |
 
