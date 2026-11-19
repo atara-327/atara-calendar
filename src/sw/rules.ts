@@ -85,14 +85,63 @@ export function isRuntimeCached(path: string): boolean {
 }
 
 /**
- * install で取った `/` の HTML が、保存する一覧の JS・CSS をすべて指しているか。指していないものを返す。
+ * install で取った `/` の HTML が、起動時に読む JS・CSS（index.html が指すもの）をすべて指しているか。指していないものを返す。
  * デプロイの途中で、別の版の HTML を取ってしまい、HTML と画面のファイルが食い違うのを防ぐ。
+ * 後から読み込む chunk（フォームなど）は HTML が指さないので、ここには渡さない。
  */
 export function missingFromPage(html: string, urls: readonly string[]): string[] {
   return urls.filter((url) => /\.(js|css)$/.test(url) && !html.includes(url));
 }
 
+/**
+ * ビルドの出力の `/assets/` の JS・CSS のうち、保存の一覧に入っていないもの。後から読み込む chunk が一覧から漏れると、
+ * 電波がない間にそれを開いた瞬間、画面が壊れる（設計書 6.5）。
+ */
+export function missingFromPrecache(files: readonly string[], urls: readonly string[]): string[] {
+  return files.filter((file) => /^\/assets\/.*\.(js|css)$/.test(file) && !urls.includes(file));
+}
+
 /** 画面のファイルのうち、install で全部保存するもの。フォントは、数が多く重いので、使ったときに保存する。 */
 export function isPrecached(path: string): boolean {
   return path.startsWith('/assets/') && !/\.(woff2?|ttf|otf)$/.test(path);
+}
+
+/** ページの取得を待つ上限（ミリ秒）。 */
+export const PAGE_TIMEOUT_MS = 3000;
+
+const TIMED_OUT = Symbol('timed out');
+
+/**
+ * ページは、ネットワークを先に使う。ただし、上限までに応答が来ず、保存したページがあれば、保存した方を返す。
+ * 保存がなければ、ネットワークを待ち続ける。上限を過ぎてから届いた応答は、使わない（返した後なので）。
+ * ネットワークの失敗（例外）のときは、保存を返す。応答（ログイン画面への転送を含む）は、そのまま返す。
+ */
+export async function pageWithTimeLimit<T>(
+  network: Promise<T>,
+  getSaved: () => Promise<T | undefined>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(TIMED_OUT);
+    }, timeoutMs);
+  });
+  try {
+    const first = await Promise.race([network, timeout]);
+    if (first !== TIMED_OUT) return first;
+    const saved = await getSaved();
+    if (saved !== undefined) {
+      // 返した後に届く応答が失敗しても、未処理の拒否にしない。
+      network.catch(() => undefined);
+      return saved;
+    }
+    return await network;
+  } catch (error) {
+    const saved = await getSaved();
+    if (saved !== undefined) return saved;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
