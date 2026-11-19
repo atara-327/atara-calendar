@@ -39,6 +39,9 @@ export function serviceWorker(): Plugin {
         typeof html.source === 'string' ? html.source : new TextDecoder().decode(html.source);
       const pageUrls = urls.filter((url) => /\.(js|css)$/.test(url) && page.includes(url));
 
+      // 空だと、install の版の確認が何もせずに通ってしまう（index.html の書き方が変わったときなど）。
+      if (pageUrls.length === 0) throw new Error('index.html が JS・CSS を指していません');
+
       const bundleSw = async (
         version: string,
         codeHash: string,
