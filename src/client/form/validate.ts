@@ -1,6 +1,5 @@
 import {
   RECURRING_LENGTH_MESSAGE,
-  entryLengthMinutes,
   entryProblem,
   recurringLengthProblem,
 } from '../../shared/entryRules';
@@ -67,7 +66,6 @@ function tooLong(name: string, limit: number): string {
 export function validateForm(
   values: FormValues,
   original?: Pick<Occurrence, 'notifyOffsetMin' | 'allDay' | 'recurring'>,
-  opened?: FormValues,
 ): FormErrors {
   const errors: FormErrors = validateSchedule(values);
   // 空白だけのタイトルは、サーバーは通すが、月表示で何も書いていない予定になるので、空と同じにする。
@@ -136,20 +134,17 @@ export function validateForm(
   }
 
   // 繰り返す予定の 1 回の長さ（日付と時刻が正しいときだけ。正しくないときは、その欄の誤りが出ている）。
-  // 開いたときから長さを変えていないなら、上限を超えていても断らない（上限ができる前の長い系列の、題名だけの
-  // 変更を通すため。サーバーの PATCH も、長さを変えうる項目がないときは確かめない）。
+  // 繰り返す回を開いて編集するときは見ない。「この予定のみ」の例外の行は繰り返さないので、上限の外で、長くても通る
+  // （サーバーも通す）。「すべて」「これ以降すべて」が上限を超えるかは、範囲ごとの判断（scope.ts の decideScope）に任せる。
+  // 新しく作るときと、繰り返さない予定に繰り返しを付けるときは、ここで断る。
   if (
     errors.startDate === undefined &&
     errors.endDate === undefined &&
     errors.startTime === undefined &&
     errors.endTime === undefined &&
     errors.range === undefined &&
-    recurringLengthProblem(draft) !== null &&
-    !(
-      original?.recurring === true &&
-      opened !== undefined &&
-      entryLengthMinutes(draft) === entryLengthMinutes(toDraft(opened))
-    )
+    original?.recurring !== true &&
+    recurringLengthProblem(draft) !== null
   ) {
     errors.range = RECURRING_LENGTH_MESSAGE;
   }

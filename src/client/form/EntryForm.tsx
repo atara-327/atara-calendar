@@ -262,7 +262,7 @@ export function EntryForm({ target }: { target: EditorTarget }) {
   const returnFocus = useRef<ScopeStepKind | null>(null);
 
   const original = target.mode === 'edit' ? target.occurrence : undefined;
-  const errors = useMemo(() => validateForm(values, original, opened), [values, original, opened]);
+  const errors = useMemo(() => validateForm(values, original), [values, original]);
   const shown: FormErrors = attempted
     ? errors
     : {
