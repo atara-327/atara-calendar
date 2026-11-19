@@ -1,6 +1,7 @@
 import type { Occurrence } from '../../shared/recurrence';
 import { defaultNotify as sharedDefaultNotify } from '../../shared/notifyDefaults';
-import type { Entry, Rrule } from '../../shared/schema';
+import { dateToDays, daysToDate } from '../../shared/date';
+import { inputDateSchema, type Entry, type Rrule } from '../../shared/schema';
 import { NO_REPEAT, repeatFieldsOf, type RepeatFields } from './repeat';
 import {
   defaultSchedule,
@@ -107,16 +108,40 @@ export function editValues(
   };
 }
 
-/** 終日・時刻・通知のタイミングを、開いたときの値に戻す（終日の切り替えで変わる項目）。 */
+/** 日付の入力欄の値を日数にする。正しくなければ null（途中の入力があるため）。 */
+function dateToDaysOrNull(date: string): number | null {
+  return inputDateSchema.safeParse(date).success ? dateToDays(date) : null;
+}
+
+/**
+ * 終日・終了・通知のタイミングを、切り替える前に戻す（終日の切り替えで変わる項目）。
+ * 開始は、今の値のまま保ち、終了は、開いたときの「長さ」を保つ（開始を動かしていても、終了が開始より前にならない）。
+ * 時刻とタイミングは、変換で入った値のままなら開いたときの値に、利用者が変えていれば、その値を保つ。
+ * 変換で入った値かどうかは、開いたときの値から同じ変換をして比べる。
+ */
 function restoreSchedule(values: FormValues, opened: FormValues): FormValues {
+  const converted = opened.allDay ? toTimed(opened) : toAllDay(opened);
+  const timesUntouched =
+    values.startTime === converted.startTime && values.endTime === converted.endTime;
+  const startDay = dateToDaysOrNull(values.startDate);
+  const openedStartDay = dateToDaysOrNull(opened.startDate);
+  const openedEndDay = dateToDaysOrNull(opened.endDate);
+  const endDate =
+    startDay !== null && openedStartDay !== null && openedEndDay !== null
+      ? daysToDate(startDay + openedEndDay - openedStartDay)
+      : opened.endDate;
+  const timesBack = timesUntouched
+    ? { startTime: opened.startTime, endTime: opened.endTime }
+    : { startTime: values.startTime, endTime: values.endTime };
+  const notifyUntouched =
+    values.notifyOffsetText === defaultNotify(values.kind, values.allDay).notifyOffsetText;
   return {
     ...values,
     allDay: opened.allDay,
-    endDate: opened.endDate,
-    startTime: opened.startTime,
-    endTime: opened.endTime,
+    endDate,
+    ...timesBack,
     anchor: undefined,
-    notifyOffsetText: opened.notifyOffsetText,
+    notifyOffsetText: notifyUntouched ? opened.notifyOffsetText : values.notifyOffsetText,
   };
 }
 
@@ -125,13 +150,15 @@ function restoreSchedule(values: FormValues, opened: FormValues): FormValues {
  * ただし、終日の予定をタイムブロックにして時間指定になるときは、終日を切り替えたときと同じく、タイミングだけ、
  * 時間指定の初期値に戻す（数の意味が違うため。setAllDay）。
  * ワークスペースは、触らない。予定にしたときの値は、開いたときに入れてある（editValues）。
+ * 開いたときの種類に戻すときは、変換で変わった項目を戻し、別の種類にいる間に変えた項目は保つ（restoreSchedule）。
  */
 export function convertKind(values: FormValues, kind: EntryKind, opened?: FormValues): FormValues {
   if (values.kind === kind) return values;
-  // 開いたときの種類に押し戻したときは、変換で変わった項目を、開いたときの値に戻す（変えていない項目を送らない。P4）。
+  // 開いたときの種類に押し戻したときは、変換で変わった項目を、切り替える前に戻す（変えていない項目を送らない。P4）。
+  // ワークスペースは、変換で書き換えない（opened の値に戻すと、別の種類にいる間に選び直した値が消える）。
   if (opened !== undefined && opened.kind === kind) {
     const restored = values.allDay === opened.allDay ? values : restoreSchedule(values, opened);
-    return { ...restored, kind, workspaceId: opened.workspaceId };
+    return { ...restored, kind };
   }
   if (kind === 'block' && values.allDay) return { ...setAllDay(values, false), kind };
   return { ...values, kind };
