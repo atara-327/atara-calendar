@@ -222,6 +222,7 @@ export class FakeLockHub {
         this.holder?.onLost();
         this.holder = mine;
         return Promise.resolve({
+          held: true,
           release: () => {
             if (this.holder === mine) this.holder = null;
           },
@@ -252,6 +253,7 @@ let deviceCounter = 0;
 export function createDevice({
   db,
   hub = new FakeLockHub(),
+  locks,
   dbName,
   idPrefix,
   clock = new ManualClock(),
@@ -260,6 +262,8 @@ export function createDevice({
 }: {
   db: D1Database;
   hub?: FakeLockHub;
+  /** 錠の仕組み。省くと hub の錠。錠がないブラウザや、錠を取れないときを再現するときに渡す。 */
+  locks?: TabLock;
   dbName?: string;
   idPrefix?: string;
   clock?: ManualClock;
@@ -280,7 +284,7 @@ export function createDevice({
     fetch: network.fetch,
     storage,
     snapshot,
-    locks: hub.lock(),
+    locks: locks ?? hub.lock(),
     page,
     now: clock.now,
     setTimeout: clock.setTimeout,

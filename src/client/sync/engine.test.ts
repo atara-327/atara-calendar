@@ -1466,6 +1466,22 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
       });
     });
 
+    it('裏に回った後の受け取りは、待たずにすぐ保存する（待つ間に凍結・終了されても、送り終えた編集が残る）', async () => {
+      const { device, saves } = recordingDevice();
+      await device.engine.start();
+      device.page.hide();
+
+      device.engine.createEntry(makeDraft({ title: '裏に回った直後の編集' }));
+      await vi.waitFor(() => {
+        expect(device.state().queue).toHaveLength(0);
+        expect(device.state().confirming).toHaveLength(0);
+      });
+
+      await vi.waitFor(() => {
+        expect(saves.at(-1)?.entries.size).toBe(1);
+      });
+    });
+
     it('錠を奪われたタブは、待っていた保存をしない', async () => {
       const hub = new FakeLockHub();
       const { device, saves } = recordingDevice(hub);
@@ -1624,6 +1640,8 @@ describe('保存した受け取り内容での起動（設計書 6.1）', () => 
     await other.engine.settled();
     await tab.engine.syncNow();
     expect(tab.state().base.entries.size).toBe(1);
+    // 保存を、最初の保存（gate で止めてある）の後ろに、順番待ちで並ばせる。
+    tab.clock.advance(SNAPSHOT_SAVE_DELAY_MS);
 
     const thief = createDevice({ db: db(), hub, idPrefix: 'thief' });
     await thief.engine.start();

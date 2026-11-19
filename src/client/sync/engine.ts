@@ -204,6 +204,12 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
   /** 保存を、最後の変化から SNAPSHOT_SAVE_DELAY_MS 待ってから行う。変わるたびに待ちを延ばす。 */
   function scheduleSnapshot(base: BaseData): void {
     snapshotPending = base;
+    // 裏に回っているタブは、待たずに書く。待っている間に凍結・終了されると、この受け取りが失われ、
+    // 次に電波なしで開いたとき、送り終えた編集が消えて見えるため。
+    if (!env.page.isVisible()) {
+      flushSnapshot();
+      return;
+    }
     if (snapshotTimer !== null) env.clearTimeout(snapshotTimer);
     snapshotTimer = env.setTimeout(flushSnapshot, SNAPSHOT_SAVE_DELAY_MS);
   }
@@ -487,7 +493,9 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
       return;
     }
     // 読んでいる間に、状態が変わりうる。列に足すかどうかは、読み終えた今の状態で決める。
-    if (!isActive() || clock === null) return;
+    // 錠を本当に持っているときだけ足す。錠がないと、ほかのタブも動いていて、そのタブの取り消し待ちの依頼を、
+    // 待たせずに送ってしまう（設計書 6.7）。
+    if (!isActive() || clock === null || lockHandle?.held !== true) return;
     const { queue, confirming } = store.getState();
     const known = new Set([...queue, ...confirming].map(({ id }) => id));
     const added = loaded.requests.filter(({ id }) => !known.has(id) && !handledIds.has(id));
@@ -563,7 +571,7 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     } catch (error) {
       // 錠の仕組みが失敗しても、動かさないという選択はしない（lock.ts の、錠がないブラウザと同じ考え方）。
       console.error('タブの錠を取れませんでした。複数のタブの調整をせずに動かします', error);
-      handle = { release: () => undefined };
+      handle = { held: false, release: () => undefined };
     }
     if (!isActive()) {
       handle.release();
