@@ -6,7 +6,9 @@ import {
   isRuntimeCached,
   isStaleCache,
   missingFromPage,
+  PAGE_TIMEOUT_MS,
   PAGE_URL,
+  pageWithTimeLimit,
   runtimeCacheName,
 } from './rules';
 
@@ -15,6 +17,8 @@ declare const self: ServiceWorkerGlobalScope;
 declare const __BUILD_VERSION__: string;
 declare const __CODE_HASH__: string;
 declare const __PRECACHE_URLS__: readonly string[];
+// 起動時に読む JS・CSS（index.html が指すもの）。後から読み込む chunk は入らない。
+declare const __PAGE_URLS__: readonly string[];
 
 const CACHE = cacheName(__BUILD_VERSION__);
 const RUNTIME_CACHE = runtimeCacheName(__CODE_HASH__);
@@ -40,7 +44,7 @@ function responseInfo(response: Response) {
 async function install(): Promise<void> {
   const cache = await caches.open(CACHE);
   const page = await fetchForInstall(PAGE_URL);
-  const missing = missingFromPage(await page.clone().text(), __PRECACHE_URLS__);
+  const missing = missingFromPage(await page.clone().text(), __PAGE_URLS__);
   if (missing.length > 0) throw new Error(`取ったページが、${missing.join('・')} を指していません`);
   await cache.put(PAGE_URL, page);
   await Promise.all(
@@ -71,14 +75,8 @@ self.addEventListener('activate', (event) => {
 
 // ページは、ここでは保存しない（install でだけ保存する）。今の版の保存を、その版の中でそろえるため。
 async function networkFirstPage(request: Request): Promise<Response> {
-  try {
-    return await fetch(request);
-  } catch {
-    // ネットワークの失敗のときだけ。ログイン画面への転送などの「応答」は、そのまま返す。
-    const saved = await (await caches.open(CACHE)).match(PAGE_URL);
-    if (saved !== undefined) return saved;
-    throw new Error('保存したページがありません');
-  }
+  const saved = async () => (await caches.open(CACHE)).match(PAGE_URL);
+  return pageWithTimeLimit(fetch(request), saved, PAGE_TIMEOUT_MS);
 }
 
 async function cacheFirst(event: FetchEvent): Promise<Response> {
