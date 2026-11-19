@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEntry, makeOccurrence } from '../../../test/helpers/entries';
 import { expandOccurrences } from '../../shared/recurrence';
 import { seriesRruleOf } from './repeat';
+import { moveStart, validateSchedule } from './schedule';
 import { convertKind, createValues, defaultNotify, editValues, setAllDay, setKind } from './values';
 
 // 日本時間 2026-10-22（木）の 14:20（UTC 05:20）。
@@ -349,7 +350,7 @@ describe('EV-9: 開いた予定の、種類の切り替え（変換）', () => {
     });
   });
 
-  it('開いたときの種類に押し戻すと、終日・時刻・通知・ワークスペースが、開いたときの値に戻る', () => {
+  it('切り替えて、何も変えずに戻すと、開いたときの値に戻る', () => {
     const allDayEvent = makeOccurrence({ workspaceId: 'w1', allDay: true, notifyOffsetMin: -360 });
     const opened = editValues(allDayEvent, AT_1420, null);
 
@@ -358,6 +359,65 @@ describe('EV-9: 開いた予定の、種類の切り替え（変換）', () => {
     const back = convertKind(toBlock, 'event', opened);
 
     expect(back).toEqual({ ...opened, anchor: undefined });
+  });
+
+  it('別の種類でワークスペースを選び直してから戻すと、選び直した値が残る', () => {
+    const opened = editValues(block, AT_1420, null, 'w9');
+
+    const toEvent = { ...convertKind(opened, 'event', opened), workspaceId: 'w3' };
+    const back = convertKind(toEvent, 'block', opened);
+
+    expect(back.workspaceId).toBe('w3');
+  });
+
+  it('別の種類で開始日を後ろへ変えてから戻すと、終了は長さを保って動き、誤りが出ない', () => {
+    const allDayEvent = makeOccurrence({
+      allDay: true,
+      startDate: '2026-10-20',
+      endDate: '2026-10-22',
+    });
+    const opened = editValues(allDayEvent, AT_1420, null);
+
+    const toBlock = convertKind(opened, 'block', opened);
+    const moved = moveStart(toBlock, { startDate: '2026-11-10' });
+    const back = convertKind(moved, 'event', opened);
+
+    expect(back).toMatchObject({ allDay: true, startDate: '2026-11-10', endDate: '2026-11-12' });
+    expect(validateSchedule(back)).toEqual({});
+  });
+
+  it('別の種類で時刻を変えていたら、その値を保つ。終日に戻すとき、通知のタイミングは開いたときの値（-360）に戻る', () => {
+    const opened = editValues(
+      makeOccurrence({ allDay: true, notifyOffsetMin: -360 }),
+      AT_1420,
+      null,
+    );
+
+    const toBlock = convertKind(opened, 'block', opened);
+    const edited = { ...toBlock, startTime: '09:00', endTime: '11:00', notifyOffsetText: '30' };
+    const back = convertKind(edited, 'event', opened);
+
+    expect(back).toMatchObject({ startTime: '09:00', endTime: '11:00', notifyOffsetText: '-360' });
+  });
+
+  it('タイムブロックを予定にして時刻を日またぎに変え、終日を経て戻しても、終了は開始より後になる', () => {
+    const timed = makeOccurrence({
+      kind: 'block',
+      workspaceId: null,
+      allDay: false,
+      startDate: '2026-10-20',
+      startTime: '10:00',
+      endTime: '11:00',
+    });
+    const opened = editValues(timed, AT_1420, null, 'w1');
+
+    const toEvent = convertKind(opened, 'event', opened);
+    const late = moveStart(toEvent, { startTime: '23:00' });
+    const allDay = setAllDay({ ...late, endDate: '2026-10-21', endTime: '01:00' }, true);
+    const back = convertKind(allDay, 'block', opened);
+
+    expect(back).toMatchObject({ allDay: false, startTime: '23:00', endTime: '00:00' });
+    expect(validateSchedule(back)).toEqual({});
   });
 
   it('同じ種類への切り替えは、何も変えない', () => {
