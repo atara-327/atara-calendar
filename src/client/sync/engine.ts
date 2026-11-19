@@ -206,7 +206,8 @@ export function createSyncEngine(env: SyncEnvironment): SyncEngine {
     snapshotPending = base;
     // 裏に回っているタブは、待たずに書く。待っている間に凍結・終了されると、この受け取りが失われ、
     // 次に電波なしで開いたとき、送り終えた編集が消えて見えるため。
-    if (!env.page.isVisible()) {
+    // isVisible() ではなく keepalive を見るのは、pagehide で裏に回ったとき、visible のままのブラウザがあるため。
+    if (keepalive) {
       flushSnapshot();
       return;
     }

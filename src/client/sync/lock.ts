@@ -6,7 +6,8 @@
 
 export interface TabLockHandle {
   /**
-   * 錠を本当に持っているか。錠がないブラウザや、錠を取れなかったときの代わりの動きでは false。
+   * 本物の錠を取れたか。錠がないブラウザや、錠を取れなかったときの代わりの動きでは false。
+   * 奪われても false にはならない（奪われたタブは、止まる。phase が stopped）。
    * false のとき、ほかのタブも同時に動いているかもしれない。
    */
   readonly held: boolean;
